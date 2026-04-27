@@ -229,4 +229,9 @@ describe('stateful services', () => {
     expect(state.records[0]?.id).toBe(run.id);
     expect(runHistoryService.find(run.id)?.args).toEqual(['scout', '--local']);
   });
+
+  test('run history service returns undefined for unknown runs', () => {
+    expect(runHistoryService.finish('missing-run', 'cancelled')).toBeUndefined();
+    expect(runHistoryService.find('missing-run')).toBeUndefined();
+  });
 });
