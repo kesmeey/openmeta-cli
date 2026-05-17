@@ -165,8 +165,6 @@ Scout issues
 
 ### 安装与运行
 
-当前仓库更适合**从源码使用**。
-
 #### 环境要求
 
 - Bun 1.0+
@@ -177,55 +175,51 @@ Scout issues
 #### 安装
 
 ```bash
+# 1. 安装依赖
 bun install
-```
 
-#### 直接运行
-
-```bash
-bun run ./src/cli.ts --help
-```
-
-#### 构建 CLI
-
-```bash
+# 2. 编译为可执行文件
 bun run build
-./bin/openmeta.js --help
+
+# 3. 链接到全局，使 openmeta 命令随处可用
+bun link
+```
+
+执行 `bun link` 后，`openmeta` 命令即可在任意终端路径下使用。如需取消链接，执行 `bun unlink`。
+
+你也可以通过 `npm link` 或 `npm install -g .` 达到同样效果。
+
+#### 验证安装
+
+```bash
+openmeta --help
+openmeta --version
 ```
 
 ### 快速开始
 
 ```bash
 # 1. 初始化配置
-bun run ./src/cli.ts init
+openmeta init
 
 # 2. 手动运行自治贡献 Agent
-bun run ./src/cli.ts agent
+openmeta agent
 
 # 3. 只看机会排名
-bun run ./src/cli.ts scout --limit 10
-bun run ./src/cli.ts scout --local --limit 10
+openmeta scout --limit 10
+openmeta scout --local --limit 10
 
 # 4. 查看贡献沉淀
-bun run ./src/cli.ts inbox
-bun run ./src/cli.ts pow
-bun run ./src/cli.ts runs
+openmeta inbox
+openmeta pow
+openmeta runs
 
 # 5. 查看或调整配置
-bun run ./src/cli.ts config view
-bun run ./src/cli.ts config set <key> <value>
+openmeta config view
+openmeta config set llm.apiKey <your-api-key>
 
 # 6. 检查本地运行前置条件
-bun run ./src/cli.ts doctor
-```
-
-如果你已经执行过构建，也可以直接使用：
-
-```bash
-./bin/openmeta.js init
-./bin/openmeta.js agent --run-checks
-./bin/openmeta.js automation status
-./bin/openmeta.js scout --local --limit 10
+openmeta doctor
 ```
 
 ### 命令一览
@@ -453,8 +447,6 @@ Scout issues
 
 ### Install and Run
 
-At the moment, this repository is best used **from source**.
-
 #### Requirements
 
 - Bun 1.0+
@@ -462,58 +454,54 @@ At the moment, this repository is best used **from source**.
 - GitHub Personal Access Token
 - A compatible LLM API key
 
-#### Install dependencies
+#### Install
 
 ```bash
+# 1. Install dependencies
 bun install
-```
 
-#### Run directly from source
-
-```bash
-bun run ./src/cli.ts --help
-```
-
-#### Build the CLI binary
-
-```bash
+# 2. Compile into a standalone binary
 bun run build
-./bin/openmeta.js --help
+
+# 3. Link globally so the openmeta command is available everywhere
+bun link
+```
+
+After running `bun link`, the `openmeta` command is available in any terminal session. To unlink, run `bun unlink`.
+
+You can also use `npm link` or `npm install -g .` to achieve the same result.
+
+#### Verify
+
+```bash
+openmeta --help
+openmeta --version
 ```
 
 ### Quick Start
 
 ```bash
 # 1. Initialize GitHub, LLM, profile, repo, and automation settings
-bun run ./src/cli.ts init
+openmeta init
 
 # 2. Run the autonomous contribution loop
-bun run ./src/cli.ts agent
+openmeta agent
 
 # 3. Only scout and rank opportunities
-bun run ./src/cli.ts scout --limit 10
-bun run ./src/cli.ts scout --local --limit 10
+openmeta scout --limit 10
+openmeta scout --local --limit 10
 
 # 4. Inspect durable contribution assets
-bun run ./src/cli.ts inbox
-bun run ./src/cli.ts pow
-bun run ./src/cli.ts runs
+openmeta inbox
+openmeta pow
+openmeta runs
 
 # 5. Review or update configuration
-bun run ./src/cli.ts config view
-bun run ./src/cli.ts config set <key> <value>
+openmeta config view
+openmeta config set llm.apiKey <your-api-key>
 
 # 6. Check local prerequisites before a full run
-bun run ./src/cli.ts doctor
-```
-
-If you already built the binary:
-
-```bash
-./bin/openmeta.js init
-./bin/openmeta.js agent --run-checks
-./bin/openmeta.js automation status
-./bin/openmeta.js scout --local --limit 10
+openmeta doctor
 ```
 
 ### Command Surface
