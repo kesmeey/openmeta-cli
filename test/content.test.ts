@@ -79,4 +79,82 @@ describe('contentService', () => {
     expect(commitMessage).toContain('feat: Development Diary -');
     expect(commitMessage).toContain('Daily open source contribution log');
   });
+
+  test('renders markdown fallbacks for sparse patch and pull request drafts', () => {
+    const patchMarkdown = contentService.formatPatchDraftMarkdown(createPatchDraft({
+      targetFiles: [],
+      proposedChanges: [
+        {
+          title: 'Inspect generated output',
+          details: 'Review the patch manually before applying any changes.',
+          files: [],
+        },
+      ],
+      risks: [],
+      validationNotes: [],
+    }));
+    const prMarkdown = contentService.formatPullRequestDraftMarkdown(createPullRequestDraft({
+      validation: [],
+      risks: [],
+    }));
+
+    expect(contentService.getContentTypeLabel('research_note')).toBe('Research Notes');
+    expect(contentService.getContentTypeLabel('development_diary')).toBe('Development Diary');
+    expect(patchMarkdown).toContain('## Risks');
+    expect(patchMarkdown).toContain('- None');
+    expect(patchMarkdown).not.toContain('Files:');
+    expect(prMarkdown).toContain('## Validation');
+    expect(prMarkdown).toContain('- Not run');
+    expect(prMarkdown).toContain('## Risks');
+    expect(prMarkdown).toContain('- None');
+  });
+
+  test('renders contribution and summary markdown fallbacks when context is sparse', () => {
+    const markdown = contentService.formatContributionDossier(
+      createRankedIssue({
+        body: '   ',
+        repoDescription: '',
+        labels: [],
+        analysis: {
+          coreDemand: '',
+          techRequirements: [],
+          solutionSuggestion: 'Investigate the issue manually.',
+          estimatedWorkload: '',
+        },
+      }),
+      createWorkspace({
+        branchName: undefined,
+        testCommands: [],
+        validationCommands: [],
+        validationWarnings: [],
+        testResults: [],
+      }),
+      createMemory({
+        lastSelectedIssue: undefined,
+        preferredPaths: [],
+      }),
+      createPatchDraft(),
+      createPullRequestDraft(),
+    );
+    const inboxMarkdown = contentService.formatInboxMarkdown([]);
+    const proofMarkdown = contentService.formatProofOfWorkMarkdown([]);
+
+    expect(markdown).toContain('- Agent Branch: not created');
+    expect(markdown).toContain('- Labels: none');
+    expect(markdown).toContain('- Repo Description: n/a');
+    expect(markdown).toContain('- Issue Excerpt: n/a');
+    expect(markdown).toContain('- Core Demand: n/a');
+    expect(markdown).toContain('- Tech Requirements: n/a');
+    expect(markdown).toContain('## Detected Test Commands');
+    expect(markdown).toContain('- None detected');
+    expect(markdown).toContain('## Runnable Validation Commands');
+    expect(markdown).toContain('- None selected');
+    expect(markdown).toContain('## Validation Safety Notes');
+    expect(markdown).toContain('## Baseline Test Results');
+    expect(markdown).toContain('- Not executed');
+    expect(markdown).toContain('- Last Selected Issue: n/a');
+    expect(markdown).toContain('- Preferred Paths: none');
+    expect(inboxMarkdown).toContain('- Inbox is empty');
+    expect(proofMarkdown).toContain('- No activity recorded');
+  });
 });
