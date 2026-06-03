@@ -14,6 +14,7 @@ import type {
   RecordItem,
   StepItem,
   StepState,
+  TaskController,
   TaskOptions,
   TimelineItem,
   Tone,
@@ -558,7 +559,7 @@ export const ui = {
     printCelebration(capabilities, completionCopy(commandName));
   },
 
-  async task<T>(options: TaskOptions, task: () => Promise<T>): Promise<T> {
+  async task<T>(options: TaskOptions, task: (controller: TaskController) => Promise<T>): Promise<T> {
     return runTask(capabilities, options, task);
   },
 
@@ -602,6 +603,7 @@ export type {
   StepItem,
   StepState,
   TaskOptions,
+  TaskController,
   TimelineItem,
   Tone,
 } from './types.js';

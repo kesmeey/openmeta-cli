@@ -51,6 +51,10 @@ export interface TaskOptions {
   tone?: Tone;
 }
 
+export interface TaskController {
+  setMessage(message: string): void;
+}
+
 export interface UiCapabilities {
   width: number;
   isInteractive: boolean;

@@ -54,6 +54,7 @@ interface IssueCachePayload {
 
 interface IssueDiscoveryOptions {
   refresh?: boolean;
+  onStatus?: (message: string) => void;
 }
 
 export class GitHubService {
@@ -61,7 +62,15 @@ export class GitHubService {
   private username: string = '';
 
   initialize(pat: string, username: string): void {
-    this.octokit = new Octokit({ auth: pat });
+    this.octokit = new Octokit({
+      auth: pat,
+      log: {
+        debug: () => {},
+        info: () => {},
+        warn: (message, ...args) => logger.debug(`GitHub client: ${String(message)}`, ...args),
+        error: (message, ...args) => logger.debug(`GitHub client: ${String(message)}`, ...args),
+      },
+    });
     this.username = username;
   }
 
@@ -106,7 +115,8 @@ export class GitHubService {
       for (const labelGroup of FILTER_LABEL_GROUPS) {
         try {
           const searchQuery = this.buildSearchQuery(labelGroup);
-          const items = await this.paginateSearchWithRetry(searchQuery);
+          options.onStatus?.(this.buildSearchStatusMessage(labelGroup));
+          const items = await this.paginateSearchWithRetry(searchQuery, labelGroup, options.onStatus);
 
           logger.debug(`Search query: ${searchQuery}`);
           logger.debug(`Fetched ${items.length} total results for "${labelGroup.join(' / ')}"`);
@@ -129,7 +139,8 @@ export class GitHubService {
         } catch (error) {
           const failure = this.describeSearchFailure(error);
           failures.push({ labelGroup, ...failure });
-          logger.warn(`Issue search failed for labels "${labelGroup.join('" / "')}". ${failure.reason}`);
+          logger.debug(`Issue search failed for labels "${labelGroup.join('" / "')}". ${failure.reason}`);
+          options.onStatus?.('GitHub search is being stubborn, but OpenMeta is still pulling together the best issue set it can.');
         }
       }
 
@@ -340,7 +351,11 @@ export class GitHubService {
     };
   }
 
-  private async paginateSearchWithRetry(searchQuery: string): Promise<SearchIssueItem[]> {
+  private async paginateSearchWithRetry(
+    searchQuery: string,
+    labelGroup: readonly string[],
+    onStatus?: (message: string) => void,
+  ): Promise<SearchIssueItem[]> {
     if (!this.octokit) {
       throw new Error('GitHub service not initialized');
     }
@@ -354,6 +369,7 @@ export class GitHubService {
       try {
         while (pagesFetched < MAX_SEARCH_PAGES) {
           if (pagesFetched > 0) {
+            onStatus?.('Still pulling issue candidates...');
             await this.delay(SEARCH_PAGE_PACING_DELAY_MS);
           }
 
@@ -375,10 +391,12 @@ export class GitHubService {
 
           if (pagesFetched >= MAX_SEARCH_PAGES) {
             logger.debug(`Reached page limit (${MAX_SEARCH_PAGES}). Stopping pagination.`);
+            onStatus?.(`Captured the strongest issue candidates for ${labelGroup.join(' / ')}.`);
             return items;
           }
 
           if (!hasMorePages) {
+            onStatus?.(`Finished pulling issue candidates for ${labelGroup.join(' / ')}.`);
             return items;
           }
 
@@ -412,12 +430,14 @@ export class GitHubService {
               }
             }
 
-            logger.warn(`Rate limited during pagination (attempt ${attempt}/${MAX_PAGINATION_RETRIES}). Retrying in ${Math.round(delayMs / 1000)}s...`);
+            logger.debug(`Rate limited during pagination (attempt ${attempt}/${MAX_PAGINATION_RETRIES}). Retrying in ${Math.round(delayMs / 1000)}s...`);
+            onStatus?.('GitHub is throttling search requests. Holding briefly and trying again...');
             await this.delay(delayMs);
             continue;
           } else if (items.length > 0) {
             // MAX_PAGINATION_RETRIES exhausted, but we have some data. Graceful return.
-            logger.warn(`Pagination retries exhausted. Yielding ${items.length} items collected so far.`);
+            logger.debug(`Pagination retries exhausted. Yielding ${items.length} items collected so far.`);
+            onStatus?.('GitHub kept throttling search requests, so OpenMeta is continuing with the strongest issues already collected.');
             return items;
           }
         }
@@ -427,6 +447,10 @@ export class GitHubService {
     }
 
     throw new Error(`Pagination exhausted after ${MAX_PAGINATION_RETRIES} attempts`);
+  }
+
+  private buildSearchStatusMessage(labelGroup: readonly string[]): string {
+    return `Pulling issue candidates for ${labelGroup.join(' / ')}...`;
   }
 
   private delay(ms: number): Promise<void> {

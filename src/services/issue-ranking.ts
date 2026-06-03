@@ -34,8 +34,11 @@ const FOCUS_AREA_TERMS: Record<string, string[]> = {
 };
 
 export class IssueRankingService {
-  async loadRankedIssues(config: AppConfig, options: { refresh?: boolean; localOnly?: boolean } = {}): Promise<RankedIssue[]> {
-    const issues = await githubService.fetchTrendingIssues({ refresh: options.refresh });
+  async loadRankedIssues(
+    config: AppConfig,
+    options: { refresh?: boolean; localOnly?: boolean; onStatus?: (message: string) => void } = {},
+  ): Promise<RankedIssue[]> {
+    const issues = await githubService.fetchTrendingIssues({ refresh: options.refresh, onStatus: options.onStatus });
     const rankedCandidates = this.rankIssuesForProfile(issues, config.userProfile);
     if (options.localOnly) {
       return opportunityService.rankIssues(this.buildLocalIssueMatches(rankedCandidates, config.userProfile));

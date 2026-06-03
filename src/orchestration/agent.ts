@@ -154,7 +154,10 @@ export class AgentOrchestrator {
       doneMessage: 'Opportunity ranking complete',
       failedMessage: 'Opportunity ranking failed',
       tone: 'info',
-    }, async () => issueRankingService.loadRankedIssues(config, { refresh }));
+    }, async (task) => issueRankingService.loadRankedIssues(config, {
+      refresh,
+      onStatus: (message) => task.setMessage(message),
+    }));
     if (rankedIssues.length === 0) {
       ui.emptyState(
         'OpenMeta Agent',
@@ -417,7 +420,11 @@ export class AgentOrchestrator {
       doneMessage: 'Contribution opportunities scored',
       failedMessage: 'Contribution opportunity scoring failed',
       tone: 'info',
-    }, async () => issueRankingService.loadRankedIssues(config, { refresh, localOnly }));
+    }, async (task) => issueRankingService.loadRankedIssues(config, {
+      refresh,
+      localOnly,
+      onStatus: (message) => task.setMessage(message),
+    }));
     if (rankedIssues.length === 0) {
       ui.emptyState('OpenMeta Scout', 'No issues found', 'No issues met the current scoring thresholds.');
       return;
