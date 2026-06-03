@@ -256,6 +256,50 @@ describe('LLMService validation behavior', () => {
     const valid = await service.validateConnection();
     expect(valid).toBe(true);
   });
+
+  test('uses streaming validation requests when streaming is enabled', async () => {
+    const service = new LLMService() as unknown as LLMServiceInternals & {
+      initialize(
+        apiKey: string,
+        baseUrl: string,
+        modelName?: string,
+        apiHeaders?: Record<string, string>,
+        provider?: 'custom',
+        reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh',
+        stream?: boolean,
+      ): void;
+    };
+    const payloads: Array<Record<string, unknown>> = [];
+
+    async function* validationChunks() {
+      yield { choices: [{ delta: { content: 'O' } }] };
+      yield { choices: [{ delta: { content: 'K' } }] };
+    }
+
+    service.initialize('sk-test', 'https://example.com/v1', 'gpt-5.5', {}, 'custom', 'xhigh', true);
+    service.client = {
+      chat: {
+        completions: {
+          create: (payload) => {
+            payloads.push(payload);
+            return validationChunks();
+          },
+        },
+      },
+    };
+
+    const valid = await service.validateConnection();
+
+    expect(valid).toBe(true);
+    expect(payloads[0]).toMatchObject({
+      model: 'gpt-5.5',
+      stream: true,
+      stream_options: {
+        include_usage: true,
+      },
+      reasoning_effort: 'xhigh',
+    });
+  });
 });
 
 describe('LLMService reasoning effort requests', () => {

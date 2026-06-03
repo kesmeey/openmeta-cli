@@ -91,6 +91,7 @@ export class LLMService {
           model: this.modelName,
           messages: [{ role: 'user', content: LLM_VALIDATION_PROMPT }],
           ...LLM_VALIDATION_REQUEST,
+          ...this.getStreamingRequestParams(),
           ...this.getReasoningRequestParams(),
         }, {
           signal: controller.signal,
@@ -98,7 +99,7 @@ export class LLMService {
 
         // 自定义兼容端点最容易把站点页面或其他 200 响应误判为可用，所以这里额外校验返回结构。
         if (this.provider === 'custom') {
-          this.assertCustomValidationResponse(response);
+          await this.assertCustomValidationResponse(response);
         }
       } finally {
         clearTimeout(timeout);
@@ -290,14 +291,7 @@ Repo Stars: ${i.repoStars}`
           { role: 'user', content: prompt },
         ],
         temperature: options.temperature ?? 0.7,
-        ...(this.stream
-          ? {
-            stream: true,
-            stream_options: {
-              include_usage: true,
-            },
-          }
-          : {}),
+        ...this.getStreamingRequestParams(),
         ...this.getReasoningRequestParams(),
       });
 
@@ -431,6 +425,19 @@ Repo Stars: ${i.repoStars}`
     }
 
     return { reasoning_effort: this.reasoningEffort };
+  }
+
+  private getStreamingRequestParams(): { stream?: true; stream_options?: { include_usage: true } } {
+    if (!this.stream) {
+      return {};
+    }
+
+    return {
+      stream: true,
+      stream_options: {
+        include_usage: true,
+      },
+    };
   }
 
   private supportsReasoningEffort(): boolean {
@@ -616,7 +623,15 @@ Repo Stars: ${i.repoStars}`
     return error instanceof Error && (error.name === 'AbortError' || error.message.toLowerCase().includes('aborted'));
   }
 
-  private assertCustomValidationResponse(response: unknown): void {
+  private async assertCustomValidationResponse(response: unknown): Promise<void> {
+    if (this.isAsyncIterable(response)) {
+      const content = await this.extractChatContent(response);
+      if (content.trim().length === 0) {
+        throw new Error('Custom provider validation response did not include a usable assistant reply.');
+      }
+      return;
+    }
+
     if (typeof response !== 'object' || response === null) {
       throw new Error('Custom provider validation response did not match the expected OpenAI-compatible format.');
     }
