@@ -372,7 +372,39 @@ describe('GitHubService internals', () => {
 
     const items = await internals.paginateSearchWithRetry('label:"good first issue"');
 
-    expect(pagesYielded).toBe(8);
-    expect(items.map((item) => item.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(pagesYielded).toBe(4);
+    expect(items.map((item) => item.id)).toEqual([1, 2, 3, 4]);
+  });
+
+  test('paces successful pagination requests with a lightweight delay between pages', async () => {
+    const service = new GitHubService();
+    const internals = service as unknown as GitHubServiceInternals;
+    const observedDelays: number[] = [];
+
+    internals.octokit = {
+      rest: {
+        search: {
+          issuesAndPullRequests: async () => ({ data: { total_count: 0, items: [] } }),
+        },
+      },
+      paginate: {
+        iterator: async function* () {
+          for (let page = 1; page <= 3; page++) {
+            yield {
+              data: [createSearchItem(page)],
+            };
+          }
+        },
+      },
+    } as unknown as GitHubServiceInternals['octokit'];
+
+    internals.delay = async (ms: number) => {
+      observedDelays.push(ms);
+    };
+
+    const items = await internals.paginateSearchWithRetry('label:"good first issue"');
+
+    expect(items.map((item) => item.id)).toEqual([1, 2, 3]);
+    expect(observedDelays).toEqual([1_500, 1_500]);
   });
 });

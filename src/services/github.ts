@@ -23,7 +23,8 @@ const ACTION_BLOCKING_LABELS = [
 const SEARCH_RESULTS_PER_PAGE = 30;
 const SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_PAGINATION_RETRIES = 3;
-const MAX_SEARCH_PAGES = 8;
+const MAX_SEARCH_PAGES = 4;
+const SEARCH_PAGE_PACING_DELAY_MS = 1_500;
 const RATE_LIMIT_RETRY_BASE_DELAY_MS = 1000;
 
 type SearchIssueItem =
@@ -361,6 +362,10 @@ export class GitHubService {
             page: currentPage,
           },
         )) {
+          if (pagesFetched > 0) {
+            await this.delay(SEARCH_PAGE_PACING_DELAY_MS);
+          }
+
           const pageItems: SearchIssueItem[] = Array.isArray((response as any).data)
             ? (response as any).data
             : [];
