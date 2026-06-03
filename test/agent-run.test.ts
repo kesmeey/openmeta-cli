@@ -65,7 +65,7 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       enabled: true,
       scheduleTime: '09:00',
       timezone: 'UTC',
-      contentType: 'issue-report',
+      contentType: 'research_note',
       scheduler: 'manual',
       minMatchScore: 75,
       skipIfAlreadyGeneratedToday: false,

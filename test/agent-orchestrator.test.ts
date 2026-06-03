@@ -152,7 +152,7 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       enabled: true,
       scheduleTime: '09:00',
       timezone: 'UTC',
-      contentType: 'issue-report',
+      contentType: 'research_note',
       scheduler: 'manual',
       minMatchScore: 75,
       skipIfAlreadyGeneratedToday: false,
@@ -321,11 +321,11 @@ describe('AgentOrchestrator support behavior', () => {
     ];
 
     spyOn(infra, 'selectPrompt').mockRejectedValue(new Error('tty unavailable'));
-    const promptSpy = spyOn(infra, 'prompt').mockImplementation(async (questions: unknown) => {
+    const promptSpy = spyOn(infra, 'prompt').mockImplementation(async <T extends object>(questions: unknown) => {
       const [question] = questions as Array<{ validate?: (input: string) => unknown }>;
       expect(question?.validate?.('6')).toBe('Enter a number between 1 and 5.');
       expect(question?.validate?.('2')).toBe(true);
-      return { selectedIndex: '2' };
+      return { selectedIndex: '2' } as T;
     });
 
     const selected = await orchestrator.promptForIssue(issues);

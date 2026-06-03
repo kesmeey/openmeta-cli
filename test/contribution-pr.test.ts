@@ -472,7 +472,7 @@ describe('ContributionPrService', () => {
     let createForkCalled = false;
 
     (githubService as unknown as { getUsername: () => string }).getUsername = () => 'octocat';
-    globalThis.setTimeout = ((callback: TimerHandler) => {
+    globalThis.setTimeout = ((callback: Parameters<typeof setTimeout>[0]) => {
       if (typeof callback === 'function') {
         callback();
       }
@@ -558,7 +558,7 @@ describe('ContributionPrService', () => {
     const service = new ContributionPrService() as unknown as ContributionPrInternals;
 
     (githubService as unknown as { getUsername: () => string }).getUsername = () => 'octocat';
-    globalThis.setTimeout = ((callback: TimerHandler) => {
+    globalThis.setTimeout = ((callback: Parameters<typeof setTimeout>[0]) => {
       if (typeof callback === 'function') {
         callback();
       }
