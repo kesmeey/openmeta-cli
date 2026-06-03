@@ -333,6 +333,69 @@ describe('ContributionPrService', () => {
     }
   });
 
+  test('rethrows unexpected createRef errors while publishing fork commits', async () => {
+    const workspacePath = mkdtempSync(join(tmpdir(), 'openmeta-contribution-pr-create-ref-error-'));
+    tempDirs.push(workspacePath);
+    mkdirSync(join(workspacePath, 'src'), { recursive: true });
+    writeFileSync(join(workspacePath, 'src', 'app.ts'), 'export const version = 2;\n', 'utf-8');
+
+    const originalGetUsername = githubService.getUsername;
+    const service = new ContributionPrService() as unknown as ContributionPrInternals;
+
+    (githubService as unknown as { getUsername: () => string }).getUsername = () => 'octocat';
+    service.initialize({
+      rest: {
+        repos: {
+          get: async ({ owner }: { owner: string; repo: string }) => owner === 'acme'
+            ? { data: { default_branch: 'main' } }
+            : {
+              data: {
+                fork: true,
+                parent: { full_name: 'acme/demo' },
+                default_branch: 'main',
+              },
+            },
+          getBranch: async () => ({
+            data: {
+              commit: {
+                sha: 'base-commit-sha',
+                commit: {
+                  tree: {
+                    sha: 'base-tree-sha',
+                  },
+                },
+              },
+            },
+          }),
+          mergeUpstream: async () => ({ data: {} }),
+        },
+        pulls: {
+          list: async () => ({ data: [] }),
+          create: async () => ({ data: { html_url: 'https://github.com/acme/demo/pull/11', number: 11 } }),
+        },
+        git: {
+          createTree: async () => ({ data: { sha: 'tree-sha' } }),
+          createCommit: async () => ({ data: { sha: 'commit-sha' } }),
+          createRef: async () => {
+            throw { status: 500, message: 'boom' };
+          },
+          updateRef: async () => ({ data: {} }),
+        },
+      },
+    });
+
+    try {
+      await expect(service.submitDraftPullRequest({
+        issue: createRankedIssue({ repoFullName: 'acme/demo', number: 9 }),
+        prDraft: createPullRequestDraft(),
+        workspacePath,
+        changedFiles: ['src/app.ts'],
+      })).rejects.toEqual(expect.objectContaining({ status: 500 }));
+    } finally {
+      (githubService as unknown as { getUsername: () => string }).getUsername = originalGetUsername;
+    }
+  });
+
   test('fails clearly when the service is not initialized', async () => {
     const service = new ContributionPrService() as unknown as ContributionPrInternals;
 
