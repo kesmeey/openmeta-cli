@@ -23,6 +23,7 @@ const ACTION_BLOCKING_LABELS = [
 const SEARCH_RESULTS_PER_PAGE = 30;
 const SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_PAGINATION_RETRIES = 3;
+const MAX_SEARCH_PAGES = 8;
 const RATE_LIMIT_RETRY_BASE_DELAY_MS = 1000;
 
 type SearchIssueItem =
@@ -343,10 +344,13 @@ export class GitHubService {
       throw new Error('GitHub service not initialized');
     }
 
+    const items: SearchIssueItem[] = [];
     let attempt = 0;
+    let pagesFetched = 0;
+    let currentPage = 1;
+
     while (attempt < MAX_PAGINATION_RETRIES) {
       try {
-        const items: SearchIssueItem[] = [];
         for await (const response of this.octokit.paginate.iterator(
           this.octokit.rest.search.issuesAndPullRequests,
           {
@@ -354,15 +358,21 @@ export class GitHubService {
             sort: 'updated',
             order: 'desc',
             per_page: SEARCH_RESULTS_PER_PAGE,
+            page: currentPage,
           },
         )) {
-          // @octokit/plugin-paginate-rest normalizes the paginated responses.
-          // For search endpoints, it places the items array directly in response.data.
           const pageItems: SearchIssueItem[] = Array.isArray((response as any).data)
             ? (response as any).data
             : [];
-          
+
           items.push(...pageItems);
+          pagesFetched++;
+          currentPage++;
+
+          if (pagesFetched >= MAX_SEARCH_PAGES) {
+            logger.debug(`Reached page limit (${MAX_SEARCH_PAGES}). Stopping pagination.`);
+            return items;
+          }
         }
         return items;
       } catch (error) {
@@ -370,21 +380,32 @@ export class GitHubService {
         const err = error as { status?: number; headers?: Record<string, string> };
         const isRateLimit = err.status === 403 || err.status === 429;
 
-        if (isRateLimit && attempt < MAX_PAGINATION_RETRIES) {
-          const resetHeader = err.headers?.['x-ratelimit-reset'];
-          let delayMs = RATE_LIMIT_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        if (isRateLimit) {
+          if (attempt < MAX_PAGINATION_RETRIES) {
+            const resetHeader = err.headers?.['x-ratelimit-reset'];
+            const retryAfterHeader = err.headers?.['retry-after'];
 
-          if (resetHeader) {
-            const resetTime = parseInt(resetHeader, 10) * 1000;
-            const waitMs = resetTime - Date.now();
-            if (waitMs > 0 && waitMs < 60_000) {
-              delayMs = Math.min(waitMs + 500, 60_000);
+            // Default conservative fallback if no headers are provided (60s + slight exponential backoff)
+            let delayMs = 60_000 + RATE_LIMIT_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+
+            if (retryAfterHeader) {
+              delayMs = parseInt(retryAfterHeader, 10) * 1000 + 500;
+            } else if (resetHeader) {
+              const resetTime = parseInt(resetHeader, 10) * 1000;
+              const waitMs = resetTime - Date.now();
+              if (waitMs > 0) {
+                delayMs = waitMs + 500; // Trust GitHub's reset time without arbitrary 60s math.min cap
+              }
             }
-          }
 
-          logger.warn(`Rate limited during pagination (attempt ${attempt}/${MAX_PAGINATION_RETRIES}). Retrying in ${Math.round(delayMs / 1000)}s...`);
-          await this.delay(delayMs);
-          continue;
+            logger.warn(`Rate limited during pagination (attempt ${attempt}/${MAX_PAGINATION_RETRIES}). Retrying in ${Math.round(delayMs / 1000)}s...`);
+            await this.delay(delayMs);
+            continue;
+          } else if (items.length > 0) {
+            // MAX_PAGINATION_RETRIES exhausted, but we have some data. Graceful return.
+            logger.warn(`Pagination retries exhausted. Yielding ${items.length} items collected so far.`);
+            return items;
+          }
         }
 
         throw error;
