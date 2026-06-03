@@ -130,6 +130,71 @@ describe('ContributionPrService', () => {
     }
   });
 
+  test('continues when syncing an existing fork with upstream fails', async () => {
+    const workspacePath = mkdtempSync(join(tmpdir(), 'openmeta-contribution-pr-sync-failure-'));
+    tempDirs.push(workspacePath);
+    mkdirSync(join(workspacePath, 'src'), { recursive: true });
+    writeFileSync(join(workspacePath, 'src', 'app.ts'), 'export const version = 1;\n', 'utf-8');
+
+    const originalGetUsername = githubService.getUsername;
+    const service = new ContributionPrService() as unknown as ContributionPrInternals;
+
+    (githubService as unknown as { getUsername: () => string }).getUsername = () => 'octocat';
+    service.initialize({
+      rest: {
+        repos: {
+          get: async ({ owner }: { owner: string; repo: string }) => owner === 'acme'
+            ? { data: { default_branch: 'main' } }
+            : {
+              data: {
+                fork: true,
+                parent: { full_name: 'acme/demo' },
+                default_branch: 'main',
+              },
+            },
+          getBranch: async () => ({
+            data: {
+              commit: {
+                sha: 'base-commit-sha',
+                commit: {
+                  tree: {
+                    sha: 'base-tree-sha',
+                  },
+                },
+              },
+            },
+          }),
+          mergeUpstream: async () => {
+            throw new Error('merge failed');
+          },
+        },
+        pulls: {
+          list: async () => ({ data: [] }),
+          create: async () => ({ data: { html_url: 'https://github.com/acme/demo/pull/10', number: 10 } }),
+        },
+        git: {
+          createTree: async () => ({ data: { sha: 'tree-sha' } }),
+          createCommit: async () => ({ data: { sha: 'commit-sha' } }),
+          createRef: async () => ({ data: {} }),
+        },
+      },
+    });
+
+    try {
+      const result = await service.submitDraftPullRequest({
+        issue: createRankedIssue({ repoFullName: 'acme/demo', number: 8 }),
+        prDraft: createPullRequestDraft(),
+        workspacePath,
+        changedFiles: ['src/app.ts'],
+      });
+
+      expect(result.url).toBe('https://github.com/acme/demo/pull/10');
+      expect(result.number).toBe(10);
+    } finally {
+      (githubService as unknown as { getUsername: () => string }).getUsername = originalGetUsername;
+    }
+  });
+
   test('creates a draft PR when no open PR already exists', async () => {
     const workspacePath = mkdtempSync(join(tmpdir(), 'openmeta-contribution-pr-create-'));
     tempDirs.push(workspacePath);
