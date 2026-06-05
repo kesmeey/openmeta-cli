@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { ensureDirectory, getOpenMetaStateDir, getLocalDateStamp } from '../infra/index.js';
 import type { ContributionInboxItem } from '../types/index.js';
@@ -40,7 +40,19 @@ export class InboxService {
       ...state.items.filter((entry) => entry.id !== item.id),
     ].sort((left, right) => right.overallScore - left.overallScore);
 
-    writeFileSync(this.getInboxPath(), JSON.stringify({ items }, null, 2), 'utf-8');
+    const targetPath = this.getInboxPath();
+    const tmpPath = `${targetPath}.tmp.${process.pid}`;
+    try {
+      writeFileSync(tmpPath, JSON.stringify({ items }, null, 2), 'utf-8');
+      renameSync(tmpPath, targetPath);
+    } catch (error) {
+      try {
+        unlinkSync(tmpPath);
+      } catch {
+        /* ignore cleanup failure */
+      }
+      throw error;
+    }
     return items;
   }
 

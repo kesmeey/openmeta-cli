@@ -3,6 +3,7 @@ import { logger } from '../infra/index.js';
 import { githubService } from './github.js';
 import { llmService } from './llm.js';
 import { opportunityService } from './opportunity.js';
+import { proofOfWorkService } from './proof-of-work.js';
 
 const ISSUE_SCORING_BATCH_SIZE = 20;
 const MAX_ISSUES_FOR_LLM_SCORING = 80;
@@ -120,7 +121,26 @@ export class IssueRankingService {
   }
 
   selectIssueForAutomation(issues: RankedIssue[], minOverallScore: number): RankedIssue | undefined {
-    return issues.find((issue) => issue.opportunity.overallScore >= minOverallScore);
+    const contributedIds = new Set(
+      proofOfWorkService.load().records.map((r) => `${r.repoFullName}#${r.issueNumber}`),
+    );
+
+    const fresh = issues.filter(
+      (issue) =>
+        issue.opportunity.overallScore >= minOverallScore &&
+        !contributedIds.has(`${issue.repoFullName}#${issue.number}`),
+    );
+
+    if (fresh.length > 0) {
+      return fresh[0];
+    }
+
+    // Fallback: all above-threshold issues already attempted — pick best unattempted
+    const unattempted = issues.filter(
+      (issue) => !contributedIds.has(`${issue.repoFullName}#${issue.number}`),
+    );
+
+    return unattempted[0];
   }
 
   diversifyScoutIssues(issues: RankedIssue[], limit: number): RankedIssue[] {

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { ensureDirectory, getOpenMetaStateDir } from '../infra/index.js';
 import type { AgentRunRecord, AgentRunStatus } from '../types/index.js';
@@ -82,7 +82,19 @@ export class RunHistoryService {
   }
 
   private write(records: AgentRunRecord[]): void {
-    writeFileSync(this.getStatePath(), JSON.stringify({ records }, null, 2), 'utf-8');
+    const targetPath = this.getStatePath();
+    const tmpPath = `${targetPath}.tmp.${process.pid}`;
+    try {
+      writeFileSync(tmpPath, JSON.stringify({ records }, null, 2), 'utf-8');
+      renameSync(tmpPath, targetPath);
+    } catch (error) {
+      try {
+        unlinkSync(tmpPath);
+      } catch {
+        /* ignore cleanup failure */
+      }
+      throw error;
+    }
   }
 }
 

@@ -4,6 +4,9 @@
   "description": "OpenMeta CLI - Developer's daily open source growth companion",
   "type": "module",
   "private": true,
+  "engines": {
+    "bun": ">=1.0.0"
+  },
   "bin": {
     "openmeta": "./bin/openmeta.js"
   },
