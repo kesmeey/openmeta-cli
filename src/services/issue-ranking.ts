@@ -42,6 +42,7 @@ export class IssueRankingService {
       refresh: options.refresh,
       repoFullName: options.repoFullName,
       onStatus: options.onStatus,
+      techStack: config.userProfile.techStack,
     });
     const rankedCandidates = this.rankIssuesForProfile(issues, config.userProfile);
     if (options.localOnly) {
@@ -206,6 +207,32 @@ export class IssueRankingService {
     score += this.computeDiscoveryFreshnessBoost(issue.updatedAt);
     score += Math.min(12, Math.log10(issue.repoStars + 10) * 5);
 
+    // Quality penalties
+    if (issue.body.trim().length < 50) {
+      score -= 10;
+    }
+    if (this.hasOnlyTitleBody(issue)) {
+      score -= 6;
+    }
+
+    // Penalize issues with no updates in > 90 days
+    const ageDays = (Date.now() - new Date(issue.updatedAt).getTime()) / (1000 * 60 * 60 * 24);
+    if (ageDays > 180) {
+      score -= 14;
+    } else if (ageDays > 90) {
+      score -= 6;
+    }
+
+    // Bonus for well-structured bug reports
+    if (/\b(expected behavior|actual behavior|steps to reproduce|reproduction steps)\b/i.test(issue.body)) {
+      score += 8;
+    }
+
+    // Bonus for issues with code snippets (concrete context)
+    if (/```[\s\S]*?```/.test(issue.body)) {
+      score += 5;
+    }
+
     return score;
   }
 
@@ -252,6 +279,11 @@ export class IssueRankingService {
     const content = `${issue.title}\n${issue.body}`;
     return /(?:^|[\s`'"])(?:[\w.-]+\/)+[\w.-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|kt|json|md|css|scss)/m.test(content) ||
       /\b(repro|steps? to reproduce|expected|actual|acceptance criteria|stack trace)\b/i.test(content);
+  }
+
+  private hasOnlyTitleBody(issue: GitHubIssue): boolean {
+    const cleaned = issue.body.trim().replace(/^#{1,6}\s+.+$/gm, '').trim();
+    return cleaned.length < 30;
   }
 
   private computeDiscoveryFreshnessBoost(updatedAt: string): number {
