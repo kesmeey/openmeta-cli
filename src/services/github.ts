@@ -26,7 +26,7 @@ const MAX_PAGINATION_RETRIES = 3;
 const MAX_SEARCH_PAGES = 4;
 const SEARCH_PAGE_PACING_DELAY_MS = 3_000;
 const RATE_LIMIT_RETRY_FALLBACK_DELAY_MS = 10_000;
-const MAX_ISSUES_PER_REPO = 5;
+const MAX_ISSUES_PER_REPO = 3;
 const MIN_REPO_STARS = 50;
 
 type SearchIssueItem =
@@ -212,6 +212,12 @@ export class GitHubService {
         const repoId = this.parseRepositoryUrl(item.repository_url);
         const repoData = await this.fetchRepoMetadata(repoId, repoCache);
 
+        // Post-fetch quality gate: GitHub issue search does not support the
+        // `stars:` qualifier, so we filter by repo stars after resolving metadata.
+        if (repoData.stars < MIN_REPO_STARS) {
+          continue;
+        }
+
         issues.push({
           id: item.id,
           number: item.number,
@@ -303,7 +309,7 @@ export class GitHubService {
   private buildSearchQuery(labels: readonly string[], repoFullName?: string): string {
     const joinedLabels = labels.map((label) => `label:"${label}"`).join(' OR ');
     const repoScope = repoFullName ? `repo:${repoFullName} ` : '';
-    return `${repoScope}(${joinedLabels}) archived:false is:issue is:open no:assignee stars:>${MIN_REPO_STARS}`;
+    return `${repoScope}(${joinedLabels}) archived:false is:issue is:open no:assignee`;
   }
 
   private buildRepositorySearchQuery(repoFullName: string): string {
@@ -323,7 +329,7 @@ export class GitHubService {
     if (!joinedTech) {
       return '';
     }
-    return `(${joinedLabels}) (${joinedTech}) archived:false is:issue is:open no:assignee stars:>${Math.max(1, MIN_REPO_STARS - 5)}`;
+    return `(${joinedLabels}) (${joinedTech}) archived:false is:issue is:open no:assignee`;
   }
 
   private shouldIncludeIssue(item: SearchIssueItem): boolean {

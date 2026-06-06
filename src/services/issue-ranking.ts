@@ -111,14 +111,26 @@ export class IssueRankingService {
     issues: GitHubIssue[],
     userProfile: AppConfig['userProfile'],
   ): GitHubIssue[] {
-    return [...issues].sort((left, right) => {
-      const scoreDelta = this.scoreIssueForProfile(right, userProfile) - this.scoreIssueForProfile(left, userProfile);
-      if (scoreDelta !== 0) {
-        return scoreDelta;
-      }
+    const repoOrder = new Map<string, number>();
 
-      return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
-    });
+    return [...issues]
+      .map((issue) => {
+        const repoIdx = repoOrder.get(issue.repoFullName) ?? 0;
+        repoOrder.set(issue.repoFullName, repoIdx + 1);
+        const sameRepoPenalty = repoIdx >= 2 ? 20 : repoIdx >= 1 ? 10 : 0;
+        return {
+          issue,
+          score: Math.max(0, this.scoreIssueForProfile(issue, userProfile) - sameRepoPenalty),
+        };
+      })
+      .sort((left, right) => {
+        const scoreDelta = right.score - left.score;
+        if (scoreDelta !== 0) {
+          return scoreDelta;
+        }
+        return new Date(right.issue.updatedAt).getTime() - new Date(left.issue.updatedAt).getTime();
+      })
+      .map((entry) => entry.issue);
   }
 
   selectIssueForAutomation(issues: RankedIssue[], minOverallScore: number): RankedIssue | undefined {
@@ -235,12 +247,14 @@ export class IssueRankingService {
       score -= 6;
     }
 
-    // Penalize issues with no updates in > 90 days
+    // Penalize stale issues — a >1yr old issue is almost certainly unmaintained
     const ageDays = (Date.now() - new Date(issue.updatedAt).getTime()) / (1000 * 60 * 60 * 24);
-    if (ageDays > 180) {
-      score -= 14;
+    if (ageDays > 365) {
+      score -= 35;
+    } else if (ageDays > 180) {
+      score -= 25;
     } else if (ageDays > 90) {
-      score -= 6;
+      score -= 12;
     }
 
     // Bonus for well-structured bug reports
