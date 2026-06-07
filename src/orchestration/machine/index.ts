@@ -7,3 +7,6 @@ export { machineProviderOrchestrator, MachineProviderOrchestrator } from './prov
 export { machineRunsOrchestrator, MachineRunsOrchestrator } from './runs.js';
 export { machineInboxOrchestrator, MachineInboxOrchestrator } from './inbox.js';
 export { machineProofOfWorkOrchestrator, MachineProofOfWorkOrchestrator } from './pow.js';
+export { machineScoutOrchestrator, MachineScoutOrchestrator } from './scout.js';
+export { machineAnalyzeOrchestrator, MachineAnalyzeOrchestrator } from './analyze.js';
+export { machineAgentFlowOrchestrator, MachineAgentFlowOrchestrator } from './agent.js';

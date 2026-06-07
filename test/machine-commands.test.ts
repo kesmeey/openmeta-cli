@@ -2,7 +2,8 @@ import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { Command } from 'commander';
 import { registerMachineCommand } from '../src/commands/machine.js';
 import * as infra from '../src/infra/index.js';
-import { configOrchestrator, providerOrchestrator } from '../src/orchestration/index.js';
+import { agentOrchestrator, analyzeOrchestrator, configOrchestrator, providerOrchestrator } from '../src/orchestration/index.js';
+import { createPatchDraft, createPullRequestDraft, createRankedIssue, createRepositorySuggestion, createWorkspace } from './helpers/factories.js';
 
 function captureStdout(): string[] {
   const writes: string[] = [];
@@ -190,5 +191,125 @@ describe('machine commands', () => {
     expect(output.command).toBe('machine provider add');
     expect(output.data.profileName).toBe('machine-add');
     expect(output.data.apiKey).toBe('***cret');
+  });
+
+  test('machine scout writes ranked opportunities as JSON only', async () => {
+    const writes = captureStdout();
+    const program = new Command();
+    registerMachineCommand(program);
+    const issue = createRankedIssue();
+
+    spyOn(agentOrchestrator, 'scoutMachine').mockResolvedValue({
+      opportunities: [issue],
+      mode: {
+        limit: 10,
+        refresh: false,
+        repo: undefined,
+        localOnly: true,
+      },
+      nextActions: ['inspect_ranked_opportunities'],
+    });
+
+    await program.parseAsync(['machine', 'scout', '--local'], { from: 'user' });
+
+    const output = JSON.parse(writes.join(''));
+    expect(output.command).toBe('machine scout');
+    expect(output.data.opportunities[0].repoFullName).toBe(issue.repoFullName);
+  });
+
+  test('machine analyze writes repository analysis output as JSON only', async () => {
+    const writes = captureStdout();
+    const program = new Command();
+    registerMachineCommand(program);
+    const suggestion = createRepositorySuggestion();
+    const patchDraft = createPatchDraft();
+    const prDraft = createPullRequestDraft();
+    const workspace = createWorkspace({
+      workspacePath: '/tmp/openmeta-demo',
+      branchName: 'openmeta/analyze-acme-demo',
+    });
+
+    spyOn(analyzeOrchestrator, 'runMachine').mockResolvedValue({
+      repoFullName: 'acme/demo',
+      workspace,
+      selectedSuggestion: suggestion,
+      suggestions: [suggestion],
+      patchDraft,
+      prDraft,
+      artifacts: {
+        artifactDir: '/tmp/openmeta/artifacts/analyze',
+        analysisPath: '/tmp/openmeta/artifacts/analyze/repository-analysis.md',
+        patchDraftPath: '/tmp/openmeta/artifacts/analyze/patch-draft.md',
+        prDraftPath: '/tmp/openmeta/artifacts/analyze/pr-draft.md',
+      },
+      mode: {
+        headless: true,
+        runChecks: false,
+        dryRun: true,
+      },
+    });
+
+    await program.parseAsync(['machine', 'analyze', '--repo', 'acme/demo', '--headless', '--dry-run'], { from: 'user' });
+
+    const output = JSON.parse(writes.join(''));
+    expect(output.command).toBe('machine analyze');
+    expect(output.data.repoFullName).toBe('acme/demo');
+    expect(output.data.mode.dryRun).toBe(true);
+  });
+
+  test('machine agent writes execution outcome as JSON only', async () => {
+    const writes = captureStdout();
+    const program = new Command();
+    registerMachineCommand(program);
+    const issue = createRankedIssue({ repoFullName: 'acme/demo', number: 42 });
+    const patchDraft = createPatchDraft();
+    const prDraft = createPullRequestDraft();
+    const workspace = createWorkspace({
+      workspacePath: '/tmp/openmeta-demo',
+      branchName: 'openmeta/42-accessibility',
+      testResults: [],
+    });
+
+    spyOn(agentOrchestrator, 'runMachine').mockResolvedValue({
+      issue,
+      workspace,
+      patchDraft,
+      prDraft,
+      artifacts: {
+        artifactDir: '/tmp/openmeta/artifacts',
+        dossierPath: '/tmp/openmeta/artifacts/dossier.md',
+        patchDraftPath: '/tmp/openmeta/artifacts/patch-draft.md',
+        prDraftPath: '/tmp/openmeta/artifacts/pr-draft.md',
+        memoryPath: '/tmp/openmeta/artifacts/repo-memory.md',
+        inboxPath: '/tmp/openmeta/artifacts/inbox.md',
+        proofOfWorkPath: '/tmp/openmeta/artifacts/proof-of-work.md',
+      },
+      changedFiles: [],
+      validationResults: [],
+      reviewRequired: false,
+      published: false,
+      prCreated: false,
+      repoMutated: false,
+      artifactsWritten: false,
+      executionOutcome: 'draft_only',
+      executionPolicy: {
+        headless: true,
+        draftOnly: true,
+        runChecks: false,
+        dryRun: true,
+        refresh: false,
+      },
+      skipReasons: ['draft_only'],
+      nextActions: ['inspect_artifact_paths'],
+      pullRequestUrl: undefined,
+      pullRequestNumber: undefined,
+    });
+
+    await program.parseAsync(['machine', 'agent', '--issue', 'https://github.com/acme/demo/issues/42', '--draft-only', '--dry-run'], { from: 'user' });
+
+    const output = JSON.parse(writes.join(''));
+    expect(output.command).toBe('machine agent');
+    expect(output.data.executionOutcome).toBe('draft_only');
+    expect(output.data.repoMutated).toBe(false);
   });
 });

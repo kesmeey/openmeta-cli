@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:
 import * as infra from '../src/infra/index.js';
 import { AgentOrchestrator } from '../src/orchestration/agent.js';
 import { AnalyzeOrchestrator } from '../src/orchestration/analyze.js';
-import { contentService, issueRankingService, llmService, memoryService, workspaceService } from '../src/services/index.js';
-import { createMemory, createPatchDraft, createPullRequestDraft, createRankedIssue, createRepositorySuggestion, createWorkspace } from './helpers/factories.js';
+import { contentService, inboxService, issueRankingService, llmService, memoryService, proofOfWorkService, workspaceService } from '../src/services/index.js';
+import { createInboxItem, createMemory, createPatchDraft, createProofRecord, createPullRequestDraft, createRankedIssue, createRepositorySuggestion, createWorkspace } from './helpers/factories.js';
 
 function createConfig() {
   return {
@@ -33,6 +33,18 @@ function createConfig() {
       skipIfAlreadyGeneratedToday: false,
     },
     commitTemplate: 'feat: {{title}}',
+  };
+}
+
+function createArtifacts() {
+  return {
+    artifactDir: '/tmp/openmeta/artifacts',
+    dossierPath: '/tmp/openmeta/artifacts/dossier.md',
+    patchDraftPath: '/tmp/openmeta/artifacts/patch-draft.md',
+    prDraftPath: '/tmp/openmeta/artifacts/pr-draft.md',
+    memoryPath: '/tmp/openmeta/artifacts/repo-memory.md',
+    inboxPath: '/tmp/openmeta/artifacts/inbox.md',
+    proofOfWorkPath: '/tmp/openmeta/artifacts/proof-of-work.md',
   };
 }
 
@@ -131,5 +143,81 @@ describe('machine flow result builders', () => {
     expect(result.selectedSuggestion).toEqual(suggestion);
     expect(result.artifacts.analysisPath).toContain('analysis');
     expect(result.mode.dryRun).toBe(true);
+  });
+
+  test('machine agent draft-only flow returns explicit execution flags', async () => {
+    const config = createConfig();
+    const issue = createRankedIssue({ repoFullName: 'acme/demo', number: 42 });
+    const memory = createMemory();
+    const workspace = createWorkspace({
+      workspacePath: '/tmp/openmeta-demo',
+      branchName: 'openmeta/42-accessibility',
+      testResults: [],
+    });
+    const patchDraft = createPatchDraft();
+    const prDraft = createPullRequestDraft();
+    const artifacts = createArtifacts();
+    const orchestrator = new AgentOrchestrator();
+
+    spyOn(infra.configService, 'get').mockResolvedValue(config);
+    spyOn(orchestrator as AgentOrchestrator, 'validateConfig' as never).mockResolvedValue(undefined);
+    spyOn(orchestrator as AgentOrchestrator, 'initializeClients' as never).mockResolvedValue(undefined);
+    spyOn(issueRankingService, 'loadTargetIssue').mockResolvedValue([issue]);
+    spyOn(memoryService, 'load').mockReturnValue(memory);
+    spyOn(workspaceService, 'prepareWorkspace').mockResolvedValue(workspace);
+    spyOn(memoryService, 'update').mockReturnValue(memory);
+    spyOn(llmService, 'generatePatchDraft').mockResolvedValue({
+      version: '1',
+      kind: 'patch_draft',
+      status: 'success',
+      data: patchDraft,
+    });
+    spyOn(orchestrator as AgentOrchestrator, 'generateConcretePatch' as never).mockResolvedValue({
+      changedFiles: [],
+      validationResults: [],
+      reviewRequired: false,
+    });
+    spyOn(llmService, 'generatePrDraft').mockResolvedValue({
+      version: '1',
+      kind: 'pull_request_draft',
+      status: 'success',
+      data: prDraft,
+    });
+    spyOn(contentService, 'formatPatchDraftMarkdown').mockReturnValue('# Patch');
+    spyOn(contentService, 'formatPullRequestDraftMarkdown').mockReturnValue('# PR');
+    spyOn(contentService, 'formatContributionDossier').mockReturnValue('# Dossier');
+    spyOn(orchestrator as AgentOrchestrator, 'submitContributionPullRequestIfPossible' as never).mockResolvedValue({
+      changedFiles: [],
+      validationResults: [],
+    });
+    spyOn(orchestrator as AgentOrchestrator, 'prepareLocalArtifactPaths' as never).mockReturnValue(artifacts);
+    const writeArtifactsSpy = spyOn(orchestrator as AgentOrchestrator, 'writeLocalArtifacts' as never).mockImplementation(() => {});
+    const publishSpy = spyOn(orchestrator as AgentOrchestrator, 'publishArtifactsIfNeeded' as never).mockResolvedValue({
+      published: false,
+    });
+    const saveInboxSpy = spyOn(inboxService, 'saveItem').mockReturnValue([createInboxItem()]);
+    spyOn(inboxService, 'renderMarkdown').mockReturnValue('# Inbox');
+    spyOn(proofOfWorkService, 'load').mockReturnValue({ records: [] });
+    spyOn(proofOfWorkService, 'renderMarkdown').mockReturnValue('# Proof');
+    const recordProofSpy = spyOn(proofOfWorkService, 'record').mockReturnValue([createProofRecord()]);
+    spyOn(memoryService, 'renderMarkdown').mockReturnValue('# Memory');
+    const recordOutcomeSpy = spyOn(memoryService, 'recordOutcome').mockReturnValue(memory);
+
+    const result = await orchestrator.runMachine({
+      issue: 'https://github.com/acme/demo/issues/42',
+      draftOnly: true,
+      dryRun: true,
+    });
+
+    expect(result.executionOutcome).toBe('draft_only');
+    expect(result.repoMutated).toBe(false);
+    expect(result.prCreated).toBe(false);
+    expect(result.artifactsWritten).toBe(false);
+    expect(result.executionPolicy.headless).toBe(true);
+    expect(writeArtifactsSpy).not.toHaveBeenCalled();
+    expect(publishSpy).not.toHaveBeenCalled();
+    expect(saveInboxSpy).not.toHaveBeenCalled();
+    expect(recordProofSpy).not.toHaveBeenCalled();
+    expect(recordOutcomeSpy).not.toHaveBeenCalled();
   });
 });

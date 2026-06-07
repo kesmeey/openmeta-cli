@@ -1,11 +1,14 @@
 import { Command } from 'commander';
 import {
+  machineAgentFlowOrchestrator,
+  machineAnalyzeOrchestrator,
   machineConfigOrchestrator,
   machineDoctorOrchestrator,
   machineInboxOrchestrator,
   machineProofOfWorkOrchestrator,
   machineProviderOrchestrator,
   machineRunsOrchestrator,
+  machineScoutOrchestrator,
 } from '../orchestration/machine/index.js';
 
 export function registerMachineCommand(program: Command): void {
@@ -84,9 +87,7 @@ export function registerMachineCommand(program: Command): void {
     .option('--refresh', 'Ignore cached GitHub issue discovery results')
     .option('--repo <repository>', 'Limit issue discovery to one repository')
     .option('--local', 'Use local heuristic scoring without calling the LLM provider')
-    .action(() => {
-      throw new Error('machine scout is not implemented yet.');
-    });
+    .action((options: { limit?: string; refresh?: boolean; repo?: string; local?: boolean }) => machineScoutOrchestrator.execute(options));
 
   machine
     .command('analyze')
@@ -95,9 +96,7 @@ export function registerMachineCommand(program: Command): void {
     .option('--headless', 'Select the highest-scoring suggestion without prompting')
     .option('--run-checks', 'Execute detected baseline validation commands during workspace preparation')
     .option('--dry-run', 'Preview artifact paths without writing local analysis files')
-    .action(() => {
-      throw new Error('machine analyze is not implemented yet.');
-    });
+    .action((options: { repo?: string; headless?: boolean; runChecks?: boolean; dryRun?: boolean }) => machineAnalyzeOrchestrator.execute(options));
 
   machine
     .command('agent')
@@ -109,7 +108,13 @@ export function registerMachineCommand(program: Command): void {
     .option('--repo <repository>', 'Limit issue discovery to one repository')
     .option('--issue <issue>', 'Solve one GitHub issue number or issue URL')
     .option('--dry-run', 'Preview artifacts without publishing them')
-    .action(() => {
-      throw new Error('machine agent is not implemented yet.');
-    });
+    .action((options: {
+      headless?: boolean;
+      runChecks?: boolean;
+      draftOnly?: boolean;
+      refresh?: boolean;
+      repo?: string;
+      issue?: string;
+      dryRun?: boolean;
+    }) => machineAgentFlowOrchestrator.execute(options));
 }
