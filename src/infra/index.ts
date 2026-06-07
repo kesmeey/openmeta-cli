@@ -17,6 +17,7 @@ export { DEFAULT_LLM_REASONING_EFFORT, LLM_REASONING_EFFORTS, parseLLMReasoningE
 export { prompt } from './prompts.js';
 export { selectPrompt } from './select.js';
 export { ui } from './ui.js';
+export { isMachineContext, runInMachineContext } from './execution-context.js';
 export {
   ISSUE_MATCH_PROMPT,
   DAILY_REPORT_GENERATE_PROMPT,

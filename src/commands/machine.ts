@@ -27,9 +27,34 @@ export function registerMachineCommand(program: Command): void {
     .description('Read a masked machine-safe configuration snapshot')
     .action(() => machineConfigOrchestrator.get());
 
+  config
+    .command('set <key> <value>')
+    .description('Update a configuration key and return the masked resulting snapshot')
+    .action((key: string, value: string) => machineConfigOrchestrator.set(key, value));
+
   const provider = machine
     .command('provider')
     .description('Machine-safe provider profile management');
+
+  provider
+    .command('add <name>')
+    .description('Save a provider profile and return its machine-readable state')
+    .requiredOption('--base-url <url>', 'OpenAI-compatible API base URL')
+    .requiredOption('--model <model>', 'Model name')
+    .requiredOption('--api-key <key>', 'Provider API key')
+    .option('--provider <provider>', 'Provider preset name')
+    .option('--reasoning-effort <effort>', 'Reasoning effort')
+    .option('--stream <enabled>', 'Streaming mode as true or false')
+    .option('--header <key=value>', 'Extra provider header', (value: string, previous: string[] = []) => [...previous, value], [])
+    .action((name: string, options: {
+      provider?: string;
+      baseUrl?: string;
+      model?: string;
+      apiKey?: string;
+      reasoningEffort?: string;
+      stream?: string;
+      header?: string[];
+    }) => machineProviderOrchestrator.add(name, options));
 
   provider
     .command('use <name>')
@@ -51,4 +76,40 @@ export function registerMachineCommand(program: Command): void {
     .command('pow')
     .description('Machine-safe proof-of-work list')
     .action(() => machineProofOfWorkOrchestrator.execute());
+
+  machine
+    .command('scout')
+    .description('Machine-safe opportunity discovery')
+    .option('--limit <count>', 'Number of opportunities to return', '10')
+    .option('--refresh', 'Ignore cached GitHub issue discovery results')
+    .option('--repo <repository>', 'Limit issue discovery to one repository')
+    .option('--local', 'Use local heuristic scoring without calling the LLM provider')
+    .action(() => {
+      throw new Error('machine scout is not implemented yet.');
+    });
+
+  machine
+    .command('analyze')
+    .description('Machine-safe repository-first analysis')
+    .requiredOption('--repo <repository>', 'GitHub repository URL or owner/name to analyze')
+    .option('--headless', 'Select the highest-scoring suggestion without prompting')
+    .option('--run-checks', 'Execute detected baseline validation commands during workspace preparation')
+    .option('--dry-run', 'Preview artifact paths without writing local analysis files')
+    .action(() => {
+      throw new Error('machine analyze is not implemented yet.');
+    });
+
+  machine
+    .command('agent')
+    .description('Machine-safe contribution execution flow')
+    .option('--headless', 'Run unattended using saved automation defaults')
+    .option('--run-checks', 'Execute detected baseline validation commands')
+    .option('--draft-only', 'Generate artifacts without applying file edits or opening a PR')
+    .option('--refresh', 'Ignore cached GitHub issue discovery results')
+    .option('--repo <repository>', 'Limit issue discovery to one repository')
+    .option('--issue <issue>', 'Solve one GitHub issue number or issue URL')
+    .option('--dry-run', 'Preview artifacts without publishing them')
+    .action(() => {
+      throw new Error('machine agent is not implemented yet.');
+    });
 }

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { Command } from 'commander';
 import { registerMachineCommand } from '../src/commands/machine.js';
 import * as infra from '../src/infra/index.js';
-import { configOrchestrator } from '../src/orchestration/index.js';
+import { configOrchestrator, providerOrchestrator } from '../src/orchestration/index.js';
 
 function captureStdout(): string[] {
   const writes: string[] = [];
@@ -30,6 +30,9 @@ describe('machine commands', () => {
     expect(help).toContain('config');
     expect(help).toContain('provider');
     expect(help).toContain('runs');
+    expect(help).toContain('scout');
+    expect(help).toContain('analyze');
+    expect(help).toContain('agent');
   });
 
   test('machine doctor writes only JSON to stdout', async () => {
@@ -102,5 +105,90 @@ describe('machine commands', () => {
     const output = JSON.parse(writes.join(''));
     expect(output.command).toBe('machine config get');
     expect(output.data.github.pat).toBe('***oken');
+  });
+
+  test('machine config set writes the updated key and masked snapshot', async () => {
+    const writes = captureStdout();
+    const program = new Command();
+    registerMachineCommand(program);
+
+    spyOn(configOrchestrator, 'setMachineValue').mockResolvedValue({
+      updatedKey: 'llm.apiKey',
+      appliedValue: '***cret',
+      snapshot: {
+        userProfile: { techStack: [], proficiency: 'beginner', focusAreas: [] },
+        github: { username: 'octocat', pat: '***oken', targetRepoPath: '' },
+        llm: {
+          provider: 'openai',
+          apiBaseUrl: 'https://api.openai.com/v1',
+          apiKey: '***cret',
+          modelName: 'gpt-4o-mini',
+          apiHeaders: {},
+          activeProfile: '',
+          savedProfiles: [],
+        },
+        automation: {
+          enabled: false,
+          scheduleTime: '09:00',
+          timezone: 'UTC',
+          contentType: 'research_note',
+          scheduler: 'manual',
+          minMatchScore: 70,
+          skipIfAlreadyGeneratedToday: true,
+        },
+        commitTemplate: 'feat: {{title}}',
+      },
+      scheduler: {
+        status: 'unchanged',
+        detail: 'Scheduler state unchanged.',
+      },
+    });
+
+    await program.parseAsync(['machine', 'config', 'set', 'llm.apiKey', 'sk-secret'], { from: 'user' });
+
+    const output = JSON.parse(writes.join(''));
+    expect(output.command).toBe('machine config set');
+    expect(output.data.updatedKey).toBe('llm.apiKey');
+    expect(output.data.appliedValue).toBe('***cret');
+  });
+
+  test('machine provider add writes the saved profile result', async () => {
+    const writes = captureStdout();
+    const program = new Command();
+    registerMachineCommand(program);
+
+    spyOn(providerOrchestrator, 'addProfile').mockResolvedValue({
+      profileName: 'machine-add',
+      activeProfile: '',
+      provider: 'custom',
+      modelName: 'example-model',
+      apiBaseUrl: 'https://example.com/v1',
+      apiKey: '***cret',
+      apiHeaders: { 'X-Test': 'yes' },
+      reasoningEffort: 'medium',
+      stream: true,
+      validation: 'skipped',
+      validationMessage: 'Validation skipped.',
+    });
+
+    await program.parseAsync([
+      'machine',
+      'provider',
+      'add',
+      'machine-add',
+      '--base-url',
+      'https://example.com/v1',
+      '--model',
+      'example-model',
+      '--api-key',
+      'sk-secret',
+      '--header',
+      'X-Test=yes',
+    ], { from: 'user' });
+
+    const output = JSON.parse(writes.join(''));
+    expect(output.command).toBe('machine provider add');
+    expect(output.data.profileName).toBe('machine-add');
+    expect(output.data.apiKey).toBe('***cret');
   });
 });

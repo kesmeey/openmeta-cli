@@ -98,6 +98,37 @@ function parseBooleanOption(value: string | undefined, label: string): boolean {
 }
 
 export class ProviderOrchestrator {
+  async addProfile(nameInput: string, options: ProviderAddOptions): Promise<ProviderUseResult> {
+    const name = this.normalizeProfileName(nameInput);
+    const config = await configService.get();
+    const profile: LLMProviderProfile = {
+      provider: parseProvider(options.provider),
+      apiBaseUrl: requireValue(options.baseUrl, 'base URL'),
+      modelName: requireValue(options.model, 'model'),
+      apiKey: requireValue(options.apiKey, 'API key'),
+      apiHeaders: parseHeaders(options.header?.filter(Boolean) ?? []),
+      reasoningEffort: options.reasoningEffort
+        ? parseLLMReasoningEffort(options.reasoningEffort)
+        : DEFAULT_LLM_REASONING_EFFORT,
+      stream: parseBooleanOption(options.stream, 'stream'),
+    };
+    const updated = await this.saveProfile(config, name, profile, config.llm.activeProfile);
+
+    return {
+      profileName: name,
+      activeProfile: updated.llm.activeProfile || '',
+      provider: profile.provider,
+      modelName: profile.modelName,
+      apiBaseUrl: profile.apiBaseUrl,
+      apiKey: ui.maskSecret(profile.apiKey),
+      apiHeaders: profile.apiHeaders ?? {},
+      reasoningEffort: profile.reasoningEffort,
+      stream: profile.stream,
+      validation: 'skipped',
+      validationMessage: 'Validation skipped.',
+    };
+  }
+
   async list(): Promise<void> {
     const config = await configService.get();
     const profiles = config.llm.profiles || {};
@@ -164,33 +195,20 @@ export class ProviderOrchestrator {
   }
 
   async add(nameInput: string, options: ProviderAddOptions): Promise<void> {
-    const name = this.normalizeProfileName(nameInput);
-    const config = await configService.get();
-    const profile: LLMProviderProfile = {
-      provider: parseProvider(options.provider),
-      apiBaseUrl: requireValue(options.baseUrl, 'base URL'),
-      modelName: requireValue(options.model, 'model'),
-      apiKey: requireValue(options.apiKey, 'API key'),
-      apiHeaders: parseHeaders(options.header?.filter(Boolean) ?? []),
-      reasoningEffort: options.reasoningEffort
-        ? parseLLMReasoningEffort(options.reasoningEffort)
-        : DEFAULT_LLM_REASONING_EFFORT,
-      stream: parseBooleanOption(options.stream, 'stream'),
-    };
-    const updated = await this.saveProfile(config, name, profile, config.llm.activeProfile);
+    const result = await this.addProfile(nameInput, options);
 
     ui.card({
       label: 'OpenMeta Provider',
       title: 'Provider profile saved',
       subtitle: options.validate ? 'The profile was saved. Run provider use to activate and validate it.' : 'The profile is available for fast switching.',
       lines: [
-        `Profile: ${name}`,
-        `Provider: ${profile.provider}`,
-        `Model: ${profile.modelName}`,
-        `Reasoning effort: ${profile.reasoningEffort || DEFAULT_LLM_REASONING_EFFORT}`,
-        `Streaming: ${profile.stream ? 'yes' : 'no'}`,
-        `Endpoint: ${profile.apiBaseUrl}`,
-        `Active profile: ${updated.llm.activeProfile || '(none)'}`,
+        `Profile: ${result.profileName}`,
+        `Provider: ${result.provider}`,
+        `Model: ${result.modelName}`,
+        `Reasoning effort: ${result.reasoningEffort || DEFAULT_LLM_REASONING_EFFORT}`,
+        `Streaming: ${result.stream ? 'yes' : 'no'}`,
+        `Endpoint: ${result.apiBaseUrl}`,
+        `Active profile: ${result.activeProfile || '(none)'}`,
       ],
       tone: 'success',
     });

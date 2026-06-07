@@ -13,6 +13,17 @@ export class MachineConfigOrchestrator {
       process.exitCode = mapped.exitCode;
     }
   }
+
+  async set(key: string, value: string): Promise<void> {
+    try {
+      const result = await configOrchestrator.setMachineValue(key, value);
+      writeMachinePayload(buildMachineEnvelope('machine config set', result));
+    } catch (error) {
+      const mapped = mapMachineError('machine config set', error);
+      writeMachinePayload(mapped.payload);
+      process.exitCode = mapped.exitCode;
+    }
+  }
 }
 
 export const machineConfigOrchestrator = new MachineConfigOrchestrator();

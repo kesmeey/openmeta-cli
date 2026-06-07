@@ -3,6 +3,36 @@ import { schedulerService, SCORING_PRESETS, getPreset, normalizeWeights, normali
 import type { AppConfig, ScoringWeights, OverallWeights } from '../types/index.js';
 
 export class ConfigOrchestrator {
+  async setMachineValue(key: string, value: string): Promise<{
+    updatedKey: string;
+    appliedValue: string;
+    snapshot: Awaited<ReturnType<ConfigOrchestrator['getMachineSnapshot']>>;
+    scheduler: {
+      status: 'unchanged' | 'synced' | 'failed';
+      detail: string;
+    };
+  }> {
+    const updated = await this.applyConfigValue(key, value);
+    const syncResult = key.startsWith('automation.')
+      ? await schedulerService.sync(updated)
+      : null;
+
+    return {
+      updatedKey: key,
+      appliedValue: this.describeUpdatedValue(key, updated),
+      snapshot: await this.getMachineSnapshot(),
+      scheduler: syncResult
+        ? {
+          status: syncResult.status === 'failed' ? 'failed' : 'synced',
+          detail: syncResult.detail,
+        }
+        : {
+          status: 'unchanged',
+          detail: 'Scheduler state unchanged.',
+        },
+    };
+  }
+
   async getMachineSnapshot(): Promise<{
     userProfile: AppConfig['userProfile'];
     github: { username: string; pat: string; targetRepoPath?: string };
@@ -18,6 +48,7 @@ export class ConfigOrchestrator {
       savedProfiles: string[];
     };
     automation: AppConfig['automation'];
+    scoring: AppConfig['scoring'];
     commitTemplate: string;
   }> {
     const config = await configService.get();
@@ -41,6 +72,7 @@ export class ConfigOrchestrator {
         savedProfiles: Object.keys(config.llm.profiles ?? {}).sort(),
       },
       automation: config.automation,
+      scoring: config.scoring,
       commitTemplate: config.commitTemplate,
     };
   }
@@ -152,141 +184,7 @@ export class ConfigOrchestrator {
   }
 
   async set(key: string, value: string): Promise<void> {
-    const config = await configService.get();
-    const validPaths = ['userProfile.techStack', 'userProfile.proficiency', 'userProfile.focusAreas',
-                       'github.username', 'github.pat', 'github.targetRepoPath', 'llm.provider', 'llm.apiBaseUrl', 'llm.apiKey', 'llm.modelName', 'llm.reasoningEffort', 'llm.stream',
-                       'automation.enabled', 'automation.scheduleTime', 'automation.contentType',
-                       'automation.minMatchScore', 'automation.skipIfAlreadyGeneratedToday',
-                       'scoring.weights.freshness', 'scoring.weights.onboardingClarity',
-                       'scoring.weights.mergePotential', 'scoring.weights.impact', 'scoring.weights.riskPenalty',
-                       'scoring.overallWeights.technicalMatch', 'scoring.overallWeights.opportunityScore',
-                       'scoring.preset',
-                       'commitTemplate'];
-
-    if (!validPaths.includes(key)) {
-      ui.callout({
-        label: 'OpenMeta Config',
-        title: 'Unknown configuration key',
-        subtitle: `OpenMeta does not recognize "${key}". Use one of the supported dotted paths below.`,
-        lines: validPaths,
-        tone: 'warning',
-      });
-      return;
-    }
-
-    let updated: AppConfig;
-
-    if (key === 'userProfile.techStack') {
-      updated = await configService.update({
-        userProfile: { ...config.userProfile, techStack: value.split(',').map(s => s.trim()).filter(Boolean) }
-      });
-    } else if (key === 'userProfile.focusAreas') {
-      updated = await configService.update({
-        userProfile: { ...config.userProfile, focusAreas: value.split(',').map(s => s.trim()).filter(Boolean) }
-      });
-    } else if (key === 'userProfile.proficiency') {
-      updated = await configService.update({
-        userProfile: { ...config.userProfile, proficiency: value as 'beginner' | 'intermediate' | 'advanced' }
-      });
-    } else if (key === 'github.username') {
-      updated = await configService.update({ github: { ...config.github, username: value } });
-    } else if (key === 'github.pat') {
-      updated = await configService.update({ github: { ...config.github, pat: this.parseRequiredSecret(value, key) } });
-    } else if (key === 'github.targetRepoPath') {
-      updated = await configService.update({ github: { ...config.github, targetRepoPath: value } });
-    } else if (key === 'llm.provider') {
-      if (!['openai', 'minimax', 'moonshot', 'zhipu', 'gemini', 'claude', 'custom'].includes(value)) {
-        throw new Error('llm.provider must be "openai", "minimax", "moonshot", "zhipu", "gemini", "claude", or "custom".');
-      }
-      updated = await configService.update({ llm: { ...config.llm, provider: value as AppConfig['llm']['provider'] } });
-    } else if (key === 'llm.apiBaseUrl') {
-      updated = await configService.update({ llm: { ...config.llm, apiBaseUrl: value } });
-    } else if (key === 'llm.apiKey') {
-      updated = await configService.update({ llm: { ...config.llm, apiKey: this.parseRequiredSecret(value, key) } });
-    } else if (key === 'llm.modelName') {
-      updated = await configService.update({ llm: { ...config.llm, modelName: value } });
-    } else if (key === 'llm.reasoningEffort') {
-      updated = await configService.update({ llm: { ...config.llm, reasoningEffort: parseLLMReasoningEffort(value) } });
-    } else if (key === 'llm.stream') {
-      updated = await configService.update({ llm: { ...config.llm, stream: this.parseBoolean(value, key) } });
-    } else if (key === 'automation.enabled') {
-      updated = await configService.update({
-        automation: {
-          ...config.automation,
-          enabled: this.parseBoolean(value, key),
-        },
-      });
-    } else if (key === 'automation.scheduleTime') {
-      if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(value)) {
-        throw new Error('automation.scheduleTime must use HH:mm format.');
-      }
-      updated = await configService.update({
-        automation: {
-          ...config.automation,
-          scheduleTime: value,
-        },
-      });
-    } else if (key === 'automation.contentType') {
-      if (value !== 'research_note' && value !== 'development_diary') {
-        throw new Error('automation.contentType must be "research_note" or "development_diary".');
-      }
-      updated = await configService.update({
-        automation: {
-          ...config.automation,
-          contentType: value,
-        },
-      });
-    } else if (key === 'automation.minMatchScore') {
-      const minMatchScore = Number.parseInt(value, 10);
-      if (Number.isNaN(minMatchScore) || minMatchScore < 0 || minMatchScore > 100) {
-        throw new Error('automation.minMatchScore must be an integer between 0 and 100.');
-      }
-      updated = await configService.update({
-        automation: {
-          ...config.automation,
-          minMatchScore,
-        },
-      });
-    } else if (key === 'automation.skipIfAlreadyGeneratedToday') {
-      updated = await configService.update({
-        automation: {
-          ...config.automation,
-          skipIfAlreadyGeneratedToday: this.parseBoolean(value, key),
-        },
-      });
-    } else if (key.startsWith('scoring.weights.')) {
-      const weightKey = key.replace('scoring.weights.', '') as keyof ScoringWeights;
-      const numValue = Number.parseFloat(value);
-      if (Number.isNaN(numValue) || numValue < 0 || numValue > 1) {
-        throw new Error(`${key} must be a number between 0 and 1.`);
-      }
-      const newWeights = normalizeWeights({ ...config.scoring.weights, [weightKey]: numValue });
-      updated = await configService.update({
-        scoring: { ...config.scoring, weights: newWeights, preset: 'custom' },
-      });
-    } else if (key.startsWith('scoring.overallWeights.')) {
-      const weightKey = key.replace('scoring.overallWeights.', '') as keyof OverallWeights;
-      const numValue = Number.parseFloat(value);
-      if (Number.isNaN(numValue) || numValue < 0 || numValue > 1) {
-        throw new Error(`${key} must be a number between 0 and 1.`);
-      }
-      const newWeights = normalizeOverallWeights({ ...config.scoring.overallWeights, [weightKey]: numValue });
-      updated = await configService.update({
-        scoring: { ...config.scoring, overallWeights: newWeights, preset: 'custom' },
-      });
-    } else if (key === 'scoring.preset') {
-      const preset = getPreset(value);
-      if (!preset) {
-        throw new Error(`Unknown scoring preset "${value}". Available: ${SCORING_PRESETS.map(p => p.name).join(', ')}`);
-      }
-      updated = await configService.update({
-        scoring: { weights: preset.weights, overallWeights: preset.overallWeights, preset: preset.name },
-      });
-    } else if (key === 'commitTemplate') {
-      updated = await configService.update({ commitTemplate: value });
-    } else {
-      return;
-    }
+    const updated = await this.applyConfigValue(key, value);
 
     let schedulerDetail = 'Scheduler state unchanged.';
     let resultTone: 'success' | 'warning' = 'success';
@@ -497,6 +395,175 @@ export class ConfigOrchestrator {
       throw new Error(`${key} cannot be empty.`);
     }
     return trimmed;
+  }
+
+  private async applyConfigValue(key: string, value: string): Promise<AppConfig> {
+    const config = await configService.get();
+    const validPaths = ['userProfile.techStack', 'userProfile.proficiency', 'userProfile.focusAreas',
+                       'github.username', 'github.pat', 'github.targetRepoPath', 'llm.provider', 'llm.apiBaseUrl', 'llm.apiKey', 'llm.modelName', 'llm.reasoningEffort', 'llm.stream',
+                       'automation.enabled', 'automation.scheduleTime', 'automation.contentType',
+                       'automation.minMatchScore', 'automation.skipIfAlreadyGeneratedToday',
+                       'scoring.weights.freshness', 'scoring.weights.onboardingClarity',
+                       'scoring.weights.mergePotential', 'scoring.weights.impact', 'scoring.weights.riskPenalty',
+                       'scoring.overallWeights.technicalMatch', 'scoring.overallWeights.opportunityScore',
+                       'scoring.preset',
+                       'commitTemplate'];
+
+    if (!validPaths.includes(key)) {
+      throw new Error(`Unknown configuration key "${key}".`);
+    }
+
+    if (key === 'userProfile.techStack') {
+      return configService.update({
+        userProfile: { ...config.userProfile, techStack: value.split(',').map((item) => item.trim()).filter(Boolean) }
+      });
+    }
+
+    if (key === 'userProfile.focusAreas') {
+      return configService.update({
+        userProfile: { ...config.userProfile, focusAreas: value.split(',').map((item) => item.trim()).filter(Boolean) }
+      });
+    }
+
+    if (key === 'userProfile.proficiency') {
+      return configService.update({
+        userProfile: { ...config.userProfile, proficiency: value as 'beginner' | 'intermediate' | 'advanced' }
+      });
+    }
+
+    if (key === 'github.username') {
+      return configService.update({ github: { ...config.github, username: value } });
+    }
+
+    if (key === 'github.pat') {
+      return configService.update({ github: { ...config.github, pat: this.parseRequiredSecret(value, key) } });
+    }
+
+    if (key === 'github.targetRepoPath') {
+      return configService.update({ github: { ...config.github, targetRepoPath: value } });
+    }
+
+    if (key === 'llm.provider') {
+      if (!['openai', 'minimax', 'moonshot', 'zhipu', 'gemini', 'claude', 'custom'].includes(value)) {
+        throw new Error('llm.provider must be "openai", "minimax", "moonshot", "zhipu", "gemini", "claude", or "custom".');
+      }
+      return configService.update({ llm: { ...config.llm, provider: value as AppConfig['llm']['provider'] } });
+    }
+
+    if (key === 'llm.apiBaseUrl') {
+      return configService.update({ llm: { ...config.llm, apiBaseUrl: value } });
+    }
+
+    if (key === 'llm.apiKey') {
+      return configService.update({ llm: { ...config.llm, apiKey: this.parseRequiredSecret(value, key) } });
+    }
+
+    if (key === 'llm.modelName') {
+      return configService.update({ llm: { ...config.llm, modelName: value } });
+    }
+
+    if (key === 'llm.reasoningEffort') {
+      return configService.update({ llm: { ...config.llm, reasoningEffort: parseLLMReasoningEffort(value) } });
+    }
+
+    if (key === 'llm.stream') {
+      return configService.update({ llm: { ...config.llm, stream: this.parseBoolean(value, key) } });
+    }
+
+    if (key === 'automation.enabled') {
+      return configService.update({
+        automation: {
+          ...config.automation,
+          enabled: this.parseBoolean(value, key),
+        },
+      });
+    }
+
+    if (key === 'automation.scheduleTime') {
+      if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(value)) {
+        throw new Error('automation.scheduleTime must use HH:mm format.');
+      }
+      return configService.update({
+        automation: {
+          ...config.automation,
+          scheduleTime: value,
+        },
+      });
+    }
+
+    if (key === 'automation.contentType') {
+      if (value !== 'research_note' && value !== 'development_diary') {
+        throw new Error('automation.contentType must be "research_note" or "development_diary".');
+      }
+      return configService.update({
+        automation: {
+          ...config.automation,
+          contentType: value,
+        },
+      });
+    }
+
+    if (key === 'automation.minMatchScore') {
+      const minMatchScore = Number.parseInt(value, 10);
+      if (Number.isNaN(minMatchScore) || minMatchScore < 0 || minMatchScore > 100) {
+        throw new Error('automation.minMatchScore must be an integer between 0 and 100.');
+      }
+      return configService.update({
+        automation: {
+          ...config.automation,
+          minMatchScore,
+        },
+      });
+    }
+
+    if (key === 'automation.skipIfAlreadyGeneratedToday') {
+      return configService.update({
+        automation: {
+          ...config.automation,
+          skipIfAlreadyGeneratedToday: this.parseBoolean(value, key),
+        },
+      });
+    }
+
+    if (key.startsWith('scoring.weights.')) {
+      const weightKey = key.replace('scoring.weights.', '') as keyof ScoringWeights;
+      const numValue = Number.parseFloat(value);
+      if (Number.isNaN(numValue) || numValue < 0 || numValue > 1) {
+        throw new Error(`${key} must be a number between 0 and 1.`);
+      }
+      const newWeights = normalizeWeights({ ...config.scoring.weights, [weightKey]: numValue });
+      return configService.update({
+        scoring: { ...config.scoring, weights: newWeights, preset: 'custom' },
+      });
+    }
+
+    if (key.startsWith('scoring.overallWeights.')) {
+      const weightKey = key.replace('scoring.overallWeights.', '') as keyof OverallWeights;
+      const numValue = Number.parseFloat(value);
+      if (Number.isNaN(numValue) || numValue < 0 || numValue > 1) {
+        throw new Error(`${key} must be a number between 0 and 1.`);
+      }
+      const newWeights = normalizeOverallWeights({ ...config.scoring.overallWeights, [weightKey]: numValue });
+      return configService.update({
+        scoring: { ...config.scoring, overallWeights: newWeights, preset: 'custom' },
+      });
+    }
+
+    if (key === 'scoring.preset') {
+      const preset = getPreset(value);
+      if (!preset) {
+        throw new Error(`Unknown scoring preset "${value}". Available: ${SCORING_PRESETS.map((p) => p.name).join(', ')}`);
+      }
+      return configService.update({
+        scoring: { weights: preset.weights, overallWeights: preset.overallWeights, preset: preset.name },
+      });
+    }
+
+    if (key === 'commitTemplate') {
+      return configService.update({ commitTemplate: value });
+    }
+
+    throw new Error(`Unknown configuration key "${key}".`);
   }
 
   private describeUpdatedValue(key: string, config: AppConfig): string {

@@ -87,4 +87,15 @@ describe('ConfigOrchestrator', () => {
     expect(snapshot.llm.modelName).toBe('gpt-4o-mini');
     expect(snapshot.llm.savedProfiles).toEqual([]);
   });
+
+  test('returns machine config set results with masked secret values', async () => {
+    const orchestrator = new ConfigOrchestrator();
+
+    const result = await orchestrator.setMachineValue('llm.apiKey', 'sk-machine-secret');
+
+    expect(result.updatedKey).toBe('llm.apiKey');
+    expect(result.appliedValue).toBe('***cret');
+    expect(result.snapshot.llm.apiKey).toBe('***cret');
+    expect(result.scheduler.status).toBe('unchanged');
+  });
 });
