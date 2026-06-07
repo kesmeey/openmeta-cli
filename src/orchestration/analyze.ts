@@ -38,13 +38,20 @@ interface AnalyzeResult {
   repoFullName: string;
   workspace: RepoWorkspaceContext;
   selectedSuggestion: RepositoryImprovementSuggestion;
+  suggestions: RepositoryImprovementSuggestion[];
   patchDraft: PatchDraft;
   prDraft: PullRequestDraft;
   artifacts: AnalyzeArtifacts;
 }
 
 export class AnalyzeOrchestrator {
-  async run(options: AnalyzeRunOptions = {}): Promise<void> {
+  async runMachine(options: AnalyzeRunOptions = {}): Promise<AnalyzeResult & {
+    mode: {
+      headless: boolean;
+      runChecks: boolean;
+      dryRun: boolean;
+    };
+  }> {
     if (!options.repo) {
       throw new Error('Repository analysis requires --repo, for example: openmeta analyze --repo owner/name.');
     }
@@ -53,72 +60,29 @@ export class AnalyzeOrchestrator {
     const config = await configService.get();
     const headless = Boolean(options.headless);
     const runChecks = Boolean(options.runChecks);
-
-    ui.hero({
-      label: 'OpenMeta Analyze',
-      title: 'Find a contribution path even when the issue tracker is quiet',
-      subtitle: 'OpenMeta will inspect the repository, ask the model for grounded improvement ideas, and draft PR-ready artifacts for the strongest suggestion.',
-      lines: [
-        `Repository: ${repoFullName}`,
-        runChecks ? 'Detected validation commands may run during workspace preparation.' : 'This analysis will skip baseline validation commands.',
-        headless ? 'Headless mode will select the highest-scoring suggestion automatically.' : 'You can choose which suggestion should become the draft target.',
-      ],
-    });
+    const dryRun = Boolean(options.dryRun);
 
     await this.validateConfig(config);
     await this.initializeClients(config);
 
     const memory = memoryService.load(repoFullName);
-    const workspace = await ui.task({
-      title: `Preparing repository workspace for ${repoFullName}`,
-      doneMessage: 'Repository workspace prepared',
-      failedMessage: 'Repository workspace preparation failed',
-      tone: 'info',
-    }, async () => workspaceService.prepareRepositoryWorkspace(
+    const workspace = await workspaceService.prepareRepositoryWorkspace(
       repoFullName,
       memory,
       runChecks,
       headless ? 'headless' : 'interactive',
-    ));
+    );
 
-    this.showWorkspaceSummary(workspace);
-
-    const suggestionsResult = await ui.task({
-      title: 'Analyzing repository contribution paths',
-      doneMessage: 'Repository suggestions generated',
-      failedMessage: 'Repository analysis failed',
-      tone: 'info',
-    }, async () => llmService.analyzeRepository(repoFullName, workspace, memory));
+    const suggestionsResult = await llmService.analyzeRepository(repoFullName, workspace, memory);
     const suggestions = suggestionsResult.data;
-    if (suggestions.length === 0) {
-      ui.emptyState(
-        'OpenMeta Analyze',
-        'No repository suggestions generated',
-        'The model did not find a grounded contribution path from the current repository context.',
-      );
-      return;
-    }
-
-    this.showSuggestions(suggestions);
     const selectedSuggestion = headless
       ? this.selectTopSuggestion(suggestions)
       : await this.promptForSuggestion(suggestions);
     const syntheticIssue = this.buildSyntheticIssue(repoFullName, selectedSuggestion);
 
-    const patchDraftResult = await ui.task({
-      title: 'Generating patch strategy for selected suggestion',
-      doneMessage: 'Patch strategy generated',
-      failedMessage: 'Patch strategy generation failed',
-      tone: 'info',
-    }, async () => llmService.generatePatchDraft(syntheticIssue, workspace, memory));
+    const patchDraftResult = await llmService.generatePatchDraft(syntheticIssue, workspace, memory);
     const patchDraft = patchDraftResult.data;
-
-    const prDraftResult = await ui.task({
-      title: 'Generating PR narrative',
-      doneMessage: 'PR narrative generated',
-      failedMessage: 'PR narrative generation failed',
-      tone: 'info',
-    }, async () => llmService.generatePrDraft(syntheticIssue, patchDraft, workspace));
+    const prDraftResult = await llmService.generatePrDraft(syntheticIssue, patchDraft, workspace);
     const prDraft = prDraftResult.data;
 
     const artifacts = this.prepareArtifactPaths(repoFullName, selectedSuggestion.id);
@@ -131,7 +95,59 @@ export class AnalyzeOrchestrator {
     const patchDraftMarkdown = contentService.formatPatchDraftMarkdown(patchDraft);
     const prDraftMarkdown = contentService.formatPullRequestDraftMarkdown(prDraft);
 
-    if (options.dryRun) {
+    if (!dryRun) {
+      this.writeLocalArtifacts({
+        artifacts,
+        analysisMarkdown,
+        patchDraftMarkdown,
+        prDraftMarkdown,
+      });
+    }
+
+    return {
+      repoFullName,
+      workspace,
+      selectedSuggestion,
+      suggestions,
+      patchDraft,
+      prDraft,
+      artifacts,
+      mode: {
+        headless,
+        runChecks,
+        dryRun,
+      },
+    };
+  }
+
+  async run(options: AnalyzeRunOptions = {}): Promise<void> {
+    const result = await this.runMachine(options);
+    const { repoFullName, mode, workspace, suggestions, selectedSuggestion, patchDraft, prDraft, artifacts } = result;
+
+    ui.hero({
+      label: 'OpenMeta Analyze',
+      title: 'Find a contribution path even when the issue tracker is quiet',
+      subtitle: 'OpenMeta will inspect the repository, ask the model for grounded improvement ideas, and draft PR-ready artifacts for the strongest suggestion.',
+      lines: [
+        `Repository: ${repoFullName}`,
+        mode.runChecks ? 'Detected validation commands may run during workspace preparation.' : 'This analysis will skip baseline validation commands.',
+        mode.headless ? 'Headless mode will select the highest-scoring suggestion automatically.' : 'You can choose which suggestion should become the draft target.',
+      ],
+    });
+
+    this.showWorkspaceSummary(workspace);
+    if (suggestions.length === 0) {
+      ui.emptyState(
+        'OpenMeta Analyze',
+        'No repository suggestions generated',
+        'The model did not find a grounded contribution path from the current repository context.',
+      );
+      return;
+    }
+
+    this.showSuggestions(suggestions);
+
+    if (mode.dryRun) {
       ui.callout({
         label: 'OpenMeta Analyze',
         title: 'Dry-run artifact preview',
@@ -143,26 +159,13 @@ export class AnalyzeOrchestrator {
         ],
         tone: 'info',
       });
-    } else {
-      await ui.task({
-        title: 'Writing repository analysis artifacts',
-        doneMessage: 'Repository analysis artifacts written',
-        failedMessage: 'Repository analysis artifact write failed',
-        tone: 'info',
-      }, async () => {
-        this.writeLocalArtifacts({
-          artifacts,
-          analysisMarkdown,
-          patchDraftMarkdown,
-          prDraftMarkdown,
-        });
-      });
     }
 
     this.showResult({
       repoFullName,
       workspace,
       selectedSuggestion,
+      suggestions,
       patchDraft,
       prDraft,
       artifacts,

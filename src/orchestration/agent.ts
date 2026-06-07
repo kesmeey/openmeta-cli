@@ -57,6 +57,17 @@ export interface ScoutRunOptions {
   localOnly?: boolean;
 }
 
+export interface MachineScoutResult {
+  opportunities: RankedIssue[];
+  mode: {
+    limit: number;
+    refresh: boolean;
+    repo?: string;
+    localOnly: boolean;
+  };
+  nextActions: string[];
+}
+
 interface TargetRepoContext {
   path: string;
   owner: string;
@@ -474,6 +485,34 @@ export class AgentOrchestrator {
       { label: 'Profile threshold', value: `${config.automation.minMatchScore}`, tone: 'info' },
     ]);
     this.renderOpportunityList('Ranked opportunities', issueRankingService.diversifyScoutIssues(rankedIssues, limit));
+  }
+
+  async scoutMachine(options: ScoutRunOptions = {}): Promise<MachineScoutResult> {
+    const limit = options.limit ?? 10;
+    const refresh = Boolean(options.refresh);
+    const repoFullName = options.repo ? parseGitHubRepoFullName(options.repo) : undefined;
+    const localOnly = Boolean(options.localOnly);
+    const config = await configService.get();
+
+    await this.validateConfig(config, { requireLlm: !localOnly });
+    await this.initializeClients(config, { validateLlm: !localOnly });
+
+    const rankedIssues = await issueRankingService.loadRankedIssues(config, {
+      refresh,
+      repoFullName,
+      localOnly,
+    });
+
+    return {
+      opportunities: issueRankingService.diversifyScoutIssues(rankedIssues, limit),
+      mode: {
+        limit,
+        refresh,
+        repo: repoFullName,
+        localOnly,
+      },
+      nextActions: rankedIssues.length === 0 ? ['broaden_profile_filters'] : ['inspect_ranked_opportunities'],
+    };
   }
 
   async showInbox(): Promise<void> {
