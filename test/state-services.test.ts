@@ -54,6 +54,8 @@ describe('stateful services', () => {
 
     expect(loaded.github.pat).toBe('ghp_test_token');
     expect(loaded.llm.apiKey).toBe('sk-test-key');
+    expect(loaded.repositoryTargeting.activePreset).toBe('');
+    expect(loaded.repositoryTargeting.presets).toEqual({});
   });
 
   test('config service resets to defaults and keeps a backup of the previous file', async () => {
@@ -98,6 +100,8 @@ describe('stateful services', () => {
     expect(loaded.llm.modelName).toBe('gpt-4o-mini');
     expect(loaded.automation.enabled).toBe(false);
     expect(loaded.automation.scheduleTime).toBe('09:00');
+    expect(loaded.repositoryTargeting.activePreset).toBe('');
+    expect(loaded.repositoryTargeting.presets).toEqual({});
   });
 
   test('memory service persists repo memory snapshots', () => {

@@ -188,6 +188,10 @@ describe('IssueRankingService', () => {
             username: 'octocat',
             targetRepoPath: '',
           },
+          repositoryTargeting: {
+            activePreset: '',
+            presets: {},
+          },
           llm: {
             provider: 'openai',
             apiBaseUrl: 'https://api.openai.com/v1',
@@ -254,6 +258,10 @@ describe('IssueRankingService', () => {
             pat: 'ghp-test',
             username: 'octocat',
             targetRepoPath: '',
+          },
+          repositoryTargeting: {
+            activePreset: '',
+            presets: {},
           },
           llm: {
             provider: 'openai',

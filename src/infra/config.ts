@@ -38,6 +38,10 @@ function createDefaultConfig(): AppConfig {
       username: '',
       targetRepoPath: '',
     },
+    repositoryTargeting: {
+      activePreset: '',
+      presets: {},
+    },
     llm: {
       provider: 'openai',
       apiBaseUrl: 'https://api.openai.com/v1',
@@ -131,6 +135,7 @@ export class ConfigService {
       ...partial,
       userProfile: { ...current.userProfile, ...partial.userProfile },
       github: { ...current.github, ...partial.github },
+      repositoryTargeting: { ...current.repositoryTargeting, ...partial.repositoryTargeting },
       llm: { ...current.llm, ...partial.llm },
       automation: { ...current.automation, ...partial.automation },
     };
@@ -198,6 +203,12 @@ export class ConfigService {
       github: {
         ...defaults.github,
         ...config.github,
+      },
+      repositoryTargeting: {
+        ...defaults.repositoryTargeting,
+        ...config.repositoryTargeting,
+        activePreset: config.repositoryTargeting?.activePreset?.trim() || '',
+        presets: this.normalizeRepositoryPresets(config.repositoryTargeting?.presets),
       },
       llm: {
         ...defaults.llm,
@@ -280,6 +291,19 @@ export class ConfigService {
         },
       ]),
     );
+  }
+
+  private normalizeRepositoryPresets(
+    presets: AppConfig['repositoryTargeting']['presets'] = {},
+  ): AppConfig['repositoryTargeting']['presets'] {
+    return Object.fromEntries(Object.entries(presets).map(([name, preset]) => [
+      name,
+      {
+        repos: Array.isArray(preset?.repos)
+          ? preset.repos.map((repo) => String(repo).trim()).filter(Boolean)
+          : [],
+      },
+    ]));
   }
 }
 
