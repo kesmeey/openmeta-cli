@@ -1,14 +1,22 @@
 {
   "name": "openmeta-cli",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "OpenMeta CLI - Developer's daily open source growth companion",
   "type": "module",
-  "private": true,
+  "private": false,
   "engines": {
     "bun": ">=1.0.0"
   },
+  "files": [
+    "bin/openmeta.js",
+    "README.md",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
-    "openmeta": "./bin/openmeta.js"
+    "openmeta": "bin/openmeta.js"
   },
   "scripts": {
     "build": "bun build --target=bun --outfile=bin/openmeta.js ./src/cli.ts",
