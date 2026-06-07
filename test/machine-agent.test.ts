@@ -3,7 +3,47 @@ import * as infra from '../src/infra/index.js';
 import { AgentOrchestrator } from '../src/orchestration/agent.js';
 import { AnalyzeOrchestrator } from '../src/orchestration/analyze.js';
 import { contentService, inboxService, issueRankingService, llmService, memoryService, proofOfWorkService, workspaceService } from '../src/services/index.js';
+import type { MachineAgentResult } from '../src/orchestration/agent.js';
 import { createInboxItem, createMemory, createPatchDraft, createProofRecord, createPullRequestDraft, createRankedIssue, createRepositorySuggestion, createWorkspace } from './helpers/factories.js';
+
+interface AgentMachineInternals {
+  validateConfig(config: unknown, options?: unknown): Promise<void>;
+  initializeClients(config: unknown, options?: unknown): Promise<void>;
+  generateConcretePatch(
+    issue: unknown,
+    workspace: unknown,
+    patchDraft: unknown,
+    runChecks: boolean,
+    draftOnly?: boolean,
+  ): Promise<{
+    changedFiles: string[];
+    validationResults: unknown[];
+    reviewRequired: boolean;
+  }>;
+  submitContributionPullRequestIfPossible(input: unknown): Promise<{
+    changedFiles: string[];
+    validationResults: unknown[];
+    url?: string;
+    number?: number;
+  }>;
+  prepareLocalArtifactPaths(issue: unknown): ReturnType<typeof createArtifacts>;
+  writeLocalArtifacts(input: unknown): void;
+  publishArtifactsIfNeeded(input: unknown): Promise<{ published: boolean }>;
+}
+
+interface AgentMachineRunShape {
+  runMachine(options?: {
+    headless?: boolean;
+    force?: boolean;
+    schedulerRun?: boolean;
+    runChecks?: boolean;
+    draftOnly?: boolean;
+    refresh?: boolean;
+    repo?: string;
+    issue?: string;
+    dryRun?: boolean;
+  }): Promise<MachineAgentResult>;
+}
 
 function createConfig() {
   return {
@@ -157,11 +197,12 @@ describe('machine flow result builders', () => {
     const patchDraft = createPatchDraft();
     const prDraft = createPullRequestDraft();
     const artifacts = createArtifacts();
-    const orchestrator = new AgentOrchestrator();
+    const orchestrator = new AgentOrchestrator() as unknown as AgentMachineRunShape;
+    const machineInternals = orchestrator as unknown as AgentMachineInternals;
 
     spyOn(infra.configService, 'get').mockResolvedValue(config);
-    spyOn(orchestrator as AgentOrchestrator, 'validateConfig' as never).mockResolvedValue(undefined);
-    spyOn(orchestrator as AgentOrchestrator, 'initializeClients' as never).mockResolvedValue(undefined);
+    spyOn(machineInternals, 'validateConfig').mockResolvedValue(undefined);
+    spyOn(machineInternals, 'initializeClients').mockResolvedValue(undefined);
     spyOn(issueRankingService, 'loadTargetIssue').mockResolvedValue([issue]);
     spyOn(memoryService, 'load').mockReturnValue(memory);
     spyOn(workspaceService, 'prepareWorkspace').mockResolvedValue(workspace);
@@ -172,7 +213,7 @@ describe('machine flow result builders', () => {
       status: 'success',
       data: patchDraft,
     });
-    spyOn(orchestrator as AgentOrchestrator, 'generateConcretePatch' as never).mockResolvedValue({
+    spyOn(machineInternals, 'generateConcretePatch').mockResolvedValue({
       changedFiles: [],
       validationResults: [],
       reviewRequired: false,
@@ -186,13 +227,13 @@ describe('machine flow result builders', () => {
     spyOn(contentService, 'formatPatchDraftMarkdown').mockReturnValue('# Patch');
     spyOn(contentService, 'formatPullRequestDraftMarkdown').mockReturnValue('# PR');
     spyOn(contentService, 'formatContributionDossier').mockReturnValue('# Dossier');
-    spyOn(orchestrator as AgentOrchestrator, 'submitContributionPullRequestIfPossible' as never).mockResolvedValue({
+    spyOn(machineInternals, 'submitContributionPullRequestIfPossible').mockResolvedValue({
       changedFiles: [],
       validationResults: [],
     });
-    spyOn(orchestrator as AgentOrchestrator, 'prepareLocalArtifactPaths' as never).mockReturnValue(artifacts);
-    const writeArtifactsSpy = spyOn(orchestrator as AgentOrchestrator, 'writeLocalArtifacts' as never).mockImplementation(() => {});
-    const publishSpy = spyOn(orchestrator as AgentOrchestrator, 'publishArtifactsIfNeeded' as never).mockResolvedValue({
+    spyOn(machineInternals, 'prepareLocalArtifactPaths').mockReturnValue(artifacts);
+    const writeArtifactsSpy = spyOn(machineInternals, 'writeLocalArtifacts').mockImplementation(() => {});
+    const publishSpy = spyOn(machineInternals, 'publishArtifactsIfNeeded').mockResolvedValue({
       published: false,
     });
     const saveInboxSpy = spyOn(inboxService, 'saveItem').mockReturnValue([createInboxItem()]);
