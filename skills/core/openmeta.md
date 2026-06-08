@@ -11,6 +11,15 @@ This skill lets an external agent treat OpenMeta as a stable execution substrate
 - Treat stderr as optional diagnostics only.
 - Escalate to `openmeta machine agent` only when the user explicitly asks for execution.
 
+## What OpenMeta Can Do
+
+OpenMeta is built for contribution-oriented open source work.
+
+- Discover and rank worthwhile issues across one repository or a broader issue stream.
+- Analyze a repository and draft a grounded patch plan plus PR narrative before writing code.
+- Execute a fuller contribution flow when the user explicitly wants OpenMeta to mutate files or open a PR.
+- Inspect prior runs, saved opportunity backlog, and proof-of-work records to understand what already happened.
+
 ## Installation Expectations
 
 - Install the OpenMeta CLI and ensure `openmeta` is on `PATH`.

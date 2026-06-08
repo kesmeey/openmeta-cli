@@ -42,6 +42,10 @@ function renderInlineStatus(symbol: string, text: string, tone: Tone): string {
   }
 }
 
+function writeMachineStatus(symbol: string, text: string, tone: Tone): void {
+  process.stderr.write(`${renderInlineStatus(symbol, text, tone)}\n`);
+}
+
 export async function runTask<T>(
   capabilities: UiCapabilities,
   options: TaskOptions,
@@ -55,7 +59,19 @@ export async function runTask<T>(
   };
 
   if (isMachineContext()) {
-    return task(controller);
+    writeMachineStatus(figures.pointerSmall, options.title, tone);
+    controller.setMessage = (message: string) => {
+      writeMachineStatus(figures.ellipsis, message, tone);
+    };
+
+    try {
+      const result = await task(controller);
+      writeMachineStatus(figures.tick, `[success] ${options.doneMessage || options.title}`, 'success');
+      return result;
+    } catch (error) {
+      writeMachineStatus(figures.cross, options.failedMessage || options.title, 'error');
+      throw error;
+    }
   }
 
   if (!capabilities.isInteractive || capabilities.mode === 'plain') {

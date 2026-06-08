@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:
 import * as infra from '../src/infra/index.js';
 import { AgentOrchestrator } from '../src/orchestration/agent.js';
 import { AnalyzeOrchestrator } from '../src/orchestration/analyze.js';
+import { runInMachineContext } from '../src/infra/execution-context.js';
 import { contentService, inboxService, issueRankingService, llmService, memoryService, proofOfWorkService, workspaceService } from '../src/services/index.js';
 import type { MachineAgentResult } from '../src/orchestration/agent.js';
 import { createInboxItem, createMemory, createPatchDraft, createProofRecord, createPullRequestDraft, createRankedIssue, createRepositorySuggestion, createWorkspace } from './helpers/factories.js';
@@ -128,6 +129,71 @@ afterEach(() => {
 });
 
 describe('machine flow result builders', () => {
+  test('machine analyze emits stage progress to stderr during long-running phases', async () => {
+    mock.restore();
+    const config = createConfig();
+    const workspace = createWorkspace({
+      workspacePath: '/tmp/openmeta-machine-progress',
+      branchName: 'openmeta/analyze-machine-progress',
+      candidateFiles: ['README.md', 'src/index.ts'],
+    });
+    const memory = createMemory({ repoFullName: 'acme/demo' });
+    const suggestion = createRepositorySuggestion({
+      id: 'machine-progress',
+      title: 'Surface machine progress',
+      summary: 'Make long-running analysis stages visible to host tools.',
+      targetFiles: [{ path: 'src/infra/ui/live.ts', reason: 'Machine progress rendering' }],
+      prPotentialScore: 91,
+    });
+    const patchDraft = createPatchDraft();
+    const prDraft = createPullRequestDraft();
+    const stderrWrites: string[] = [];
+    const orchestrator = new AnalyzeOrchestrator();
+
+    spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
+      stderrWrites.push(String(chunk));
+      return true;
+    });
+    spyOn(infra.configService, 'get').mockResolvedValue(config);
+    spyOn(orchestrator as AnalyzeOrchestrator, 'validateConfig' as never).mockResolvedValue(undefined);
+    spyOn(orchestrator as AnalyzeOrchestrator, 'initializeClients' as never).mockResolvedValue(undefined);
+    spyOn(memoryService, 'load').mockReturnValue(memory);
+    spyOn(workspaceService, 'prepareRepositoryWorkspace').mockResolvedValue(workspace);
+    spyOn(llmService, 'analyzeRepository').mockResolvedValue({
+      version: '1',
+      kind: 'repository_suggestion_list',
+      status: 'success',
+      data: [suggestion],
+    });
+    spyOn(llmService, 'generatePatchDraft').mockResolvedValue({
+      version: '1',
+      kind: 'patch_draft',
+      status: 'success',
+      data: patchDraft,
+    });
+    spyOn(llmService, 'generatePrDraft').mockResolvedValue({
+      version: '1',
+      kind: 'pull_request_draft',
+      status: 'success',
+      data: prDraft,
+    });
+    spyOn(contentService, 'formatRepositoryAnalysisMarkdown').mockReturnValue('# Repository Analysis');
+    spyOn(contentService, 'formatPatchDraftMarkdown').mockReturnValue('# Patch');
+    spyOn(contentService, 'formatPullRequestDraftMarkdown').mockReturnValue('# PR');
+
+    await runInMachineContext(() => orchestrator.runMachine({
+      repo: 'acme/demo',
+      headless: true,
+      dryRun: true,
+    }));
+
+    const combined = stderrWrites.join('');
+    expect(combined).toContain('Inspecting repository for grounded contribution ideas');
+    expect(combined).toContain('Selecting the strongest repository suggestion');
+    expect(combined).toContain('Drafting patch strategy for the selected suggestion');
+    expect(combined).toContain('Drafting pull request narrative for the selected suggestion');
+  });
+
   test('machine scout returns ranked opportunities with mode metadata', async () => {
     const config = createConfig();
     const issue = createRankedIssue();

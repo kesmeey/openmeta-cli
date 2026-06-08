@@ -73,16 +73,38 @@ export class AnalyzeOrchestrator {
       headless ? 'headless' : 'interactive',
     );
 
-    const suggestionsResult = await llmService.analyzeRepository(repoFullName, workspace, memory);
+    const suggestionsResult = await ui.task({
+      title: 'Inspecting repository for grounded contribution ideas',
+      doneMessage: 'Repository suggestions generated',
+      failedMessage: 'Repository suggestion analysis failed',
+      tone: 'info',
+    }, async () => llmService.analyzeRepository(repoFullName, workspace, memory));
     const suggestions = suggestionsResult.data;
     const selectedSuggestion = headless
       ? this.selectTopSuggestion(suggestions)
       : await this.promptForSuggestion(suggestions);
     const syntheticIssue = this.buildSyntheticIssue(repoFullName, selectedSuggestion);
 
-    const patchDraftResult = await llmService.generatePatchDraft(syntheticIssue, workspace, memory);
+    await ui.task({
+      title: 'Selecting the strongest repository suggestion',
+      doneMessage: 'Repository suggestion selected',
+      failedMessage: 'Repository suggestion selection failed',
+      tone: 'info',
+    }, async () => selectedSuggestion);
+
+    const patchDraftResult = await ui.task({
+      title: 'Drafting patch strategy for the selected suggestion',
+      doneMessage: 'Patch strategy drafted',
+      failedMessage: 'Patch strategy drafting failed',
+      tone: 'info',
+    }, async () => llmService.generatePatchDraft(syntheticIssue, workspace, memory));
     const patchDraft = patchDraftResult.data;
-    const prDraftResult = await llmService.generatePrDraft(syntheticIssue, patchDraft, workspace);
+    const prDraftResult = await ui.task({
+      title: 'Drafting pull request narrative for the selected suggestion',
+      doneMessage: 'Pull request narrative drafted',
+      failedMessage: 'Pull request narrative drafting failed',
+      tone: 'info',
+    }, async () => llmService.generatePrDraft(syntheticIssue, patchDraft, workspace));
     const prDraft = prDraftResult.data;
 
     const artifacts = this.prepareArtifactPaths(repoFullName, selectedSuggestion.id);

@@ -33,6 +33,8 @@ describe('skill bundle rendering', () => {
     expect(claudeSkill).toStartWith('---\nname: openmeta\n');
     expect(claudeSkill).toContain('Install target: `~/.claude/skills/openmeta`');
     expect(claudeSkill).toContain('Keep the generated file at `SKILL.md`');
+    expect(claudeSkill).toContain('## What OpenMeta Can Do');
+    expect(claudeSkill).toContain('Discover and rank worthwhile issues');
     expect(claudeSkill).toContain('## Config Keys For `machine config set`');
     expect(claudeSkill).toContain('`executionOutcome`');
     expect(claudeSkill).toContain('"errorCodes"');
@@ -79,6 +81,7 @@ describe('skill bundle rendering', () => {
     const exportedSkill = readFileSync(join(exportRoot, 'claude-code', 'SKILL.md'), 'utf-8');
     expect(exportedSkill).toStartWith('---\nname: openmeta\n');
     expect(exportedSkill).toContain('Install target: `~/.claude/skills/openmeta`');
+    expect(exportedSkill).toContain('## What OpenMeta Can Do');
     expect(exportedSkill).toContain('## Result Interpretation');
     expect(exportedSkill).toContain('"inspectFields"');
     expect(exportedSkill).toContain('openmeta machine doctor');
@@ -100,6 +103,7 @@ describe('skill bundle rendering', () => {
     const installedSkill = readFileSync(skillPath, 'utf-8');
     expect(installedSkill).toStartWith('---\nname: openmeta\n');
     expect(installedSkill).toContain('description: Use when');
+    expect(installedSkill).toContain('## What OpenMeta Can Do');
     expect(installedSkill).toContain('openmeta machine doctor');
   });
 });

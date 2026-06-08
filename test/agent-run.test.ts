@@ -53,6 +53,12 @@ interface AnalyzeRunInternals {
     runChecks?: boolean;
     dryRun?: boolean;
   }): Promise<void>;
+  runMachine(options: {
+    repo?: string;
+    headless?: boolean;
+    runChecks?: boolean;
+    dryRun?: boolean;
+  }): Promise<unknown>;
   initializeClients(config: AppConfig): Promise<void>;
   promptForSuggestion<T>(suggestions: T[]): Promise<T>;
   prepareArtifactPaths(repoFullName: string, suggestionId: string): {
