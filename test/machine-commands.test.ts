@@ -15,6 +15,21 @@ function captureStdout(): string[] {
   return writes;
 }
 
+const DEFAULT_SCORING = {
+  weights: {
+    freshness: 0.25,
+    onboardingClarity: 0.25,
+    mergePotential: 0.3,
+    impact: 0.2,
+    riskPenalty: 0.35,
+  },
+  overallWeights: {
+    technicalMatch: 0.45,
+    opportunityScore: 0.55,
+  },
+  preset: 'balanced',
+} as const;
+
 describe('machine commands', () => {
   afterEach(() => {
     mock.restore();
@@ -63,6 +78,7 @@ describe('machine commands', () => {
         minMatchScore: 70,
         skipIfAlreadyGeneratedToday: true,
       },
+      scoring: DEFAULT_SCORING,
       commitTemplate: 'feat: {{title}}',
     });
 
@@ -99,6 +115,7 @@ describe('machine commands', () => {
         minMatchScore: 70,
         skipIfAlreadyGeneratedToday: true,
       },
+      scoring: DEFAULT_SCORING,
       commitTemplate: 'feat: {{title}}',
     });
 
@@ -138,6 +155,7 @@ describe('machine commands', () => {
           minMatchScore: 70,
           skipIfAlreadyGeneratedToday: true,
         },
+        scoring: DEFAULT_SCORING,
         commitTemplate: 'feat: {{title}}',
       },
       scheduler: {
@@ -340,6 +358,7 @@ describe('machine commands', () => {
         minMatchScore: 70,
         skipIfAlreadyGeneratedToday: true,
       },
+      scoring: DEFAULT_SCORING,
       commitTemplate: 'feat: {{title}}',
     });
     spyOn(githubService, 'validateCredentials').mockResolvedValue(true);
