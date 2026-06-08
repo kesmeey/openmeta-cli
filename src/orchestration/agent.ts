@@ -162,6 +162,7 @@ export class AgentOrchestrator {
   private octokit: Octokit | null = null;
 
   async runMachine(options: AgentRunOptions = {}): Promise<MachineAgentResult> {
+    const totalSteps = 8;
     const config = await configService.get();
     const headless = options.headless ?? true;
     const schedulerRun = Boolean(options.schedulerRun);
@@ -179,15 +180,38 @@ export class AgentOrchestrator {
       await this.confirmManualHeadlessRun(config);
     }
 
-    await this.initializeClients(config);
+    await this.initializeClients(config, {
+      validateGithub: true,
+      validateLlm: true,
+      taskSteps: {
+        github: { index: 1, total: totalSteps },
+        llm: { index: 2, total: totalSteps },
+      },
+    });
     this.showLocalRepositoryHint(repoPath);
 
     const rankedIssues = issueTarget
-      ? await issueRankingService.loadTargetIssue(config, issueTarget)
-      : await issueRankingService.loadRankedIssues(config, {
+      ? await ui.task({
+        title: 'Loading target issue',
+        doneMessage: 'Target issue loaded',
+        failedMessage: 'Target issue loading failed',
+        tone: 'info',
+        step: { index: 3, total: totalSteps },
+      }, async () => issueRankingService.loadTargetIssue(config, issueTarget))
+      : await ui.task({
+        title: 'Ranking contribution opportunities',
+        doneMessage: 'Contribution opportunities ranked',
+        failedMessage: 'Contribution opportunity ranking failed',
+        tone: 'info',
+        step: { index: 3, total: totalSteps },
+        heartbeat: {
+          message: 'Still ranking contribution opportunities',
+        },
+      }, async (task) => issueRankingService.loadRankedIssues(config, {
         refresh,
         repoFullName,
-      });
+        onStatus: (message) => task.setMessage(message),
+      }));
 
     if (rankedIssues.length === 0) {
       throw new Error(issueTarget
@@ -208,16 +232,34 @@ export class AgentOrchestrator {
     }
 
     const memoryBeforeRun = memoryService.load(selectedIssue.repoFullName);
-    const workspace = await workspaceService.prepareWorkspace(
+    const workspace = await ui.task({
+      title: `Preparing workspace for ${selectedIssue.repoFullName}`,
+      doneMessage: 'Workspace prepared',
+      failedMessage: 'Workspace preparation failed',
+      tone: 'info',
+      step: { index: 4, total: totalSteps },
+      heartbeat: {
+        message: 'Still preparing repository workspace',
+      },
+    }, async () => workspaceService.prepareWorkspace(
       selectedIssue,
       memoryBeforeRun,
       runChecks,
       headless ? 'headless' : 'interactive',
       repoPath,
-    );
+    ));
     const memory = memoryService.update(selectedIssue, workspace);
 
-    const patchDraftResult = await llmService.generatePatchDraft(selectedIssue, workspace, memory);
+    const patchDraftResult = await ui.task({
+      title: 'Generating patch strategy',
+      doneMessage: 'Patch strategy generated',
+      failedMessage: 'Patch strategy generation failed',
+      tone: 'info',
+      step: { index: 5, total: totalSteps },
+      heartbeat: {
+        message: 'Still drafting patch strategy',
+      },
+    }, async () => llmService.generatePatchDraft(selectedIssue, workspace, memory));
     const patchDraft = patchDraftResult.data;
     const implementationWorkspace = this.buildImplementationWorkspace(workspace, patchDraft);
     const implementation = patchDraftResult.status === 'success'
@@ -233,12 +275,27 @@ export class AgentOrchestrator {
       testResults: implementation.validationResults,
     };
 
-    const prDraftResult = await llmService.generatePrDraft(selectedIssue, patchDraft, workspaceForArtifacts);
+    const prDraftResult = await ui.task({
+      title: 'Generating PR narrative',
+      doneMessage: 'PR narrative generated',
+      failedMessage: 'PR narrative generation failed',
+      tone: 'info',
+      step: { index: 6, total: totalSteps },
+      heartbeat: {
+        message: 'Still drafting PR narrative',
+      },
+    }, async () => llmService.generatePrDraft(selectedIssue, patchDraft, workspaceForArtifacts));
     const prDraft = prDraftResult.data;
     const patchDraftMarkdown = contentService.formatPatchDraftMarkdown(patchDraft);
     const prDraftMarkdown = contentService.formatPullRequestDraftMarkdown(prDraft);
 
-    const contributionPullRequest = await this.submitContributionPullRequestIfPossible({
+    const contributionPullRequest = await ui.task({
+      title: 'Evaluating draft PR creation',
+      doneMessage: 'Draft PR evaluation complete',
+      failedMessage: 'Draft PR evaluation failed',
+      tone: 'info',
+      step: { index: 7, total: totalSteps },
+    }, async () => this.submitContributionPullRequestIfPossible({
       config,
       allowRealPr: patchDraftResult.status === 'success' && prDraftResult.status === 'success',
       headless,
@@ -247,7 +304,7 @@ export class AgentOrchestrator {
       workspace: workspaceForArtifacts,
       changedFiles: implementation.changedFiles,
       validationResults: implementation.validationResults,
-    });
+    }));
 
     const artifacts = this.prepareLocalArtifactPaths(selectedIssue);
     const reviewRequired =
@@ -306,7 +363,13 @@ export class AgentOrchestrator {
         proofMarkdown,
       });
 
-      const publishResult = await this.publishArtifactsIfNeeded({
+      const publishResult = await ui.task({
+        title: dryRun ? 'Previewing artifact publication' : 'Publishing contribution artifacts',
+        doneMessage: dryRun ? 'Artifact publication preview complete' : 'Contribution artifacts published',
+        failedMessage: dryRun ? 'Artifact publication preview failed' : 'Contribution artifact publication failed',
+        tone: 'info',
+        step: { index: 8, total: totalSteps },
+      }, async () => this.publishArtifactsIfNeeded({
         config,
         headless,
         dryRun: options.dryRun,
@@ -320,7 +383,7 @@ export class AgentOrchestrator {
         changedFiles: implementation.changedFiles,
         validationResults: implementation.validationResults,
         pullRequestUrl: contributionPullRequest.url,
-      });
+      }));
 
       const finalProofRecord = {
         ...proofRecord,
@@ -744,6 +807,7 @@ export class AgentOrchestrator {
   }
 
   async scoutMachine(options: ScoutRunOptions = {}): Promise<MachineScoutResult> {
+    const totalSteps = 3;
     const limit = options.limit ?? 10;
     const refresh = Boolean(options.refresh);
     const repoFullName = options.repo ? parseGitHubRepoFullName(options.repo) : undefined;
@@ -752,14 +816,31 @@ export class AgentOrchestrator {
 
     await this.validateConfig(config, { requireGithub: !localOnly, requireLlm: !localOnly });
     if (!localOnly || repoFullName) {
-      await this.initializeClients(config, { validateGithub: true, validateLlm: !localOnly });
+      await this.initializeClients(config, {
+        validateGithub: true,
+        validateLlm: !localOnly,
+        taskSteps: {
+          github: { index: 1, total: totalSteps },
+          ...(localOnly ? {} : { llm: { index: 2, total: totalSteps } }),
+        },
+      });
     }
 
-    const rankedIssues = await issueRankingService.loadRankedIssues(config, {
+    const rankedIssues = await ui.task({
+      title: 'Scoring contribution opportunities',
+      doneMessage: 'Contribution opportunities scored',
+      failedMessage: 'Contribution opportunity scoring failed',
+      tone: 'info',
+      step: { index: localOnly ? 2 : 3, total: totalSteps },
+      heartbeat: {
+        message: 'Still scoring contribution opportunities',
+      },
+    }, async (task) => issueRankingService.loadRankedIssues(config, {
       refresh,
       repoFullName,
       localOnly,
-    });
+      onStatus: (message) => task.setMessage(message),
+    }));
 
     return {
       opportunities: issueRankingService.diversifyScoutIssues(rankedIssues, limit),
@@ -1105,7 +1186,14 @@ export class AgentOrchestrator {
 
   private async initializeClients(
     config: AppConfig,
-    options: { validateGithub?: boolean; validateLlm?: boolean } = {},
+    options: {
+      validateGithub?: boolean;
+      validateLlm?: boolean;
+      taskSteps?: {
+        github?: { index: number; total: number };
+        llm?: { index: number; total: number };
+      };
+    } = {},
   ): Promise<void> {
     const validateGithub = options.validateGithub ?? true;
     const validateLlm = options.validateLlm ?? true;
@@ -1117,6 +1205,7 @@ export class AgentOrchestrator {
         doneMessage: 'GitHub access verified',
         failedMessage: 'GitHub access failed',
         tone: 'info',
+        step: options.taskSteps?.github,
       }, async () => {
         const valid = await githubService.validateCredentials();
         if (!valid) {
@@ -1149,6 +1238,7 @@ export class AgentOrchestrator {
       doneMessage: 'LLM provider verified',
       failedMessage: 'LLM provider failed',
       tone: 'info',
+      step: options.taskSteps?.llm,
     }, async () => {
       const valid = await llmService.validateConnection();
       if (!valid) {

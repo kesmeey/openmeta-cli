@@ -34,3 +34,18 @@ export function buildMachineErrorEnvelope(
 export function writeMachinePayload(payload: MachineEnvelope<unknown> | MachineErrorEnvelope): void {
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 }
+
+export function writeMachinePlan(command: string, steps: string[]): void {
+  if (steps.length === 0) {
+    return;
+  }
+
+  const lines = [
+    `Machine execution plan for ${command}:`,
+    ...steps.map((step, index) => `${index + 1}. ${step}`),
+  ];
+
+  for (const line of lines) {
+    process.stderr.write(`${line}\n`);
+  }
+}

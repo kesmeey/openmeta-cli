@@ -316,11 +316,14 @@ describe('machine commands', () => {
     expect(output.command).toBe('machine analyze');
     expect(output.data.repoFullName).toBe('acme/demo');
     expect(output.data.mode.dryRun).toBe(true);
+    expect(stderrWrites.join('')).toContain('Machine execution plan for machine analyze');
+    expect(stderrWrites.join('')).toContain('Prepare repository workspace');
     expect(stderrWrites.join('')).toContain('Inspecting repository for grounded contribution ideas');
   });
 
   test('machine agent writes execution outcome as JSON only', async () => {
     const writes = captureStdout();
+    const stderrWrites = captureStderr();
     const program = new Command();
     registerMachineCommand(program);
     const issue = createRankedIssue({ repoFullName: 'acme/demo', number: 42 });
@@ -373,6 +376,8 @@ describe('machine commands', () => {
     expect(output.command).toBe('machine agent');
     expect(output.data.executionOutcome).toBe('draft_only');
     expect(output.data.repoMutated).toBe(false);
+    expect(stderrWrites.join('')).toContain('Machine execution plan for machine agent');
+    expect(stderrWrites.join('')).toContain('Draft patch and PR artifacts without mutating the repository');
   });
 
   test('machine scout suppresses human task output during real machine execution', async () => {

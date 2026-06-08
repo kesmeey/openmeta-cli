@@ -49,6 +49,14 @@ export interface TaskOptions {
   doneMessage?: string;
   failedMessage?: string;
   tone?: Tone;
+  step?: {
+    index: number;
+    total: number;
+  };
+  heartbeat?: {
+    intervalMs?: number;
+    message: string | ((context: { elapsedMs: number }) => string);
+  };
 }
 
 export interface TaskController {

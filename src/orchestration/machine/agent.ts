@@ -1,7 +1,7 @@
 import { agentOrchestrator } from '../index.js';
 import { runInMachineContext } from '../../infra/index.js';
 import { mapMachineError } from './errors.js';
-import { buildMachineEnvelope, writeMachinePayload } from './runtime.js';
+import { buildMachineEnvelope, writeMachinePayload, writeMachinePlan } from './runtime.js';
 
 export class MachineAgentFlowOrchestrator {
   async execute(options: {
@@ -15,6 +15,15 @@ export class MachineAgentFlowOrchestrator {
     dryRun?: boolean;
   } = {}): Promise<void> {
     try {
+      writeMachinePlan('machine agent', [
+        'Validate GitHub access',
+        'Validate LLM provider',
+        'Scout or load the target issue',
+        'Prepare repository workspace',
+        'Draft patch and PR artifacts without mutating the repository unless allowed',
+        'Optionally apply changes or open a draft PR depending on execution flags',
+        'Return execution outcome with artifact paths and next actions',
+      ]);
       const result = await runInMachineContext(() => agentOrchestrator.runMachine({
         headless: options.headless ?? true,
         runChecks: options.runChecks,

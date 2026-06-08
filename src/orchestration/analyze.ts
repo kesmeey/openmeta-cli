@@ -68,20 +68,34 @@ export class AnalyzeOrchestrator {
     await this.initializeClients(config);
     this.showLocalRepositoryHint(repoPath);
 
+    const totalSteps = 7;
     const memory = memoryService.load(repoFullName);
-    const workspace = await workspaceService.prepareRepositoryWorkspace(
+    const workspace = await ui.task({
+      title: 'Preparing repository workspace',
+      doneMessage: 'Repository workspace prepared',
+      failedMessage: 'Repository workspace preparation failed',
+      tone: 'info',
+      step: { index: 3, total: totalSteps },
+      heartbeat: {
+        message: 'Still preparing repository workspace',
+      },
+    }, async () => workspaceService.prepareRepositoryWorkspace(
       repoFullName,
       memory,
       runChecks,
       headless ? 'headless' : 'interactive',
       repoPath,
-    );
+    ));
 
     const suggestionsResult = await ui.task({
       title: 'Inspecting repository for grounded contribution ideas',
       doneMessage: 'Repository suggestions generated',
       failedMessage: 'Repository suggestion analysis failed',
       tone: 'info',
+      step: { index: 4, total: totalSteps },
+      heartbeat: {
+        message: 'Still inspecting repository context',
+      },
     }, async () => llmService.analyzeRepository(repoFullName, workspace, memory));
     const suggestions = suggestionsResult.data;
     const selectedSuggestion = headless
@@ -94,6 +108,7 @@ export class AnalyzeOrchestrator {
       doneMessage: 'Repository suggestion selected',
       failedMessage: 'Repository suggestion selection failed',
       tone: 'info',
+      step: { index: 5, total: totalSteps },
     }, async () => selectedSuggestion);
 
     const patchDraftResult = await ui.task({
@@ -101,6 +116,10 @@ export class AnalyzeOrchestrator {
       doneMessage: 'Patch strategy drafted',
       failedMessage: 'Patch strategy drafting failed',
       tone: 'info',
+      step: { index: 6, total: totalSteps },
+      heartbeat: {
+        message: 'Still drafting patch strategy',
+      },
     }, async () => llmService.generatePatchDraft(syntheticIssue, workspace, memory));
     const patchDraft = patchDraftResult.data;
     const prDraftResult = await ui.task({
@@ -108,6 +127,10 @@ export class AnalyzeOrchestrator {
       doneMessage: 'Pull request narrative drafted',
       failedMessage: 'Pull request narrative drafting failed',
       tone: 'info',
+      step: { index: 7, total: totalSteps },
+      heartbeat: {
+        message: 'Still drafting pull request narrative',
+      },
     }, async () => llmService.generatePrDraft(syntheticIssue, patchDraft, workspace));
     const prDraft = prDraftResult.data;
 
@@ -239,6 +262,7 @@ export class AnalyzeOrchestrator {
       doneMessage: 'GitHub access verified',
       failedMessage: 'GitHub access failed',
       tone: 'info',
+      step: { index: 1, total: 7 },
     }, async () => {
       const valid = await githubService.validateCredentials();
       if (!valid) {
@@ -263,6 +287,7 @@ export class AnalyzeOrchestrator {
       doneMessage: 'LLM provider verified',
       failedMessage: 'LLM provider failed',
       tone: 'info',
+      step: { index: 2, total: 7 },
     }, async () => {
       const valid = await llmService.validateConnection();
       if (!valid) {
