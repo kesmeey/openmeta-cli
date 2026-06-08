@@ -4,7 +4,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { execFileSync } from 'child_process';
 import packageJson from '../package.json';
-import { getSupportedSkillHosts, renderSkillBundle } from '../src/orchestration/skill/index.js';
+import { getSupportedSkillHosts, installSkillBundle, renderSkillBundle } from '../src/orchestration/skill/index.js';
 
 let tempRoot = '';
 
@@ -29,12 +29,16 @@ describe('skill bundle rendering', () => {
     const claudeSkill = readFileSync(claude.files[0]!, 'utf-8');
     const openclawSkill = readFileSync(openclaw.files[0]!, 'utf-8');
 
+    expect(claude.files[0]).toBe(join(tempRoot, 'claude-code', 'SKILL.md'));
+    expect(claudeSkill).toStartWith('---\nname: openmeta\n');
     expect(claudeSkill).toContain('Install target: `~/.claude/skills/openmeta`');
+    expect(claudeSkill).toContain('Keep the generated file at `SKILL.md`');
     expect(claudeSkill).toContain('## Config Keys For `machine config set`');
     expect(claudeSkill).toContain('`executionOutcome`');
     expect(claudeSkill).toContain('"errorCodes"');
     expect(claudeSkill).toContain('openmeta machine agent');
 
+    expect(openclaw.files[0]).toBe(join(tempRoot, 'openclaw', 'skill.md'));
     expect(openclawSkill).toContain('Install target: `~/.openclaw/skills/openmeta`');
     expect(openclawSkill).toContain('## Recovery Playbook');
     expect(openclawSkill).toContain('`reviewRequired`');
@@ -71,12 +75,32 @@ describe('skill bundle rendering', () => {
       encoding: 'utf-8',
     });
 
-    expect(existsSync(join(exportRoot, 'claude-code', 'skill.md'))).toBe(true);
-    const exportedSkill = readFileSync(join(exportRoot, 'claude-code', 'skill.md'), 'utf-8');
+    expect(existsSync(join(exportRoot, 'claude-code', 'SKILL.md'))).toBe(true);
+    const exportedSkill = readFileSync(join(exportRoot, 'claude-code', 'SKILL.md'), 'utf-8');
+    expect(exportedSkill).toStartWith('---\nname: openmeta\n');
     expect(exportedSkill).toContain('Install target: `~/.claude/skills/openmeta`');
     expect(exportedSkill).toContain('## Result Interpretation');
     expect(exportedSkill).toContain('"inspectFields"');
     expect(exportedSkill).toContain('openmeta machine doctor');
+  });
+
+  test('installs claude-code bundle at the Claude Code skill discovery entrypoint', async () => {
+    const homeRoot = join(tempRoot, 'home');
+
+    const result = await installSkillBundle('claude-code', { homeDir: homeRoot });
+    const skillPath = join(homeRoot, '.claude', 'skills', 'openmeta', 'SKILL.md');
+    const legacyNestedPath = join(homeRoot, '.claude', 'skills', 'openmeta', 'claude-code', 'skill.md');
+
+    expect(result.installed).toBe(true);
+    expect(result.installPath).toBe(join(homeRoot, '.claude', 'skills', 'openmeta'));
+    expect(result.exportedFiles).toEqual([skillPath]);
+    expect(existsSync(skillPath)).toBe(true);
+    expect(existsSync(legacyNestedPath)).toBe(false);
+
+    const installedSkill = readFileSync(skillPath, 'utf-8');
+    expect(installedSkill).toStartWith('---\nname: openmeta\n');
+    expect(installedSkill).toContain('description: Use when');
+    expect(installedSkill).toContain('openmeta machine doctor');
   });
 });
 

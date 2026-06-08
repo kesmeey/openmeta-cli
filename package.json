@@ -1,6 +1,6 @@
 {
   "name": "openmeta-cli",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "OpenMeta CLI - Developer's daily open source growth companion",
   "type": "module",
   "private": false,

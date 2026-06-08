@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import { renderSkillBundle } from './renderer.js';
+import { getInstalledSkillFileName, renderInstallSkillContent } from './renderer.js';
 import type { SkillHost } from './catalog.js';
 
 export interface SkillInstallResult {
@@ -12,20 +12,24 @@ export interface SkillInstallResult {
   manualInstructions?: string;
 }
 
-function resolveDefaultInstallPath(host: SkillHost): string | null {
+export interface SkillInstallOptions {
+  homeDir?: string;
+}
+
+function resolveDefaultInstallPath(host: SkillHost, homeDir = homedir()): string | null {
   if (host === 'claude-code') {
-    return join(homedir(), '.claude', 'skills', 'openmeta');
+    return join(homeDir, '.claude', 'skills', 'openmeta');
   }
 
   if (host === 'openclaw') {
-    return join(homedir(), '.openclaw', 'skills', 'openmeta');
+    return join(homeDir, '.openclaw', 'skills', 'openmeta');
   }
 
   return null;
 }
 
-export async function installSkillBundle(host: SkillHost): Promise<SkillInstallResult> {
-  const installPath = resolveDefaultInstallPath(host);
+export async function installSkillBundle(host: SkillHost, options: SkillInstallOptions = {}): Promise<SkillInstallResult> {
+  const installPath = resolveDefaultInstallPath(host, options.homeDir);
   if (!installPath) {
     return {
       host,
@@ -36,13 +40,15 @@ export async function installSkillBundle(host: SkillHost): Promise<SkillInstallR
   }
 
   mkdirSync(installPath, { recursive: true });
-  const rendered = await renderSkillBundle(host, installPath);
+  const skillPath = join(installPath, getInstalledSkillFileName(host));
+  const rendered = renderInstallSkillContent(host);
+  writeFileSync(skillPath, rendered, 'utf-8');
 
   return {
     host,
-    installed: existsSync(installPath),
+    installed: existsSync(skillPath),
     installPath,
-    exportedFiles: rendered.files,
+    exportedFiles: [skillPath],
   };
 }
 
