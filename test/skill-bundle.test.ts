@@ -26,10 +26,20 @@ describe('skill bundle rendering', () => {
     const claude = await renderSkillBundle('claude-code', tempRoot);
     const openclaw = await renderSkillBundle('openclaw', tempRoot);
 
-    expect(readFileSync(claude.files[0]!, 'utf-8')).toContain('openmeta machine doctor');
-    expect(readFileSync(claude.files[0]!, 'utf-8')).toContain('openmeta machine agent');
-    expect(readFileSync(openclaw.files[0]!, 'utf-8')).toContain('openmeta machine doctor');
-    expect(readFileSync(openclaw.files[0]!, 'utf-8')).toContain('openmeta machine agent');
+    const claudeSkill = readFileSync(claude.files[0]!, 'utf-8');
+    const openclawSkill = readFileSync(openclaw.files[0]!, 'utf-8');
+
+    expect(claudeSkill).toContain('Install target: `~/.claude/skills/openmeta`');
+    expect(claudeSkill).toContain('## Config Keys For `machine config set`');
+    expect(claudeSkill).toContain('`executionOutcome`');
+    expect(claudeSkill).toContain('"errorCodes"');
+    expect(claudeSkill).toContain('openmeta machine agent');
+
+    expect(openclawSkill).toContain('Install target: `~/.openclaw/skills/openmeta`');
+    expect(openclawSkill).toContain('## Recovery Playbook');
+    expect(openclawSkill).toContain('`reviewRequired`');
+    expect(openclawSkill).toContain('"openmeta machine pow"');
+    expect(openclawSkill).toContain('openmeta machine doctor');
   });
 
   test('export works from the packed CLI with runtime-resolved skill assets', () => {
@@ -62,7 +72,11 @@ describe('skill bundle rendering', () => {
     });
 
     expect(existsSync(join(exportRoot, 'claude-code', 'skill.md'))).toBe(true);
-    expect(readFileSync(join(exportRoot, 'claude-code', 'skill.md'), 'utf-8')).toContain('openmeta machine doctor');
+    const exportedSkill = readFileSync(join(exportRoot, 'claude-code', 'skill.md'), 'utf-8');
+    expect(exportedSkill).toContain('Install target: `~/.claude/skills/openmeta`');
+    expect(exportedSkill).toContain('## Result Interpretation');
+    expect(exportedSkill).toContain('"inspectFields"');
+    expect(exportedSkill).toContain('openmeta machine doctor');
   });
 });
 

@@ -4,41 +4,110 @@
     {
       "name": "openmeta machine doctor",
       "requiredArgs": [],
-      "outcome": "machine_doctor_report"
+      "optionalArgs": [],
+      "outcome": "machine_doctor_report",
+      "purpose": "Check whether local configuration, credentials, directories, and automation prerequisites are ready for agent-driven use.",
+      "inspectFields": ["ready", "configPath", "homePath", "nextActions"]
+    },
+    {
+      "name": "openmeta machine config get",
+      "requiredArgs": [],
+      "optionalArgs": [],
+      "outcome": "machine_config_snapshot",
+      "purpose": "Read the masked machine-safe configuration snapshot without exposing raw secrets.",
+      "inspectFields": ["github", "llm", "automation", "commitTemplate"]
     },
     {
       "name": "openmeta machine config set",
       "requiredArgs": ["key", "value"],
-      "outcome": "machine_config_snapshot"
+      "optionalArgs": [],
+      "outcome": "machine_config_snapshot",
+      "purpose": "Set one configuration key and receive the masked resulting snapshot plus scheduler sync state.",
+      "inspectFields": ["updatedKey", "appliedValue", "snapshot", "scheduler"]
     },
     {
       "name": "openmeta machine provider add",
       "requiredArgs": ["name", "--base-url", "--model", "--api-key"],
-      "outcome": "machine_provider_result"
+      "optionalArgs": ["--provider", "--reasoning-effort", "--stream", "--header"],
+      "outcome": "machine_provider_result",
+      "purpose": "Save a named LLM provider profile for later machine-safe activation.",
+      "inspectFields": ["profileName", "activeProfile", "provider", "modelName", "apiBaseUrl", "validation"]
     },
     {
       "name": "openmeta machine provider use",
       "requiredArgs": ["name"],
-      "outcome": "machine_provider_result"
+      "optionalArgs": [],
+      "outcome": "machine_provider_result",
+      "purpose": "Switch the active provider profile used by scout, analyze, and agent flows.",
+      "inspectFields": ["profileName", "activeProfile", "provider", "modelName", "validation", "validationMessage"]
     },
     {
       "name": "openmeta machine scout",
       "requiredArgs": [],
-      "outcome": "machine_scout_result"
+      "optionalArgs": ["--limit", "--refresh", "--repo", "--local"],
+      "outcome": "machine_scout_result",
+      "purpose": "Return ranked contribution opportunities in a stable JSON shape.",
+      "inspectFields": ["opportunities", "mode", "nextActions"]
     },
     {
       "name": "openmeta machine analyze",
       "requiredArgs": ["--repo"],
-      "outcome": "machine_analyze_result"
+      "optionalArgs": ["--headless", "--run-checks", "--dry-run"],
+      "outcome": "machine_analyze_result",
+      "purpose": "Analyze one repository, generate a suggested patch and PR draft, and return artifact locations.",
+      "inspectFields": ["repoFullName", "selectedSuggestion", "patchDraft", "prDraft", "workspace", "artifacts", "mode"]
     },
     {
       "name": "openmeta machine agent",
       "requiredArgs": [],
+      "optionalArgs": ["--headless", "--run-checks", "--draft-only", "--refresh", "--repo", "--issue", "--dry-run"],
       "outcome": "machine_agent_result",
+      "purpose": "Execute the full contribution flow, from issue selection through artifacts and optional PR creation.",
+      "inspectFields": ["executionOutcome", "reviewRequired", "validationResults", "changedFiles", "pullRequestUrl", "artifacts", "skipReasons"],
       "dangerousExecutionNotes": [
         "Only run when the user explicitly asks for execution.",
-        "Review executionOutcome, validationResults, and pullRequestUrl before claiming completion."
+        "Prefer --dry-run for previews and --draft-only for artifact-only operation.",
+        "Review executionOutcome, reviewRequired, validationResults, and pullRequestUrl before claiming completion."
       ]
+    },
+    {
+      "name": "openmeta machine runs",
+      "requiredArgs": [],
+      "optionalArgs": ["[id]", "--limit"],
+      "outcome": "machine_runs_result",
+      "purpose": "Inspect machine-safe run history or one specific run record.",
+      "inspectFields": ["records", "totals", "ledgerPath"]
+    },
+    {
+      "name": "openmeta machine inbox",
+      "requiredArgs": [],
+      "optionalArgs": [],
+      "outcome": "machine_inbox_result",
+      "purpose": "Read the persisted ranked opportunity backlog.",
+      "inspectFields": ["items", "inboxPath"]
+    },
+    {
+      "name": "openmeta machine pow",
+      "requiredArgs": [],
+      "optionalArgs": [],
+      "outcome": "machine_proof_of_work_result",
+      "purpose": "Read proof-of-work records, publication state, and stored artifact references.",
+      "inspectFields": ["records", "proofOfWorkPath"]
     }
+  ],
+  "errorCodes": [
+    "INVALID_ARGUMENT",
+    "CONFIG_MISSING",
+    "CONFIG_INVALID",
+    "GITHUB_AUTH_FAILED",
+    "LLM_AUTH_FAILED",
+    "REPO_PREP_FAILED",
+    "VALIDATION_FAILED",
+    "DIRTY_WORKSPACE",
+    "PR_CREATION_SKIPPED",
+    "PR_CREATION_FAILED",
+    "SKILL_HOST_UNSUPPORTED",
+    "SKILL_INSTALL_FAILED",
+    "INTERNAL_ERROR"
   ]
 }
