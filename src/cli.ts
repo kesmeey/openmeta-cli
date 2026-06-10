@@ -5,6 +5,7 @@ import {
   registerAnalyzeCommand,
   registerAutomationCommand,
   registerConfigCommand,
+  registerDashboardCommand,
   registerDailyCommand,
   registerDoctorCommand,
   registerInboxCommand,
@@ -39,6 +40,7 @@ async function main(): Promise<void> {
   registerInboxCommand(program);
   registerPowCommand(program);
   registerConfigCommand(program);
+  registerDashboardCommand(program);
   registerProviderCommand(program);
   registerAutomationCommand(program);
   registerDoctorCommand(program);

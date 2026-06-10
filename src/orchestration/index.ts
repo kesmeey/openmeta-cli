@@ -1,3 +1,4 @@
+export { DashboardOrchestrator, dashboardOrchestrator } from './dashboard.js';
 export { dailyOrchestrator, DailyOrchestrator } from './daily.js';
 export { agentOrchestrator, AgentOrchestrator } from './agent.js';
 export { analyzeOrchestrator, AnalyzeOrchestrator } from './analyze.js';

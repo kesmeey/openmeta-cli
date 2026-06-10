@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenMeta Contribution Dashboard</title>
+  <link rel="stylesheet" href="./dashboard.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-line">
+          <div class="brand-mark" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M3 12.2V5.8L9 2.6L15 5.8V12.2L9 15.4L3 12.2Z" stroke="currentColor" stroke-width="1.6"/>
+              <path d="M6.2 10.2L8.2 12.2L12 7.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <p class="eyebrow">Contribution Ledger</p>
+            <h1>OpenMeta Contribution Dashboard</h1>
+          </div>
+        </div>
+      </div>
+      <div class="topbar-meta topbar-meta-wide" id="topbar-meta"></div>
+    </header>
+
+    <section class="toolbar">
+      <div class="toolbar-note" id="toolbar-note"></div>
+      <div class="toolbar-controls">
+        <div class="field">
+          <label for="repo-filter">Repository</label>
+          <select id="repo-filter"></select>
+        </div>
+        <div class="field">
+          <label for="decision-filter">Decision</label>
+          <select id="decision-filter"></select>
+        </div>
+        <div class="field">
+          <label>Period</label>
+          <div class="segment" id="period-segment" aria-label="Period switch">
+            <button type="button" data-period="weekly" class="active">Weekly</button>
+            <button type="button" data-period="monthly">Monthly</button>
+          </div>
+        </div>
+        <div class="sync-wrap">
+          <label for="refresh-button">Snapshot</label>
+          <button type="button" class="sync-button" id="refresh-button">Refresh Snapshot</button>
+          <div class="sync-status" id="sync-status"></div>
+        </div>
+      </div>
+    </section>
+
+    <main class="layout">
+      <div class="decision-row">
+        <section class="section">
+          <div class="section-head">
+            <div>
+              <h2>Overview</h2>
+            </div>
+            <div class="section-badge" id="overview-badge"></div>
+          </div>
+          <div class="summary-shell">
+            <div class="summary-primary" id="overview-primary"></div>
+            <div class="funnel-panel" id="overview-funnel"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <h2>Deepen Decision</h2>
+            </div>
+            <div class="section-badge" id="focus-badge"></div>
+          </div>
+          <div class="decision-wrap">
+            <div class="decision-callout" id="decision-callout"></div>
+            <div class="decision-list" id="decision-list"></div>
+          </div>
+        </section>
+      </div>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <h2>Projects</h2>
+          </div>
+          <div class="section-badge" id="projects-badge"></div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-tools">
+            <div id="projects-summary"></div>
+            <div id="projects-detail"></div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30%;">Project</th>
+                <th style="width: 12%;">State</th>
+                <th style="width: 22%;">Contribution</th>
+                <th style="width: 28%;">Latest Outcome</th>
+                <th style="width: 8%;">Score</th>
+              </tr>
+            </thead>
+            <tbody id="projects-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <h2>Contribution Attempts</h2>
+          </div>
+          <div class="section-badge" id="attempts-badge"></div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-tools">
+            <div id="attempts-summary"></div>
+            <div id="attempts-detail"></div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 46%;">Attempt</th>
+                <th style="width: 14%;">Outcome</th>
+                <th style="width: 18%;">Ledger Trace</th>
+                <th style="width: 14%;">Last Update</th>
+                <th style="width: 8%;">Open</th>
+              </tr>
+            </thead>
+            <tbody id="attempts-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="panel-row">
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <h2>Momentum</h2>
+            </div>
+            <div class="section-badge" id="trend-badge"></div>
+          </div>
+          <div class="chart-wrap">
+            <div class="trend-head">
+              <div class="trend-insight" id="trend-insight"></div>
+              <div class="legend">
+                <div class="legend-item"><span class="legend-dot drafted"></span>Drafted</div>
+                <div class="legend-item"><span class="legend-dot published"></span>Ledger Published</div>
+                <div class="legend-item"><span class="legend-dot pr_open"></span>PR Open</div>
+                <div class="legend-item"><span class="legend-dot merged"></span>Merged</div>
+              </div>
+            </div>
+            <div class="trend-summary" id="trend-summary">
+            </div>
+            <div class="trend-chart">
+              <div class="trend-y-axis" id="trend-y-axis"></div>
+              <div class="trend-plot">
+                <div class="trend-bars" id="trend-bars"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <h2>Recent Activity</h2>
+            </div>
+            <div class="section-badge" id="activity-badge"></div>
+          </div>
+          <div class="list-wrap">
+            <div class="activity-list" id="activity-list"></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="panel-row panel-row-tight">
+        <section class="section">
+          <div class="section-head">
+            <div>
+              <h2>Archive Snapshot</h2>
+            </div>
+            <div class="vault-meta">
+              <div class="section-badge" id="archive-badge"></div>
+              <div class="vault-composition" id="vault-composition"></div>
+            </div>
+          </div>
+          <div class="vault-wrap">
+            <div class="archive-grid" id="archive-grid"></div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="./dashboard.js"></script>
+</body>
+</html>

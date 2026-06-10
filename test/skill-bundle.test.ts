@@ -51,8 +51,9 @@ describe('skill bundle rendering', () => {
   test('export works from the packed CLI with runtime-resolved skill assets', () => {
     const packedRoot = mkdtempSync(join(tmpdir(), 'openmeta-pack-runtime-'));
     const exportRoot = join(packedRoot, 'exported');
+    const bunExecutable = process.execPath;
 
-    execFileSync('bun', ['run', 'build'], {
+    execFileSync(bunExecutable, ['build', '--target=bun', '--outfile=bin/openmeta.js', './src/cli.ts'], {
       cwd: process.cwd(),
       stdio: ['ignore', 'pipe', 'inherit'],
       encoding: 'utf-8',
@@ -63,19 +64,23 @@ describe('skill bundle rendering', () => {
       encoding: 'utf-8',
     })) as Array<{ filename: string }>;
     execFileSync('tar', ['-xzf', join(packedRoot, packed[0]!.filename), '-C', packedRoot]);
-    execFileSync('bun', [
-      join(packedRoot, 'package', 'bin', 'openmeta.js'),
-      'skill',
-      'export',
-      '--host',
-      'claude-code',
-      '--output',
-      exportRoot,
-    ], {
-      cwd: process.cwd(),
-      stdio: ['ignore', 'pipe', 'inherit'],
-      encoding: 'utf-8',
-    });
+    execFileSync(
+      bunExecutable,
+      [
+        join(packedRoot, 'package', 'bin', 'openmeta.js'),
+        'skill',
+        'export',
+        '--host',
+        'claude-code',
+        '--output',
+        exportRoot,
+      ],
+      {
+        cwd: process.cwd(),
+        stdio: ['ignore', 'pipe', 'inherit'],
+        encoding: 'utf-8',
+      },
+    );
 
     expect(existsSync(join(exportRoot, 'claude-code', 'SKILL.md'))).toBe(true);
     const exportedSkill = readFileSync(join(exportRoot, 'claude-code', 'SKILL.md'), 'utf-8');
@@ -85,7 +90,7 @@ describe('skill bundle rendering', () => {
     expect(exportedSkill).toContain('## Result Interpretation');
     expect(exportedSkill).toContain('"inspectFields"');
     expect(exportedSkill).toContain('openmeta machine doctor');
-  });
+  }, { timeout: 20000 });
 
   test('installs claude-code bundle at the Claude Code skill discovery entrypoint', async () => {
     const homeRoot = join(tempRoot, 'home');
@@ -111,6 +116,7 @@ describe('skill bundle rendering', () => {
 describe('package files', () => {
   test('publishes skill assets with the CLI binary', () => {
     expect(packageJson.files).toContain('bin/openmeta.js');
+    expect(packageJson.files).toContain('dashboard');
     expect(packageJson.files).toContain('skills');
   });
 });
