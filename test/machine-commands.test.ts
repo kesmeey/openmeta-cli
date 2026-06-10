@@ -261,12 +261,11 @@ describe('machine commands', () => {
         limit: 10,
         refresh: false,
         repo: undefined,
-        localOnly: true,
       },
       nextActions: ['inspect_ranked_opportunities'],
     });
 
-    await program.parseAsync(['machine', 'scout', '--local'], { from: 'user' });
+    await program.parseAsync(['machine', 'scout'], { from: 'user' });
 
     const output = JSON.parse(writes.join(''));
     expect(output.command).toBe('machine scout');
@@ -522,7 +521,7 @@ describe('machine commands', () => {
     spyOn(githubService, 'validateCredentials').mockResolvedValue(true);
     spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([]);
 
-    await program.parseAsync(['machine', 'scout', '--local'], { from: 'user' });
+    await program.parseAsync(['machine', 'scout'], { from: 'user' });
 
     const output = writes.join('');
     expect(() => JSON.parse(output)).not.toThrow();

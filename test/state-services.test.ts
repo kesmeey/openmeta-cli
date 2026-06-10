@@ -230,7 +230,7 @@ describe('stateful services', () => {
   test('run history service records command lifecycle and error details', () => {
     const run = runHistoryService.start({
       commandName: 'OpenMeta Scout',
-      args: ['scout', '--local'],
+      args: ['scout', '--refresh'],
     });
     const finished = runHistoryService.finish(run.id, 'failed', 'LLM validation failed');
     const state = runHistoryService.load();
@@ -239,7 +239,7 @@ describe('stateful services', () => {
     expect(finished?.durationMs).toBeGreaterThanOrEqual(0);
     expect(finished?.error).toBe('LLM validation failed');
     expect(state.records[0]?.id).toBe(run.id);
-    expect(runHistoryService.find(run.id)?.args).toEqual(['scout', '--local']);
+    expect(runHistoryService.find(run.id)?.args).toEqual(['scout', '--refresh']);
   });
 
   test('run history service returns undefined for unknown runs', () => {

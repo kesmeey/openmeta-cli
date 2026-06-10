@@ -229,14 +229,13 @@ describe('machine flow result builders', () => {
     spyOn(orchestrator as AgentOrchestrator, 'initializeClients' as never).mockResolvedValue(undefined);
     spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([issue]);
 
-    const result = await orchestrator.scoutMachine({ limit: 5, refresh: true, localOnly: true });
+    const result = await orchestrator.scoutMachine({ limit: 5, refresh: true });
 
-    expect(result.mode.localOnly).toBe(true);
     expect(result.mode.refresh).toBe(true);
     expect(result.opportunities).toEqual([issue]);
   });
 
-  test('machine local scout skips external client initialization', async () => {
+  test('machine scout validates config and initializes clients before ranking', async () => {
     const config = createConfig();
     const issue = createRankedIssue();
     const orchestrator = new AgentOrchestrator();
@@ -250,10 +249,10 @@ describe('machine flow result builders', () => {
     spyOn(infra.configService, 'get').mockResolvedValue(config);
     spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([issue]);
 
-    const result = await orchestrator.scoutMachine({ limit: 3, localOnly: true });
+    const result = await orchestrator.scoutMachine({ limit: 3 });
 
-    expect(validateSpy).toHaveBeenCalledWith(config, { requireGithub: false, requireLlm: false });
-    expect(initializeSpy).not.toHaveBeenCalled();
+    expect(validateSpy).toHaveBeenCalledWith(config);
+    expect(initializeSpy).toHaveBeenCalled();
     expect(result.opportunities).toEqual([issue]);
   });
 
@@ -263,9 +262,10 @@ describe('machine flow result builders', () => {
 
     spyOn(infra.configService, 'get').mockResolvedValue(config);
     spyOn(orchestrator as AgentOrchestrator, 'validateConfig' as never).mockResolvedValue(undefined);
+    spyOn(orchestrator as AgentOrchestrator, 'initializeClients' as never).mockResolvedValue(undefined);
     spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([]);
 
-    const result = await orchestrator.scoutMachine({ localOnly: true });
+    const result = await orchestrator.scoutMachine();
 
     expect(result.opportunities).toEqual([]);
     expect(result.emptyExplanation).toEqual(

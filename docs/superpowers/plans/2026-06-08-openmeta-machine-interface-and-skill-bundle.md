@@ -595,8 +595,8 @@ git commit -m "feat: add machine inbox pow and run state surfaces"
 
 ```ts
 test('machine scout returns ranked opportunities with mode metadata', async () => {
-  const result = await new AgentOrchestrator().scoutMachine({ limit: 5, refresh: true, localOnly: true });
-  expect(result.mode.localOnly).toBe(true);
+  const result = await new AgentOrchestrator().scoutMachine({ limit: 5, refresh: true });
+  expect(result.mode.refresh).toBe(true);
   expect(result.opportunities).toBeArray();
 });
 
@@ -630,7 +630,6 @@ Implement `AgentOrchestrator.scoutMachine(options)` so it reuses `issueRankingSe
     limit: number;
     refresh: boolean;
     repo?: string;
-    localOnly: boolean;
   };
   nextActions: string[];
 }

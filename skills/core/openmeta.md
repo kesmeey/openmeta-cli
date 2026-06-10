@@ -64,7 +64,7 @@ OpenMeta is built for contribution-oriented open source work.
 
 ### Discovery and Execution
 
-- `openmeta machine scout [--limit <count>] [--refresh] [--repo <owner/name>] [--local]`
+- `openmeta machine scout [--limit <count>] [--refresh] [--repo <owner/name>]`
 - `openmeta machine analyze --repo <owner/name|url> [--headless] [--run-checks] [--dry-run]`
 - `openmeta machine agent [--headless] [--run-checks] [--draft-only] [--refresh] [--repo <owner/name>] [--issue <number|url>] [--dry-run]`
 
@@ -206,9 +206,7 @@ Look for:
 
 - `opportunities`
 - per-item `repoFullName`, `issueNumber`, `issueUrl`, `overallScore`, and scoring breakdown
-- mode flags such as `refresh`, `repo`, and `localOnly`
-
-Use `--local` when the host wants heuristic ranking without LLM calls.
+- mode flags such as `refresh` and `repo`
 
 ### `machine analyze`
 

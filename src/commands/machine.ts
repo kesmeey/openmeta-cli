@@ -90,8 +90,7 @@ export function registerMachineCommand(program: Command): void {
     .option('--limit <count>', 'Number of opportunities to return', '10')
     .option('--refresh', 'Ignore cached GitHub issue discovery results')
     .option('--repo <repository>', 'Limit issue discovery to one repository')
-    .option('--local', 'Use local heuristic scoring without calling the LLM provider')
-    .action((options: { limit?: string; refresh?: boolean; repo?: string; local?: boolean }) =>
+    .action((options: { limit?: string; refresh?: boolean; repo?: string }) =>
       machineScoutOrchestrator.execute(options),
     );
 

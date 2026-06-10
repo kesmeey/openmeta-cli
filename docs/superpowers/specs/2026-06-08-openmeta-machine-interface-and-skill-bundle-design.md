@@ -45,7 +45,7 @@ openmeta machine config get
 openmeta machine config set <key> <value>
 openmeta machine provider add <name> --base-url <url> --model <model> --api-key <key>
 openmeta machine provider use <name>
-openmeta machine scout [--limit <count>] [--refresh] [--repo <repository>] [--local]
+openmeta machine scout [--limit <count>] [--refresh] [--repo <repository>]
 openmeta machine analyze --repo <repository> [--headless] [--run-checks] [--dry-run]
 openmeta machine agent [--headless] [--run-checks] [--draft-only] [--refresh] [--repo <repository>] [--issue <issue>] [--dry-run]
 openmeta machine runs [id]
@@ -203,7 +203,7 @@ Return a stable ranked opportunity list:
 
 - `opportunities[]`
 - per-item repo, issue number, issue URL, score, summary, breakdown
-- invocation mode metadata such as `refresh`, `repo`, and `localOnly`
+- invocation mode metadata such as `refresh` and `repo`
 
 ### `machine analyze`
 

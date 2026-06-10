@@ -4,11 +4,11 @@ import { mapMachineError } from './errors.js';
 import { buildMachineEnvelope, writeMachinePayload, writeMachinePlan } from './runtime.js';
 
 export class MachineScoutOrchestrator {
-  async execute(options: { limit?: string; refresh?: boolean; repo?: string; local?: boolean } = {}): Promise<void> {
+  async execute(options: { limit?: string; refresh?: boolean; repo?: string } = {}): Promise<void> {
     try {
       writeMachinePlan('machine scout', [
-        'Validate GitHub access when remote scouting is enabled',
-        'Validate LLM provider when model scoring is enabled',
+        'Validate GitHub access',
+        'Validate LLM provider',
         'Fetch and score contribution opportunities',
         'Return ranked opportunities with mode metadata',
       ]);
@@ -17,7 +17,6 @@ export class MachineScoutOrchestrator {
           limit: Number.parseInt(options.limit || '10', 10) || 10,
           refresh: options.refresh,
           repo: options.repo,
-          localOnly: options.local,
         }),
       );
       writeMachinePayload(buildMachineEnvelope('machine scout', result));

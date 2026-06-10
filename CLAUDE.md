@@ -188,7 +188,7 @@ Issue ranking now has a dedicated service:
 It is responsible for:
 
 - local pre-ranking against the saved profile
-- local heuristic issue matching when `--local` is used
+- local heuristic issue matching before batched scoring
 - batched LLM issue scoring
 - selecting the first issue above the automation threshold
 - diversifying scout output across repositories

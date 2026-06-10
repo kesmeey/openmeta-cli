@@ -230,7 +230,6 @@ openmeta agent
 
 # 3. 只看机会排名
 openmeta scout --limit 10
-openmeta scout --local --limit 10
 
 # 4. 查看贡献沉淀
 openmeta inbox
@@ -300,7 +299,6 @@ openmeta machine analyze --repo owner/name --dry-run
 | `openmeta scout --limit <count>` | 查看高价值贡献机会排名 |
 | `openmeta scout --refresh` | 强制刷新 GitHub issue discovery 缓存 |
 | `openmeta scout --repo <repository>` | 从一个 GitHub 仓库 URL 或 `owner/name` 中筛选贡献机会 |
-| `openmeta scout --local` | 使用本地启发式评分，不调用 LLM，适合模型服务暂时不可用时先筛机会 |
 | `openmeta inbox` | 查看已起草的贡献机会收件箱 |
 | `openmeta pow` | 查看贡献工作量证明记录 |
 | `openmeta runs` | 查看最近命令运行记录、耗时和失败原因 |
@@ -574,7 +572,6 @@ openmeta agent
 
 # 3. Only scout and rank opportunities
 openmeta scout --limit 10
-openmeta scout --local --limit 10
 
 # 4. Inspect durable contribution assets
 openmeta inbox
@@ -644,7 +641,6 @@ openmeta machine analyze --repo owner/name --dry-run
 | `openmeta scout --limit <count>` | Show ranked contribution opportunities |
 | `openmeta scout --refresh` | Force-refresh the GitHub issue discovery cache |
 | `openmeta scout --repo <repository>` | Rank opportunities from one upstream GitHub repository URL or `owner/name` |
-| `openmeta scout --local` | Use local heuristic scoring without calling the LLM provider |
 | `openmeta inbox` | Show drafted contribution opportunities |
 | `openmeta pow` | Show proof-of-work history |
 | `openmeta runs` | Show recent command runs, durations, and failure reasons |

@@ -56,7 +56,6 @@ export interface ScoutRunOptions {
   limit?: number;
   refresh?: boolean;
   repo?: string;
-  localOnly?: boolean;
 }
 
 export interface MachineScoutResult {
@@ -65,7 +64,6 @@ export interface MachineScoutResult {
     limit: number;
     refresh: boolean;
     repo?: string;
-    localOnly: boolean;
   };
   emptyExplanation?: {
     title: string;
@@ -170,7 +168,7 @@ export class AgentOrchestrator {
 
   private buildScoutEmptyExplanation(
     config: AppConfig,
-    options: { repoFullName?: string; localOnly: boolean; refresh: boolean },
+    options: { repoFullName?: string; refresh: boolean },
   ): { title: string; detail: string; suggestions: string[] } {
     const scopeLine = options.repoFullName
       ? `This run was limited to ${options.repoFullName}.`
@@ -184,11 +182,9 @@ export class AgentOrchestrator {
         options.repoFullName
           ? 'Try a different repository or remove the repo filter.'
           : 'Broaden your tech stack or focus areas in the saved profile.',
-        options.localOnly
-          ? 'Run scout without --local after the LLM provider is healthy to widen scoring coverage.'
-          : options.refresh
-            ? 'Try again later after new issues appear.'
-            : 'Rerun with --refresh to ignore the local issue cache.',
+        options.refresh
+          ? 'Try again later after new issues appear.'
+          : 'Rerun with --refresh to ignore the local issue cache.',
       ],
     };
   }
@@ -899,19 +895,15 @@ export class AgentOrchestrator {
     const refresh = typeof options === 'number' ? false : Boolean(options.refresh);
     const repoFullName =
       typeof options === 'number' || !options.repo ? undefined : parseGitHubRepoFullName(options.repo);
-    const localOnly = typeof options === 'number' ? false : Boolean(options.localOnly);
     const config = await configService.get();
-    await this.validateConfig(config, { requireGithub: !localOnly, requireLlm: !localOnly });
-    if (!localOnly || repoFullName) {
-      await this.initializeClients(config, { validateGithub: true, validateLlm: !localOnly });
-    }
+    await this.validateConfig(config);
+    await this.initializeClients(config, { validateGithub: true, validateLlm: true });
 
     ui.hero({
       label: 'OpenMeta Scout',
-      title: localOnly ? 'Read the field while the model stays offline' : 'Read the field before you spend your focus',
-      subtitle: localOnly
-        ? 'OpenMeta will use local profile heuristics to keep scouting useful even when the LLM provider is unavailable.'
-        : 'OpenMeta turns a noisy issue stream into a shortlist shaped by technical fit, timing, and real opening momentum.',
+      title: 'Read the field before you spend your focus',
+      subtitle:
+        'OpenMeta turns a noisy issue stream into a shortlist shaped by technical fit, timing, and real opening momentum.',
       lines: [
         `Saved threshold reference: ${config.automation.minMatchScore}/100.`,
         refresh
@@ -920,9 +912,7 @@ export class AgentOrchestrator {
         repoFullName
           ? `Issue discovery is limited to ${repoFullName}.`
           : 'Issue discovery will scan the broader GitHub issue stream.',
-        localOnly
-          ? 'LLM validation and model scoring are skipped for this run.'
-          : 'LLM scoring will refine the local candidate shortlist.',
+        'LLM scoring will refine the local candidate shortlist.',
       ],
     });
 
@@ -937,12 +927,11 @@ export class AgentOrchestrator {
         issueRankingService.loadRankedIssues(config, {
           refresh,
           repoFullName,
-          localOnly,
           onStatus: (message) => task.setMessage(message),
         }),
     );
     if (rankedIssues.length === 0) {
-      const emptyExplanation = this.buildScoutEmptyExplanation(config, { repoFullName, localOnly, refresh });
+      const emptyExplanation = this.buildScoutEmptyExplanation(config, { repoFullName, refresh });
       ui.emptyState(
         'OpenMeta Scout',
         emptyExplanation.title,
@@ -965,20 +954,17 @@ export class AgentOrchestrator {
     const limit = options.limit ?? 10;
     const refresh = Boolean(options.refresh);
     const repoFullName = options.repo ? parseGitHubRepoFullName(options.repo) : undefined;
-    const localOnly = Boolean(options.localOnly);
     const config = await configService.get();
 
-    await this.validateConfig(config, { requireGithub: !localOnly, requireLlm: !localOnly });
-    if (!localOnly || repoFullName) {
-      await this.initializeClients(config, {
-        validateGithub: true,
-        validateLlm: !localOnly,
-        taskSteps: {
-          github: { index: 1, total: totalSteps },
-          ...(localOnly ? {} : { llm: { index: 2, total: totalSteps } }),
-        },
-      });
-    }
+    await this.validateConfig(config);
+    await this.initializeClients(config, {
+      validateGithub: true,
+      validateLlm: true,
+      taskSteps: {
+        github: { index: 1, total: totalSteps },
+        llm: { index: 2, total: totalSteps },
+      },
+    });
 
     const rankedIssues = await ui.task(
       {
@@ -986,7 +972,7 @@ export class AgentOrchestrator {
         doneMessage: 'Contribution opportunities scored',
         failedMessage: 'Contribution opportunity scoring failed',
         tone: 'info',
-        step: { index: localOnly ? 2 : 3, total: totalSteps },
+        step: { index: 3, total: totalSteps },
         heartbeat: {
           message: 'Still scoring contribution opportunities',
         },
@@ -995,14 +981,11 @@ export class AgentOrchestrator {
         issueRankingService.loadRankedIssues(config, {
           refresh,
           repoFullName,
-          localOnly,
           onStatus: (message) => task.setMessage(message),
         }),
     );
     const emptyExplanation =
-      rankedIssues.length === 0
-        ? this.buildScoutEmptyExplanation(config, { repoFullName, localOnly, refresh })
-        : undefined;
+      rankedIssues.length === 0 ? this.buildScoutEmptyExplanation(config, { repoFullName, refresh }) : undefined;
 
     return {
       opportunities: issueRankingService.diversifyScoutIssues(rankedIssues, limit),
@@ -1010,7 +993,6 @@ export class AgentOrchestrator {
         limit,
         refresh,
         repo: repoFullName,
-        localOnly,
       },
       ...(emptyExplanation ? { emptyExplanation } : {}),
       nextActions: rankedIssues.length === 0 ? ['broaden_profile_filters'] : ['inspect_ranked_opportunities'],
