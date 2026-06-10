@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import type { DashboardData } from '../src/dashboard/data-adapter.ts';
 
 const tempRoots: string[] = [];
 
@@ -12,9 +13,9 @@ function createTempRoot(): string {
 }
 
 async function loadAdapter() {
-  const modulePath = `../dashboard/dashboard-data-adapter.cjs?ts=${Date.now()}-${Math.random()}`;
+  const modulePath = `../src/dashboard/data-adapter.ts?ts=${Date.now()}-${Math.random()}`;
   const mod = await import(modulePath);
-  return mod as { buildDashboardData: () => any };
+  return mod as { buildDashboardData: () => DashboardData };
 }
 
 describe('dashboard data adapter', () => {
@@ -151,14 +152,26 @@ describe('dashboard data adapter', () => {
       'src/components/IconButton.tsx',
       'src/components/IconButton.test.tsx',
     ]);
+    expect(data.attempts[0]?.workType).toBe('tests');
     expect(data.attempts[0]?.validationState).toBe('passed');
     expect(data.attempts[0]?.assetCompletenessLabel).toBe('4/4 assets');
+    expect(data.attempts[0]?.highLeverage).toBe(true);
 
     expect(data.projects[0]?.attemptToPublishedRate).toBe(100);
     expect(data.projects[0]?.attemptToPrRate).toBe(100);
     expect(data.projects[0]?.attemptToMergedRate).toBe(0);
     expect(data.projects[0]?.lastSuccessfulLandingAt).toBe('2026-06-09');
-    expect(data.projects[0]?.blockageNote).toContain('0 review');
+    expect(data.projects[0]?.reopenableAttemptCount).toBe(0);
+    expect(data.projects[0]?.stalePublishedWithoutPrCount).toBe(0);
+    expect(data.projects[0]?.returnSessions).toBe(1);
+    expect(data.projects[0]?.dominantWorkType).toBe('tests');
+    expect(data.projects[0]?.topAreas).toEqual(['src/components']);
+    expect(data.projects[0]?.highLeverageAttemptCount).toBe(1);
+    expect(data.projects[0]?.blockageNote).toContain('0 stale PR');
+
+    expect(data.summary.highLeverageAttemptTotal).toBe(1);
+    expect(data.summary.dominantWorkType).toBe('tests');
+    expect(data.summary.topAreas).toEqual(['src/components']);
 
     expect(data.archive[0]?.assetCompletenessLabel).toBe('4/4 assets');
     expect(data.archive[0]?.reuseLabel).toBe('context compounding');

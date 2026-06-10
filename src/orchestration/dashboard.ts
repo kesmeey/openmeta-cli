@@ -1,9 +1,9 @@
-import { createRequire } from 'module';
 import { existsSync, readFile, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs';
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'http';
 import { dirname, extname, isAbsolute, join, normalize, relative, resolve } from 'path';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
+import { buildDashboardData } from '../dashboard/data-adapter.ts';
 import { ensureDirectory, getOpenMetaStateDir, ui, UserCancelledError } from '../infra/index.js';
 
 const DEFAULT_HOST = '127.0.0.1';
@@ -193,12 +193,7 @@ function resolveDashboardPrototypeRoot(): string {
   ];
 
   for (const candidate of candidates) {
-    if (
-      existsSync(join(candidate, 'index.html'))
-      && existsSync(join(candidate, 'dashboard.js'))
-      && existsSync(join(candidate, 'dashboard.css'))
-      && existsSync(join(candidate, 'dashboard-data-adapter.cjs'))
-    ) {
+    if (existsSync(join(candidate, 'index.html'))) {
       return candidate;
     }
   }
@@ -256,9 +251,12 @@ interface DashboardDataStore {
   refreshDashboardData: () => Promise<unknown>;
 }
 
-export function createDashboardDataStore(rootDir: string): DashboardDataStore {
-  const require = createRequire(import.meta.url);
-  const adapterPath = join(rootDir, 'dashboard-data-adapter.cjs');
+interface DashboardDataStoreOptions {
+  buildDashboardData?: () => unknown;
+}
+
+export function createDashboardDataStore(options: DashboardDataStoreOptions = {}): DashboardDataStore {
+  const buildDashboardPayload = options.buildDashboardData || buildDashboardData;
   const snapshotPath = join(ensureDirectory(getOpenMetaStateDir()), 'dashboard-data.json');
   let cachedPayload: unknown | undefined;
   let pendingRefresh: Promise<unknown> | null = null;
@@ -278,18 +276,8 @@ export function createDashboardDataStore(rootDir: string): DashboardDataStore {
     }
   };
 
-  const materialize = (forceReloadAdapter: boolean): unknown => {
-    if (forceReloadAdapter) {
-      const resolvedAdapterPath = require.resolve(adapterPath);
-      delete require.cache[resolvedAdapterPath];
-    }
-
-    const adapter = require(adapterPath) as { buildDashboardData?: () => unknown };
-    if (typeof adapter.buildDashboardData !== 'function') {
-      throw new Error('Dashboard data adapter does not export buildDashboardData().');
-    }
-
-    const rawPayload = adapter.buildDashboardData();
+  const materialize = (_forceReloadAdapter: boolean): unknown => {
+    const rawPayload = buildDashboardPayload();
     const payload = withDashboardSnapshotMeta(rawPayload, snapshotPath);
     writeJsonFileAtomically(snapshotPath, payload);
     cachedPayload = payload;
@@ -363,7 +351,7 @@ export class DashboardOrchestrator {
     const rootDir = resolveDashboardPrototypeRoot();
     const host = options.host || DEFAULT_HOST;
     const preferredPort = Math.max(0, options.port ?? DEFAULT_PORT);
-    const dashboardDataStore = createDashboardDataStore(rootDir);
+    const dashboardDataStore = createDashboardDataStore();
     const server = createDashboardServer({
       rootDir,
       getDashboardData: dashboardDataStore.getDashboardData,

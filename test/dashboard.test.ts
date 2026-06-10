@@ -11,8 +11,6 @@ function createFixtureRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'openmeta-dashboard-'));
   tempRoots.push(root);
   writeFileSync(join(root, 'index.html'), '<!doctype html><title>dashboard</title><main>Dashboard Home</main>');
-  writeFileSync(join(root, 'dashboard.css'), 'body { color: #111; }');
-  writeFileSync(join(root, 'dashboard.js'), 'console.log("dashboard");');
   return root;
 }
 
@@ -74,22 +72,15 @@ describe('dashboard server', () => {
 
   test('refresh endpoint materializes and returns a fresh dashboard snapshot', async () => {
     const rootDir = createFixtureRoot();
-    writeFileSync(
-      join(rootDir, 'dashboard-data-adapter.cjs'),
-      [
-        'let counter = 0;',
-        'module.exports = {',
-        '  buildDashboardData() {',
-        '    counter += 1;',
-        '    return { meta: { mode: "real", counter }, sync: { status: "ok" } };',
-        '  },',
-        '};',
-      ].join('\n'),
-      'utf-8',
-    );
+    let counter = 0;
     const snapshotDir = join(rootDir, '.config', 'openmeta');
     process.env['OPENMETA_CONFIG_DIR'] = snapshotDir;
-    const dataStore = createDashboardDataStore(rootDir);
+    const dataStore = createDashboardDataStore({
+      buildDashboardData: () => {
+        counter += 1;
+        return { meta: { mode: 'real', counter }, sync: { status: 'ok' } };
+      },
+    });
     const server = createDashboardServer({
       rootDir,
       getDashboardData: dataStore.getDashboardData,
@@ -112,19 +103,7 @@ describe('dashboard server', () => {
 
   test('data store reuses an existing snapshot before forcing a refresh', async () => {
     const rootDir = createFixtureRoot();
-    writeFileSync(
-      join(rootDir, 'dashboard-data-adapter.cjs'),
-      [
-        'let counter = 99;',
-        'module.exports = {',
-        '  buildDashboardData() {',
-        '    counter += 1;',
-        '    return { meta: { mode: "real", counter }, sync: { status: "adapter" } };',
-        '  },',
-        '};',
-      ].join('\n'),
-      'utf-8',
-    );
+    let counter = 99;
     const snapshotDir = join(rootDir, '.config', 'openmeta');
     const snapshotPath = join(snapshotDir, 'dashboard-data.json');
     process.env['OPENMETA_CONFIG_DIR'] = snapshotDir;
@@ -138,7 +117,12 @@ describe('dashboard server', () => {
       'utf-8',
     );
 
-    const dataStore = createDashboardDataStore(rootDir);
+    const dataStore = createDashboardDataStore({
+      buildDashboardData: () => {
+        counter += 1;
+        return { meta: { mode: 'real', counter }, sync: { status: 'adapter' } };
+      },
+    });
     const initialPayload = await dataStore.getDashboardData() as { meta: { counter: number }; sync: { status: string } };
     const refreshedPayload = await dataStore.refreshDashboardData() as { meta: { counter: number }; sync: { status: string } };
 
@@ -150,21 +134,14 @@ describe('dashboard server', () => {
 
   test('data store coalesces concurrent refresh requests into one materialization', async () => {
     const rootDir = createFixtureRoot();
-    writeFileSync(
-      join(rootDir, 'dashboard-data-adapter.cjs'),
-      [
-        'let counter = 0;',
-        'module.exports = {',
-        '  buildDashboardData() {',
-        '    counter += 1;',
-        '    return { meta: { mode: "real", counter }, sync: { status: "ok" } };',
-        '  },',
-        '};',
-      ].join('\n'),
-      'utf-8',
-    );
+    let counter = 0;
     process.env['OPENMETA_CONFIG_DIR'] = join(rootDir, '.config', 'openmeta');
-    const dataStore = createDashboardDataStore(rootDir);
+    const dataStore = createDashboardDataStore({
+      buildDashboardData: () => {
+        counter += 1;
+        return { meta: { mode: 'real', counter }, sync: { status: 'ok' } };
+      },
+    });
 
     const concurrentPayloads = await Promise.all([
       dataStore.refreshDashboardData(),
