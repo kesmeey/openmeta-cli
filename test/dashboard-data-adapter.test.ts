@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import type { DashboardData } from '../src/dashboard/data-adapter.ts';
@@ -73,64 +73,72 @@ describe('dashboard data adapter', () => {
 
     writeFileSync(
       join(configDir, 'proof-of-work.json'),
-      JSON.stringify({
-        records: [
-          {
-            id: 'proof-1',
-            repoFullName: 'acme/demo',
-            issueNumber: 42,
-            issueTitle: 'Add accessible labels to icon buttons',
-            overallScore: 84,
-            opportunityScore: 84,
-            branchName: 'openmeta/42-accessibility',
-            artifactDir,
-            generatedAt: '2026-06-09T08:00:00.000Z',
-            published: true,
-            pullRequestUrl: 'https://github.com/acme/demo/pull/123',
-            pullRequestNumber: 123,
-          },
-        ],
-      }, null, 2),
+      JSON.stringify(
+        {
+          records: [
+            {
+              id: 'proof-1',
+              repoFullName: 'acme/demo',
+              issueNumber: 42,
+              issueTitle: 'Add accessible labels to icon buttons',
+              overallScore: 84,
+              opportunityScore: 84,
+              branchName: 'openmeta/42-accessibility',
+              artifactDir,
+              generatedAt: '2026-06-09T08:00:00.000Z',
+              published: true,
+              pullRequestUrl: 'https://github.com/acme/demo/pull/123',
+              pullRequestNumber: 123,
+            },
+          ],
+        },
+        null,
+        2,
+      ),
       'utf-8',
     );
     writeFileSync(join(configDir, 'runs.json'), JSON.stringify({ records: [] }, null, 2), 'utf-8');
     writeFileSync(
       join(memoryDir, 'acme__demo.json'),
-      JSON.stringify({
-        repoFullName: 'acme/demo',
-        firstSeenAt: '2026-06-01T00:00:00.000Z',
-        lastUpdatedAt: '2026-06-09T08:00:00.000Z',
-        lastSelectedIssue: 'acme/demo#42',
-        workspacePath: '/tmp/openmeta-demo',
-        lastBranchName: 'openmeta/42-accessibility',
-        detectedTestCommands: ['bun test'],
-        preferredPaths: ['src/components/IconButton.tsx'],
-        generatedDossiers: 2,
-        runStats: {
-          totalRuns: 2,
-          publishedRuns: 1,
-          realPrRuns: 1,
-          reviewRequiredRuns: 0,
-          successfulValidationRuns: 1,
-          failedValidationRuns: 0,
-        },
-        pathSignals: [],
-        validationSignals: [],
-        recentIssues: [
-          {
-            reference: 'acme/demo#42',
-            title: 'Add accessible labels to icon buttons',
-            overallScore: 84,
-            generatedAt: '2026-06-09T08:00:00.000Z',
-            status: 'published',
-            changedFiles: ['src/components/IconButton.tsx', 'src/components/IconButton.test.tsx'],
-            published: true,
-            reviewRequired: false,
-            validationSummary: 'bun test=passed',
-            pullRequestUrl: 'https://github.com/acme/demo/pull/123',
+      JSON.stringify(
+        {
+          repoFullName: 'acme/demo',
+          firstSeenAt: '2026-06-01T00:00:00.000Z',
+          lastUpdatedAt: '2026-06-09T08:00:00.000Z',
+          lastSelectedIssue: 'acme/demo#42',
+          workspacePath: '/tmp/openmeta-demo',
+          lastBranchName: 'openmeta/42-accessibility',
+          detectedTestCommands: ['bun test'],
+          preferredPaths: ['src/components/IconButton.tsx'],
+          generatedDossiers: 2,
+          runStats: {
+            totalRuns: 2,
+            publishedRuns: 1,
+            realPrRuns: 1,
+            reviewRequiredRuns: 0,
+            successfulValidationRuns: 1,
+            failedValidationRuns: 0,
           },
-        ],
-      }, null, 2),
+          pathSignals: [],
+          validationSignals: [],
+          recentIssues: [
+            {
+              reference: 'acme/demo#42',
+              title: 'Add accessible labels to icon buttons',
+              overallScore: 84,
+              generatedAt: '2026-06-09T08:00:00.000Z',
+              status: 'published',
+              changedFiles: ['src/components/IconButton.tsx', 'src/components/IconButton.test.tsx'],
+              published: true,
+              reviewRequired: false,
+              validationSummary: 'bun test=passed',
+              pullRequestUrl: 'https://github.com/acme/demo/pull/123',
+            },
+          ],
+        },
+        null,
+        2,
+      ),
       'utf-8',
     );
 

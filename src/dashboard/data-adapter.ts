@@ -618,7 +618,7 @@ function parseArtifactDirName(dirName: string): ArtifactNameParts | null {
   }
 
   return {
-    repoFullName: match[1].replace(/__/g, "/"),
+    repoFullName: match[1].replace(/__/g, '/'),
     issueNumber: Number.parseInt(match[2], 10),
   };
 }
@@ -758,9 +758,7 @@ function normalizeRepoFilePath(filePath: string): string {
 }
 
 function summarizeChangedFiles(changedFiles: string[] | undefined): string[] {
-  return (changedFiles || [])
-    .map((filePath) => normalizeRepoFilePath(filePath))
-    .filter(Boolean);
+  return (changedFiles || []).map((filePath) => normalizeRepoFilePath(filePath)).filter(Boolean);
 }
 
 function summarizeFileAreas(changedFiles: string[] | undefined): string[] {
@@ -821,7 +819,10 @@ function detectWorkType(changedFiles: string[] | undefined, summary: string, tit
       docs += 2;
       continue;
     }
-    if (/(^|\/)(\.github|scripts|ops|infra|deploy|docker|helm|k8s)\//.test(file) || /(dockerfile|compose|\.ya?ml$|\.json$|\.toml$|\.lock$)/.test(file)) {
+    if (
+      /(^|\/)(\.github|scripts|ops|infra|deploy|docker|helm|k8s)\//.test(file) ||
+      /(dockerfile|compose|\.ya?ml$|\.json$|\.toml$|\.lock$)/.test(file)
+    ) {
       infra += 2;
       continue;
     }
@@ -885,14 +886,15 @@ function resolveDominantWorkType(attempts: AttemptRecord[]): WorkType {
     counter.set(key, (counter.get(key) || 0) + 1);
   }
 
-  return [...counter.entries()]
-    .sort((left, right) => {
+  return (
+    [...counter.entries()].sort((left, right) => {
       const byCount = right[1] - left[1];
       if (byCount !== 0) {
         return byCount;
       }
       return workTypePriority(right[0]) - workTypePriority(left[0]);
-    })[0]?.[0] || 'unknown';
+    })[0]?.[0] || 'unknown'
+  );
 }
 
 function parsePullRequestNumber(pullRequestUrl: string | undefined): number | undefined {
@@ -901,7 +903,9 @@ function parsePullRequestNumber(pullRequestUrl: string | undefined): number | un
 }
 
 function deriveValidationState(validationSummary: string | undefined): ValidationState {
-  const summary = String(validationSummary || '').trim().toLowerCase();
+  const summary = String(validationSummary || '')
+    .trim()
+    .toLowerCase();
   if (!summary || summary === 'not run') {
     return 'not_run';
   }
@@ -1013,10 +1017,10 @@ function enrichAttempt(baseAttempt: BaseAttempt, input: AttemptEnrichmentInput):
     validationState,
   });
   const highLeverage = Boolean(
-    baseAttempt.merged
-    || baseAttempt.pullRequestUrl
-    || (baseAttempt.published && assetCoverage.count >= 3)
-    || (baseAttempt.score >= 80 && assetCoverage.count >= 3),
+    baseAttempt.merged ||
+      baseAttempt.pullRequestUrl ||
+      (baseAttempt.published && assetCoverage.count >= 3) ||
+      (baseAttempt.score >= 80 && assetCoverage.count >= 3),
   );
 
   return {
@@ -1024,7 +1028,7 @@ function enrichAttempt(baseAttempt: BaseAttempt, input: AttemptEnrichmentInput):
     reference: `${baseAttempt.repoFullName}#${baseAttempt.issueNumber}`,
     issueUrl: githubIssueUrl(baseAttempt.repoFullName, baseAttempt.issueNumber),
     pullRequestNumber: input.pullRequestNumber || parsePullRequestNumber(baseAttempt.pullRequestUrl),
-    branchName: cleanOptionalValue(input.branchName || ""),
+    branchName: cleanOptionalValue(input.branchName || ''),
     changedFiles,
     changedFilesCount: changedFiles.length,
     changedFilePreview: changedFiles.slice(0, 2),
@@ -1132,7 +1136,12 @@ function isAttemptReopenable(input: {
   if (input.merged || input.pullRequestUrl) {
     return false;
   }
-  if (input.reviewRequired || input.published || input.validationState === 'failed' || input.validationState === 'passed') {
+  if (
+    input.reviewRequired ||
+    input.published ||
+    input.validationState === 'failed' ||
+    input.validationState === 'passed'
+  ) {
     return true;
   }
   return input.assetCompletenessCount >= 2;
@@ -1275,13 +1284,10 @@ function scanArtifactDirs(): ArtifactSnapshot[] {
         issueNumber: parsed.issueNumber,
         generatedAt,
         title:
-          extractLineValue(prDraftText, 'Title:')
-          || extractSectionValue(patchText, '## Goal')
-          || `${parsed.repoFullName}#${parsed.issueNumber}`,
-        summary:
-          extractLineValue(dossierText, '- Summary:')
-          || extractSectionValue(patchText, '## Goal')
-          || '',
+          extractLineValue(prDraftText, 'Title:') ||
+          extractSectionValue(patchText, '## Goal') ||
+          `${parsed.repoFullName}#${parsed.issueNumber}`,
+        summary: extractLineValue(dossierText, '- Summary:') || extractSectionValue(patchText, '## Goal') || '',
         paths: {
           dossier: existsSync(dossierPath) ? dossierPath : '',
           patchDraft: existsSync(patchDraftPath) ? patchDraftPath : '',
@@ -1338,48 +1344,50 @@ function buildArtifactDerivedMemorySnapshots(artifacts: ArtifactSnapshot[]): Mem
     grouped.set(artifact.repoFullName, bucket);
   }
 
-  return [...grouped.entries()].map(([repoFullName, repoArtifacts]) => {
-    const sorted = [...repoArtifacts].sort((left, right) => right.generatedAt.localeCompare(left.generatedAt));
-    const latest = sorted[0];
-    if (!latest) {
-      return null;
-    }
-    const latestMarkdown = readText(latest.paths.memory);
-    const parsed = deriveMemorySnapshotFromArtifactMarkdown(latest, latestMarkdown);
-    if (!parsed) {
-      return null;
-    }
-
-    const references: string[] = [];
-    for (const artifact of sorted) {
-      const reference = `${artifact.repoFullName}#${artifact.issueNumber}`;
-      if (!references.includes(reference)) {
-        references.push(reference);
+  return [...grouped.entries()]
+    .map(([repoFullName, repoArtifacts]) => {
+      const sorted = [...repoArtifacts].sort((left, right) => right.generatedAt.localeCompare(left.generatedAt));
+      const latest = sorted[0];
+      if (!latest) {
+        return null;
       }
-    }
+      const latestMarkdown = readText(latest.paths.memory);
+      const parsed = deriveMemorySnapshotFromArtifactMarkdown(latest, latestMarkdown);
+      if (!parsed) {
+        return null;
+      }
 
-    return {
-      ...parsed,
-      repoFullName,
-      firstSeenAt: sorted[sorted.length - 1]?.generatedAt || parsed.firstSeenAt,
-      lastUpdatedAt: parsed.lastUpdatedAt || latest.generatedAt,
-      generatedDossiers: Math.max(parsed.generatedDossiers || 0, sorted.filter((item) => item.paths.dossier).length),
-      recentIssues:
-        parsed.recentIssues && parsed.recentIssues.length > 0
-          ? parsed.recentIssues
-          : references.map((reference) => ({
-              reference,
-              title: reference,
-              overallScore: 0,
-              generatedAt: latest.generatedAt,
-              status: "draft_only",
-              changedFiles: [],
-              published: false,
-              reviewRequired: false,
-              validationSummary: "not run",
-            })),
-    };
-  }).filter(isDefined);
+      const references: string[] = [];
+      for (const artifact of sorted) {
+        const reference = `${artifact.repoFullName}#${artifact.issueNumber}`;
+        if (!references.includes(reference)) {
+          references.push(reference);
+        }
+      }
+
+      return {
+        ...parsed,
+        repoFullName,
+        firstSeenAt: sorted[sorted.length - 1]?.generatedAt || parsed.firstSeenAt,
+        lastUpdatedAt: parsed.lastUpdatedAt || latest.generatedAt,
+        generatedDossiers: Math.max(parsed.generatedDossiers || 0, sorted.filter((item) => item.paths.dossier).length),
+        recentIssues:
+          parsed.recentIssues && parsed.recentIssues.length > 0
+            ? parsed.recentIssues
+            : references.map((reference) => ({
+                reference,
+                title: reference,
+                overallScore: 0,
+                generatedAt: latest.generatedAt,
+                status: 'draft_only',
+                changedFiles: [],
+                published: false,
+                reviewRequired: false,
+                validationSummary: 'not run',
+              })),
+      };
+    })
+    .filter(isDefined);
 }
 
 function mergeProofRecords(primaryRecords: ProofRecord[], fallbackRecords: ProofRecord[]): ProofRecord[] {
@@ -1418,7 +1426,10 @@ function mergeInboxItems(primaryItems: InboxItem[], fallbackItems: InboxItem[]):
   return merged;
 }
 
-function mergeMemorySnapshots(primarySnapshots: MemorySnapshot[], fallbackSnapshots: MemorySnapshot[]): MemorySnapshot[] {
+function mergeMemorySnapshots(
+  primarySnapshots: MemorySnapshot[],
+  fallbackSnapshots: MemorySnapshot[],
+): MemorySnapshot[] {
   const merged = new Map(primarySnapshots.map((snapshot) => [snapshot.repoFullName, snapshot]));
 
   for (const snapshot of fallbackSnapshots) {
@@ -1433,18 +1444,20 @@ function mergeMemorySnapshots(primarySnapshots: MemorySnapshot[], fallbackSnapsh
 function deriveProofRecordFromArtifactMarkdown(artifact: ArtifactSnapshot, proofMarkdown: string): ProofRecord | null {
   const activityItems = extractBulletItems(proofMarkdown, '## Recent Activity');
   const topRepositories = extractBulletItems(proofMarkdown, '## Top Repositories');
-  const recentMatch = activityItems.find((item) => item.startsWith(`${artifact.repoFullName}#${artifact.issueNumber} |`));
+  const recentMatch = activityItems.find((item) =>
+    item.startsWith(`${artifact.repoFullName}#${artifact.issueNumber} |`),
+  );
   const published = parseBooleanToken((/\|\s*published=(true|false|yes|no)/i.exec(recentMatch || '') || [])[1]);
   const overallScore = recentMatch ? parseInteger((/overall\s+(\d+)/i.exec(recentMatch) || [])[1], 0) : 0;
   const pullRequestUrl = recentMatch ? cleanOptionalValue((/\|\s*pr=(.+)$/i.exec(recentMatch) || [])[1]) : '';
   const issueTitle = artifact.title || `${artifact.repoFullName}#${artifact.issueNumber}`;
 
   if (
-    !recentMatch
-    && activityItems.length === 0
-    && topRepositories.length === 0
-    && !/-\s*Total Draft Contributions:/i.test(proofMarkdown)
-    && !/-\s*Published Runs:/i.test(proofMarkdown)
+    !recentMatch &&
+    activityItems.length === 0 &&
+    topRepositories.length === 0 &&
+    !/-\s*Total Draft Contributions:/i.test(proofMarkdown) &&
+    !/-\s*Published Runs:/i.test(proofMarkdown)
   ) {
     return null;
   }
@@ -1491,12 +1504,15 @@ function deriveInboxItemFromArtifactMarkdown(artifact: ArtifactSnapshot, inboxMa
   };
 }
 
-function deriveMemorySnapshotFromArtifactMarkdown(artifact: ArtifactSnapshot, memoryMarkdown: string): MemorySnapshot | null {
+function deriveMemorySnapshotFromArtifactMarkdown(
+  artifact: ArtifactSnapshot,
+  memoryMarkdown: string,
+): MemorySnapshot | null {
   if (
-    !/#\s*Repo Memory:/i.test(memoryMarkdown)
-    && !/##\s*Run Stats/i.test(memoryMarkdown)
-    && !/##\s*Recent Issues/i.test(memoryMarkdown)
-    && !/-\s*Generated Dossiers:/i.test(memoryMarkdown)
+    !/#\s*Repo Memory:/i.test(memoryMarkdown) &&
+    !/##\s*Run Stats/i.test(memoryMarkdown) &&
+    !/##\s*Recent Issues/i.test(memoryMarkdown) &&
+    !/-\s*Generated Dossiers:/i.test(memoryMarkdown)
   ) {
     return null;
   }
@@ -1506,28 +1522,27 @@ function deriveMemorySnapshotFromArtifactMarkdown(artifact: ArtifactSnapshot, me
     return null;
   }
 
-  const recentIssues = extractBulletItems(memoryMarkdown, '## Recent Issues')
-    .map((item) => {
-      const parts = item.split('|').map((part) => part.trim());
-      const reference = parts[0] || `${artifact.repoFullName}#${artifact.issueNumber}`;
-      const overallScore = parseInteger((/score\s+(\d+)/i.exec(parts[1] || '') || [])[1], 0);
-      const status = cleanOptionalValue((/status\s+(.+)$/i.exec(parts[2] || '') || [])[1]) || 'selected';
-      const changedCount = parseInteger((/changed\s+(\d+)/i.exec(parts[3] || '') || [])[1], 0);
-      const published = parseBooleanToken((/published\s+(yes|no)/i.exec(parts[4] || '') || [])[1]);
-      const validationSummary = cleanOptionalValue((/validation\s+(.+)$/i.exec(parts[5] || '') || [])[1]) || 'not run';
+  const recentIssues = extractBulletItems(memoryMarkdown, '## Recent Issues').map((item) => {
+    const parts = item.split('|').map((part) => part.trim());
+    const reference = parts[0] || `${artifact.repoFullName}#${artifact.issueNumber}`;
+    const overallScore = parseInteger((/score\s+(\d+)/i.exec(parts[1] || '') || [])[1], 0);
+    const status = cleanOptionalValue((/status\s+(.+)$/i.exec(parts[2] || '') || [])[1]) || 'selected';
+    const changedCount = parseInteger((/changed\s+(\d+)/i.exec(parts[3] || '') || [])[1], 0);
+    const published = parseBooleanToken((/published\s+(yes|no)/i.exec(parts[4] || '') || [])[1]);
+    const validationSummary = cleanOptionalValue((/validation\s+(.+)$/i.exec(parts[5] || '') || [])[1]) || 'not run';
 
-      return {
-        reference,
-        title: artifact.title || reference,
-        overallScore,
-        generatedAt: artifact.generatedAt,
-        status,
-        changedFiles: Array.from({ length: changedCount }, (_, index) => `changed-${index + 1}`),
-        published,
-        reviewRequired: status === 'review_required',
-        validationSummary,
-      };
-    });
+    return {
+      reference,
+      title: artifact.title || reference,
+      overallScore,
+      generatedAt: artifact.generatedAt,
+      status,
+      changedFiles: Array.from({ length: changedCount }, (_, index) => `changed-${index + 1}`),
+      published,
+      reviewRequired: status === 'review_required',
+      validationSummary,
+    };
+  });
 
   return {
     repoFullName,
@@ -1539,8 +1554,13 @@ function deriveMemorySnapshotFromArtifactMarkdown(artifact: ArtifactSnapshot, me
     detectedTestCommands: extractBulletItems(memoryMarkdown, '## Detected Test Commands')
       .filter((item) => !/^none detected$/i.test(item))
       .map((item) => item.replace(/^`|`$/g, '')),
-    preferredPaths: extractBulletItems(memoryMarkdown, '## Preferred Paths').filter((item) => !/^none recorded$/i.test(item)),
-    generatedDossiers: parseInteger(extractLineValue(memoryMarkdown, '- Generated Dossiers:'), artifact.paths.dossier ? 1 : 0),
+    preferredPaths: extractBulletItems(memoryMarkdown, '## Preferred Paths').filter(
+      (item) => !/^none recorded$/i.test(item),
+    ),
+    generatedDossiers: parseInteger(
+      extractLineValue(memoryMarkdown, '- Generated Dossiers:'),
+      artifact.paths.dossier ? 1 : 0,
+    ),
     runStats: {
       totalRuns: parseInteger(extractLineValue(memoryMarkdown, '- Total Runs:')),
       publishedRuns: parseInteger(extractLineValue(memoryMarkdown, '- Published Runs:')),
@@ -1557,9 +1577,11 @@ function deriveMemorySnapshotFromArtifactMarkdown(artifact: ArtifactSnapshot, me
 
 function loadState(): DashboardState {
   const configDir = getOpenMetaConfigDir();
-  const proofRecords = readJson<{ records?: ProofRecord[] }>(path.join(configDir, 'proof-of-work.json'), { records: [] }).records || [];
+  const proofRecords =
+    readJson<{ records?: ProofRecord[] }>(path.join(configDir, 'proof-of-work.json'), { records: [] }).records || [];
   const inboxItems = readJson<{ items?: InboxItem[] }>(path.join(configDir, 'inbox.json'), { items: [] }).items || [];
-  const runRecords = readJson<{ records?: RunRecord[] }>(path.join(configDir, 'runs.json'), { records: [] }).records || [];
+  const runRecords =
+    readJson<{ records?: RunRecord[] }>(path.join(configDir, 'runs.json'), { records: [] }).records || [];
   const memorySnapshots = loadMemorySnapshots();
   const artifacts = scanArtifactDirs();
   const artifactProofRecords = buildArtifactDerivedProofRecords(artifacts);
@@ -1634,7 +1656,8 @@ function buildAttemptFromProof(
   artifact: ArtifactSnapshot | null | undefined,
   memoryIssue: MemoryIssue | undefined,
 ): AttemptRecord {
-  const title = artifact?.title || memoryIssue?.title || record.issueTitle || `${record.repoFullName}#${record.issueNumber}`;
+  const title =
+    artifact?.title || memoryIssue?.title || record.issueTitle || `${record.repoFullName}#${record.issueNumber}`;
   const outcome = resolveAttemptOutcome({
     merged: record.merged === true,
     pullRequestUrl: record.pullRequestUrl,
@@ -1645,7 +1668,8 @@ function buildAttemptFromProof(
   const summary = summarizeOutcome(outcome, title, {
     summary: artifact?.summary || memoryIssue?.summary || '',
   });
-  const generatedAt = record.generatedAt || artifact?.generatedAt || memoryIssue?.generatedAt || new Date().toISOString();
+  const generatedAt =
+    record.generatedAt || artifact?.generatedAt || memoryIssue?.generatedAt || new Date().toISOString();
   const openTarget = chooseOpenTarget({
     pullRequestUrl: record.pullRequestUrl,
     dossierPath: artifact?.paths.dossier,
@@ -1654,42 +1678,48 @@ function buildAttemptFromProof(
     fallbackUrl: githubIssueUrl(record.repoFullName, record.issueNumber),
   });
 
-  return enrichAttempt({
-    key: `pow:${record.id}`,
-    source: 'proof',
-    sourceLabel: formatAttemptSourceLabel('proof'),
-    repoFullName: record.repoFullName,
-    issueNumber: record.issueNumber,
-    outcome,
-    title,
-    summary,
-    generatedAt,
-    lastUpdatedAt: formatDateOnly(generatedAt),
-    detailLink: openTarget.url,
-    openTarget,
-    artifactDir: artifact?.artifactDir || record.artifactDir || '',
-    ledgerTrace: buildLedgerTrace(artifact, record.pullRequestUrl || ''),
-    published: Boolean(record.published),
-    pullRequestUrl: record.pullRequestUrl || '',
-    merged: Boolean(record.merged),
-    outcomeFlags: buildOutcomeFlags({
-      published: record.published,
-      pullRequestUrl: record.pullRequestUrl,
-      merged: record.merged,
-    }),
-    reviewRequired: Boolean(memoryIssue?.reviewRequired),
-    validationSummary: memoryIssue?.validationSummary || '',
-    score: Number(record.overallScore || record.opportunityScore || 0),
-  }, {
-    branchName: record.branchName,
-    pullRequestNumber: record.pullRequestNumber,
-    changedFiles: memoryIssue?.changedFiles || [],
-    validationSummary: memoryIssue?.validationSummary || '',
-    artifact,
-  });
+  return enrichAttempt(
+    {
+      key: `pow:${record.id}`,
+      source: 'proof',
+      sourceLabel: formatAttemptSourceLabel('proof'),
+      repoFullName: record.repoFullName,
+      issueNumber: record.issueNumber,
+      outcome,
+      title,
+      summary,
+      generatedAt,
+      lastUpdatedAt: formatDateOnly(generatedAt),
+      detailLink: openTarget.url,
+      openTarget,
+      artifactDir: artifact?.artifactDir || record.artifactDir || '',
+      ledgerTrace: buildLedgerTrace(artifact, record.pullRequestUrl || ''),
+      published: Boolean(record.published),
+      pullRequestUrl: record.pullRequestUrl || '',
+      merged: Boolean(record.merged),
+      outcomeFlags: buildOutcomeFlags({
+        published: record.published,
+        pullRequestUrl: record.pullRequestUrl,
+        merged: record.merged,
+      }),
+      reviewRequired: Boolean(memoryIssue?.reviewRequired),
+      validationSummary: memoryIssue?.validationSummary || '',
+      score: Number(record.overallScore || record.opportunityScore || 0),
+    },
+    {
+      branchName: record.branchName,
+      pullRequestNumber: record.pullRequestNumber,
+      changedFiles: memoryIssue?.changedFiles || [],
+      validationSummary: memoryIssue?.validationSummary || '',
+      artifact,
+    },
+  );
 }
 
-function buildAttemptFromMemory(issue: MemoryIssue, artifact: ArtifactSnapshot | null | undefined): AttemptRecord | null {
+function buildAttemptFromMemory(
+  issue: MemoryIssue,
+  artifact: ArtifactSnapshot | null | undefined,
+): AttemptRecord | null {
   const parsed = parseRepoIssueReference(issue.reference);
   if (!parsed) {
     return null;
@@ -1715,45 +1745,49 @@ function buildAttemptFromMemory(issue: MemoryIssue, artifact: ArtifactSnapshot |
     fallbackUrl: githubIssueUrl(parsed.repoFullName, parsed.issueNumber),
   });
 
-  return enrichAttempt({
-    key: `memory:${issue.reference}:${generatedAt}`,
-    source: 'memory',
-    sourceLabel: formatAttemptSourceLabel('memory'),
-    repoFullName: parsed.repoFullName,
-    issueNumber: parsed.issueNumber,
-    outcome,
-    title,
-    summary,
-    generatedAt,
-    lastUpdatedAt: formatDateOnly(generatedAt),
-    detailLink: openTarget.url,
-    openTarget,
-    artifactDir: artifact?.artifactDir || '',
-    ledgerTrace: buildLedgerTrace(artifact, issue.pullRequestUrl || ''),
-    published: Boolean(issue.published),
-    pullRequestUrl: issue.pullRequestUrl || '',
-    merged: false,
-    outcomeFlags: buildOutcomeFlags({
-      published: issue.published,
-      pullRequestUrl: issue.pullRequestUrl,
+  return enrichAttempt(
+    {
+      key: `memory:${issue.reference}:${generatedAt}`,
+      source: 'memory',
+      sourceLabel: formatAttemptSourceLabel('memory'),
+      repoFullName: parsed.repoFullName,
+      issueNumber: parsed.issueNumber,
+      outcome,
+      title,
+      summary,
+      generatedAt,
+      lastUpdatedAt: formatDateOnly(generatedAt),
+      detailLink: openTarget.url,
+      openTarget,
+      artifactDir: artifact?.artifactDir || '',
+      ledgerTrace: buildLedgerTrace(artifact, issue.pullRequestUrl || ''),
+      published: Boolean(issue.published),
+      pullRequestUrl: issue.pullRequestUrl || '',
       merged: false,
-    }),
-    reviewRequired: Boolean(issue.reviewRequired),
-    validationSummary: issue.validationSummary || '',
-    score: Number(issue.overallScore || 0),
-  }, {
-    branchName: '',
-    changedFiles: issue.changedFiles || [],
-    validationSummary: issue.validationSummary || '',
-    artifact,
-  });
+      outcomeFlags: buildOutcomeFlags({
+        published: issue.published,
+        pullRequestUrl: issue.pullRequestUrl,
+        merged: false,
+      }),
+      reviewRequired: Boolean(issue.reviewRequired),
+      validationSummary: issue.validationSummary || '',
+      score: Number(issue.overallScore || 0),
+    },
+    {
+      branchName: '',
+      changedFiles: issue.changedFiles || [],
+      validationSummary: issue.validationSummary || '',
+      artifact,
+    },
+  );
 }
 
 function buildAttemptFromInbox(item: InboxItem, artifact: ArtifactSnapshot | null | undefined): AttemptRecord {
   const reference = parseRepoIssueReference(item.id);
   const issueNumber = reference?.issueNumber || Number(item.issueNumber || 0);
   const title = artifact?.title || item.issueTitle || `${item.repoFullName}#${issueNumber}`;
-  const summary = artifact?.summary || item.summary || `${title} is staged in the contribution inbox and waiting for a deeper pass.`;
+  const summary =
+    artifact?.summary || item.summary || `${title} is staged in the contribution inbox and waiting for a deeper pass.`;
   const generatedAt = item.generatedAt || artifact?.generatedAt || new Date().toISOString();
   const openTarget = chooseOpenTarget({
     pullRequestUrl: '',
@@ -1763,38 +1797,41 @@ function buildAttemptFromInbox(item: InboxItem, artifact: ArtifactSnapshot | nul
     fallbackUrl: githubIssueUrl(item.repoFullName, issueNumber),
   });
 
-  return enrichAttempt({
-    key: `inbox:${item.id}:${generatedAt}`,
-    source: 'inbox',
-    sourceLabel: formatAttemptSourceLabel('inbox'),
-    repoFullName: item.repoFullName,
-    issueNumber,
-    outcome: 'draft_only',
-    title,
-    summary,
-    generatedAt,
-    lastUpdatedAt: formatDateOnly(generatedAt),
-    detailLink: openTarget.url,
-    openTarget,
-    artifactDir: artifact?.artifactDir || item.artifactDir || '',
-    ledgerTrace: buildLedgerTrace(artifact, ''),
-    published: false,
-    pullRequestUrl: '',
-    merged: false,
-    outcomeFlags: buildOutcomeFlags({
+  return enrichAttempt(
+    {
+      key: `inbox:${item.id}:${generatedAt}`,
+      source: 'inbox',
+      sourceLabel: formatAttemptSourceLabel('inbox'),
+      repoFullName: item.repoFullName,
+      issueNumber,
+      outcome: 'draft_only',
+      title,
+      summary,
+      generatedAt,
+      lastUpdatedAt: formatDateOnly(generatedAt),
+      detailLink: openTarget.url,
+      openTarget,
+      artifactDir: artifact?.artifactDir || item.artifactDir || '',
+      ledgerTrace: buildLedgerTrace(artifact, ''),
       published: false,
       pullRequestUrl: '',
       merged: false,
-    }),
-    reviewRequired: false,
-    validationSummary: '',
-    score: Number(item.overallScore || item.opportunityScore || 0),
-  }, {
-    branchName: '',
-    changedFiles: [],
-    validationSummary: '',
-    artifact,
-  });
+      outcomeFlags: buildOutcomeFlags({
+        published: false,
+        pullRequestUrl: '',
+        merged: false,
+      }),
+      reviewRequired: false,
+      validationSummary: '',
+      score: Number(item.overallScore || item.opportunityScore || 0),
+    },
+    {
+      branchName: '',
+      changedFiles: [],
+      validationSummary: '',
+      artifact,
+    },
+  );
 }
 
 function buildAttemptFromArtifact(artifact: ArtifactSnapshot): AttemptRecord {
@@ -1811,38 +1848,41 @@ function buildAttemptFromArtifact(artifact: ArtifactSnapshot): AttemptRecord {
     fallbackUrl: githubIssueUrl(artifact.repoFullName, artifact.issueNumber),
   });
 
-  return enrichAttempt({
-    key: `artifact:${artifact.key}`,
-    source: 'artifact',
-    sourceLabel: formatAttemptSourceLabel('artifact'),
-    repoFullName: artifact.repoFullName,
-    issueNumber: artifact.issueNumber,
-    outcome,
-    title,
-    summary,
-    generatedAt: artifact.generatedAt,
-    lastUpdatedAt: formatDateOnly(artifact.generatedAt),
-    detailLink: openTarget.url,
-    openTarget,
-    artifactDir: artifact.artifactDir,
-    ledgerTrace: buildLedgerTrace(artifact, ''),
-    published: false,
-    pullRequestUrl: '',
-    merged: false,
-    outcomeFlags: buildOutcomeFlags({
+  return enrichAttempt(
+    {
+      key: `artifact:${artifact.key}`,
+      source: 'artifact',
+      sourceLabel: formatAttemptSourceLabel('artifact'),
+      repoFullName: artifact.repoFullName,
+      issueNumber: artifact.issueNumber,
+      outcome,
+      title,
+      summary,
+      generatedAt: artifact.generatedAt,
+      lastUpdatedAt: formatDateOnly(artifact.generatedAt),
+      detailLink: openTarget.url,
+      openTarget,
+      artifactDir: artifact.artifactDir,
+      ledgerTrace: buildLedgerTrace(artifact, ''),
       published: false,
       pullRequestUrl: '',
       merged: false,
-    }),
-    reviewRequired: false,
-    validationSummary: '',
-    score: 0,
-  }, {
-    branchName: '',
-    changedFiles: [],
-    validationSummary: '',
-    artifact,
-  });
+      outcomeFlags: buildOutcomeFlags({
+        published: false,
+        pullRequestUrl: '',
+        merged: false,
+      }),
+      reviewRequired: false,
+      validationSummary: '',
+      score: 0,
+    },
+    {
+      branchName: '',
+      changedFiles: [],
+      validationSummary: '',
+      artifact,
+    },
+  );
 }
 
 function buildAttempts(state: DashboardState): {
@@ -1855,10 +1895,14 @@ function buildAttempts(state: DashboardState): {
   const consumedReferences = new Set<string>();
   const consumedArtifactDirs = new Set<string>();
 
-  const proofRecords = [...state.proofRecords].sort((left, right) => String(right.generatedAt || '').localeCompare(String(left.generatedAt || '')));
+  const proofRecords = [...state.proofRecords].sort((left, right) =>
+    String(right.generatedAt || '').localeCompare(String(left.generatedAt || '')),
+  );
   for (const record of proofRecords) {
     const reference = `${record.repoFullName}#${record.issueNumber}`;
-    const artifact = record.artifactDir ? byDir.get(normalizePath(record.artifactDir)) : (byReference.get(reference) || [])[0];
+    const artifact = record.artifactDir
+      ? byDir.get(normalizePath(record.artifactDir))
+      : (byReference.get(reference) || [])[0];
     if (artifact) {
       consumedArtifactDirs.add(normalizePath(artifact.artifactDir));
     }
@@ -1893,7 +1937,9 @@ function buildAttempts(state: DashboardState): {
       continue;
     }
 
-    const artifact = item.artifactDir ? byDir.get(normalizePath(item.artifactDir)) : (byReference.get(reference) || [])[0];
+    const artifact = item.artifactDir
+      ? byDir.get(normalizePath(item.artifactDir))
+      : (byReference.get(reference) || [])[0];
     if (artifact) {
       consumedArtifactDirs.add(normalizePath(artifact.artifactDir));
     }
@@ -1950,7 +1996,7 @@ function buildTrends(attempts: AttemptRecord[]): Trends {
 
   for (let index = WEEK_BUCKETS - 1; index >= 0; index -= 1) {
     const end = getStartOfWeek(now);
-    end.setDate(end.getDate() - (index * 7));
+    end.setDate(end.getDate() - index * 7);
     const start = new Date(end);
     const bucketEnd = new Date(start);
     bucketEnd.setDate(bucketEnd.getDate() + 7);
@@ -1984,12 +2030,12 @@ function buildTrends(attempts: AttemptRecord[]): Trends {
       prOpen: bucketAttempts.filter((item) => item.pullRequestUrl).length,
       merged: bucketAttempts.filter((item) => item.merged).length,
       sourceBreakdown: {
-          proof: bucketAttempts.filter((item) => item.source === 'proof').length,
-          memory: bucketAttempts.filter((item) => item.source === 'memory').length,
-          inbox: bucketAttempts.filter((item) => item.source === 'inbox').length,
-          artifact: bucketAttempts.filter((item) => item.source === 'artifact').length,
-        },
-      };
+        proof: bucketAttempts.filter((item) => item.source === 'proof').length,
+        memory: bucketAttempts.filter((item) => item.source === 'memory').length,
+        inbox: bucketAttempts.filter((item) => item.source === 'inbox').length,
+        artifact: bucketAttempts.filter((item) => item.source === 'artifact').length,
+      },
+    };
   };
 
   return {
@@ -1998,7 +2044,11 @@ function buildTrends(attempts: AttemptRecord[]): Trends {
   };
 }
 
-function computeRepoSignal(repoFullName: string, attempts: AttemptRecord[], memory: MemorySnapshot | null): ProjectSignal {
+function computeRepoSignal(
+  repoFullName: string,
+  attempts: AttemptRecord[],
+  memory: MemorySnapshot | null,
+): ProjectSignal {
   const attemptCount = attempts.length;
   const publishedCount = attempts.filter((item) => item.published).length;
   const prOpenCount = attempts.filter((item) => item.pullRequestUrl).length;
@@ -2013,25 +2063,26 @@ function computeRepoSignal(repoFullName: string, attempts: AttemptRecord[], memo
   const totalRuns = Number(memory?.runStats?.totalRuns || 0);
   const validationRate = totalRuns > 0 ? Math.round((successfulRuns / totalRuns) * 100) : 0;
   const revisit = clamp(Math.round(18 + attemptCount * 11 + activeWeeks * 5), 12, 95);
-  const landingBase = attemptCount > 0
-    ? ((publishedCount * 0.55 + prOpenCount * 0.8 + mergedCount) / attemptCount) * 100
-    : 0;
+  const landingBase =
+    attemptCount > 0 ? ((publishedCount * 0.55 + prOpenCount * 0.8 + mergedCount) / attemptCount) * 100 : 0;
   const landing = clamp(Math.round(landingBase * 0.75 + validationRate * 0.25), 8, 95);
   const memoryScore = clamp(
     Math.round(
-      12
-      + Number(memory?.generatedDossiers || 0) * 7
-      + Number(memory?.preferredPaths?.length || 0) * 4
-      + Math.min(18, Number(memory?.pathSignals?.length || 0) * 2)
-      + Math.min(12, Number(memory?.detectedTestCommands?.length || 0) * 2)
-      + Math.min(16, totalRuns * 3),
+      12 +
+        Number(memory?.generatedDossiers || 0) * 7 +
+        Number(memory?.preferredPaths?.length || 0) * 4 +
+        Math.min(18, Number(memory?.pathSignals?.length || 0) * 2) +
+        Math.min(12, Number(memory?.detectedTestCommands?.length || 0) * 2) +
+        Math.min(16, totalRuns * 3),
     ),
     10,
     95,
   );
   const score = clamp(Math.round(revisit * 0.35 + landing * 0.4 + memoryScore * 0.25), 0, 100);
 
-  const trend = buildTrends(attempts).weekly.slice(-4).map((item) => item.drafted);
+  const trend = buildTrends(attempts)
+    .weekly.slice(-4)
+    .map((item) => item.drafted);
 
   return {
     repoFullName,
@@ -2069,7 +2120,9 @@ function buildProjectStats(attempts: AttemptRecord[], memoryByRepo: Map<string, 
   }
 
   const rows = [...grouped.entries()].map(([repoFullName, items]) => {
-    const sortedItems = [...items].sort((left, right) => String(right.generatedAt || '').localeCompare(String(left.generatedAt || '')));
+    const sortedItems = [...items].sort((left, right) =>
+      String(right.generatedAt || '').localeCompare(String(left.generatedAt || '')),
+    );
     const memory = memoryByRepo.get(repoFullName) || null;
     const signal = computeRepoSignal(repoFullName, sortedItems, memory);
     const latest = sortedItems[0];
@@ -2079,13 +2132,17 @@ function buildProjectStats(attempts: AttemptRecord[], memoryByRepo: Map<string, 
     const publishedCount = sortedItems.filter((item) => item.published).length;
     const prOpenCount = sortedItems.filter((item) => item.pullRequestUrl).length;
     const mergedCount = sortedItems.filter((item) => item.merged).length;
-      const stalledCount = sortedItems.filter((item) => item.reviewRequired || item.outcome === 'stalled').length;
+    const stalledCount = sortedItems.filter((item) => item.reviewRequired || item.outcome === 'stalled').length;
     const reviewRequiredCount = sortedItems.filter((item) => item.reviewRequired).length;
-      const validationFailedCount = sortedItems.filter((item) => item.validationState === 'failed').length;
+    const validationFailedCount = sortedItems.filter((item) => item.validationState === 'failed').length;
     const openAttemptCount = sortedItems.filter((item) => !item.merged && !item.pullRequestUrl).length;
     const reopenableAttemptCount = sortedItems.filter((item) => item.isReopenable).length;
-    const stalePublishedWithoutPrCount = sortedItems.filter((item) => item.published && !item.pullRequestUrl && !item.merged && item.staleDays >= STALE_ATTEMPT_DAYS).length;
-    const stalePrOpenCount = sortedItems.filter((item) => item.pullRequestUrl && !item.merged && item.staleDays >= STALE_ATTEMPT_DAYS).length;
+    const stalePublishedWithoutPrCount = sortedItems.filter(
+      (item) => item.published && !item.pullRequestUrl && !item.merged && item.staleDays >= STALE_ATTEMPT_DAYS,
+    ).length;
+    const stalePrOpenCount = sortedItems.filter(
+      (item) => item.pullRequestUrl && !item.merged && item.staleDays >= STALE_ATTEMPT_DAYS,
+    ).length;
     const openAttemptAges = sortedItems
       .filter((item) => !item.merged && !item.pullRequestUrl)
       .map((item) => item.ageDays);
@@ -2136,7 +2193,9 @@ function buildProjectStats(attempts: AttemptRecord[], memoryByRepo: Map<string, 
     };
   });
 
-  rows.sort((left, right) => right.signal.score - left.signal.score || right.contributionCount - left.contributionCount);
+  rows.sort(
+    (left, right) => right.signal.score - left.signal.score || right.contributionCount - left.contributionCount,
+  );
 
   return rows.map((row, index) => ({
     ...row,
@@ -2215,11 +2274,11 @@ function buildProjects(projectRows: ProjectStatsRow[]): ProjectRow[] {
     topAreas: row.topAreas,
     highLeverageAttemptCount: row.highLeverageAttemptCount,
     sourceMix: {
-        proof: row.attempts.filter((item) => item.source === 'proof').length,
-        memory: row.attempts.filter((item) => item.source === 'memory').length,
-        inbox: row.attempts.filter((item) => item.source === 'inbox').length,
-        artifact: row.attempts.filter((item) => item.source === 'artifact').length,
-      },
+      proof: row.attempts.filter((item) => item.source === 'proof').length,
+      memory: row.attempts.filter((item) => item.source === 'memory').length,
+      inbox: row.attempts.filter((item) => item.source === 'inbox').length,
+      artifact: row.attempts.filter((item) => item.source === 'artifact').length,
+    },
     note: `${row.publishedCount} ledger published | ${row.prOpenCount} PR open | ${row.reopenableAttemptCount} reopenable`,
     conversionNote: `pub ${row.attemptToPublishedRate}% | pr ${row.attemptToPrRate}% | merge ${row.attemptToMergedRate}%`,
     blockageNote: `${row.stalePublishedWithoutPrCount} published waiting PR | ${row.stalePrOpenCount} stale PR | ${row.oldestOpenAttemptAgeDays}d oldest open`,
@@ -2272,13 +2331,14 @@ function buildArchive(attempts: DashboardAttempt[]): ArchiveItem[] {
       lines.push('local artifact trail retained');
     }
 
-    const evidenceLevel: ArchiveEvidenceLevel = attempt.source === 'proof'
-      ? 'proof-backed'
-      : attempt.pullRequestUrl
-        ? 'live-pr'
-        : attempt.source === 'memory'
-          ? 'memory-backed'
-          : 'artifact-only';
+    const evidenceLevel: ArchiveEvidenceLevel =
+      attempt.source === 'proof'
+        ? 'proof-backed'
+        : attempt.pullRequestUrl
+          ? 'live-pr'
+          : attempt.source === 'memory'
+            ? 'memory-backed'
+            : 'artifact-only';
 
     return {
       label:
@@ -2331,20 +2391,24 @@ function buildSummary(
   const realPrRuns = attempts.filter((item) => item.pullRequestUrl).length;
   const mergedRuns = attempts.filter((item) => item.merged).length;
   const reopenableBacklogTotal = attempts.filter((item) => item.isReopenable).length;
-  const stalePublishedBacklogTotal = attempts.filter((item) => item.published && !item.pullRequestUrl && !item.merged && item.staleDays >= STALE_ATTEMPT_DAYS).length;
+  const stalePublishedBacklogTotal = attempts.filter(
+    (item) => item.published && !item.pullRequestUrl && !item.merged && item.staleDays >= STALE_ATTEMPT_DAYS,
+  ).length;
   const reposWithReturnMotion = projectRows.filter((item) => item.returnSessions > 1).length;
   const highLeverageAttemptTotal = attempts.filter((item) => item.highLeverage).length;
   const dominantWorkType = resolveDominantWorkType(attempts);
   const topAreas = summarizeTopAreas(attempts);
   const archivedAssets = Object.values(assets).reduce((sum, value) => sum + value, 0);
-  const lastRun = [...runRecords].sort((left, right) => String(right.startedAt || '').localeCompare(String(left.startedAt || '')))[0];
+  const lastRun = [...runRecords].sort((left, right) =>
+    String(right.startedAt || '').localeCompare(String(left.startedAt || '')),
+  )[0];
   const lastActiveAt = lastAttempt?.generatedAt || lastRun?.startedAt || new Date().toISOString();
   const sourceBreakdown = {
-     proof: attempts.filter((item) => item.source === 'proof').length,
-     memory: attempts.filter((item) => item.source === 'memory').length,
-     inbox: attempts.filter((item) => item.source === 'inbox').length,
-     artifact: attempts.filter((item) => item.source === 'artifact').length,
-   };
+    proof: attempts.filter((item) => item.source === 'proof').length,
+    memory: attempts.filter((item) => item.source === 'memory').length,
+    inbox: attempts.filter((item) => item.source === 'inbox').length,
+    artifact: attempts.filter((item) => item.source === 'artifact').length,
+  };
 
   return {
     totalContributions: attempts.length,
@@ -2364,8 +2428,8 @@ function buildSummary(
     sourceBreakdown,
     callout:
       attempts.length > 0
-        ? `${realPrRuns} upstream PRs tracked, ${reopenableBacklogTotal} reopenable attempts, ${projectRows.filter((item) => item.decision === "deepen").length} lanes worth deeper follow-through.`
-         : 'No real contribution records are available yet. Generate or publish one run to start the ledger trail.',
+        ? `${realPrRuns} upstream PRs tracked, ${reopenableBacklogTotal} reopenable attempts, ${projectRows.filter((item) => item.decision === 'deepen').length} lanes worth deeper follow-through.`
+        : 'No real contribution records are available yet. Generate or publish one run to start the ledger trail.',
   };
 }
 
@@ -2461,11 +2525,20 @@ function buildDashboardData(): DashboardData {
   const topMeta = buildTopMeta(summary, projectRows, state);
   const availableRepos = ['all', ...projects.map((item) => item.repoFullName)];
   const generatedAt = new Date().toISOString();
-  const lastRun = [...state.runRecords].sort((left, right) => String(right.startedAt || '').localeCompare(String(left.startedAt || '')))[0];
-  const mode: DashboardMode = summary.totalContributions > 0 || Object.values(assets).some((value) => value > 0) ? 'real' : 'empty';
+  const lastRun = [...state.runRecords].sort((left, right) =>
+    String(right.startedAt || '').localeCompare(String(left.startedAt || '')),
+  )[0];
+  const mode: DashboardMode =
+    summary.totalContributions > 0 || Object.values(assets).some((value) => value > 0) ? 'real' : 'empty';
   const syncStatusParts = [mode === 'real' ? 'Real snapshot' : 'No local contribution state'];
   if (lastRun) {
-    syncStatusParts.push(`latest run ${String(lastRun.commandName || "").replace(/^OpenMeta\s+/i, "").trim() || lastRun.commandName}`.trim());
+    syncStatusParts.push(
+      `latest run ${
+        String(lastRun.commandName || '')
+          .replace(/^OpenMeta\s+/i, '')
+          .trim() || lastRun.commandName
+      }`.trim(),
+    );
   }
 
   return {
@@ -2485,7 +2558,7 @@ function buildDashboardData(): DashboardData {
     },
     sync: {
       lastRefreshedAt: formatDateTime(generatedAt),
-      status: syncStatusParts.join(" | "),
+      status: syncStatusParts.join(' | '),
     },
     summary,
     trends,
@@ -2499,6 +2572,4 @@ function buildDashboardData(): DashboardData {
   };
 }
 
-export {
-  buildDashboardData,
-};
+export { buildDashboardData };

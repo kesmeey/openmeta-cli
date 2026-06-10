@@ -1,8 +1,7 @@
-import { createServer } from 'http';
 import { readFile } from 'fs';
-import { extname, join, normalize, resolve } from 'path';
+import { createServer } from 'http';
+import { dirname, extname, join, normalize, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 import { buildDashboardData } from './data-adapter.ts';
 
 const host = '127.0.0.1';
@@ -33,10 +32,12 @@ const server = createServer((req, res) => {
         'Content-Type': 'application/json; charset=utf-8',
         'Cache-Control': 'no-store',
       });
-      res.end(JSON.stringify({
-        error: 'dashboard_data_failed',
-        message: error instanceof Error ? error.message : String(error),
-      }));
+      res.end(
+        JSON.stringify({
+          error: 'dashboard_data_failed',
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
     }
     return;
   }

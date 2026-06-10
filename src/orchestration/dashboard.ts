@@ -1,10 +1,10 @@
-import { existsSync, readFile, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs';
-import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'http';
-import { dirname, extname, isAbsolute, join, normalize, relative, resolve } from 'path';
 import { spawn } from 'child_process';
+import { existsSync, readFile, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs';
+import { createServer, type Server as HttpServer, type IncomingMessage, type ServerResponse } from 'http';
+import { dirname, extname, isAbsolute, join, normalize, relative, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { buildDashboardData } from '../dashboard/data-adapter.ts';
-import { ensureDirectory, getOpenMetaStateDir, ui, UserCancelledError } from '../infra/index.js';
+import { ensureDirectory, getOpenMetaStateDir, UserCancelledError, ui } from '../infra/index.js';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 4326;
@@ -92,7 +92,9 @@ export function createDashboardServer(options: DashboardServerOptions): HttpServ
       return;
     }
 
-    const resolvedPath = normalize(resolve(rootDir, `.${requestPath.startsWith('/') ? requestPath : `/${requestPath}`}`));
+    const resolvedPath = normalize(
+      resolve(rootDir, `.${requestPath.startsWith('/') ? requestPath : `/${requestPath}`}`),
+    );
     const relativePath = relative(rootDir, resolvedPath);
     if (relativePath.startsWith('..') || isAbsolute(relativePath)) {
       res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
