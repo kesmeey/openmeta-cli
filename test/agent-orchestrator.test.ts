@@ -1,11 +1,19 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
 import * as simpleGitModule from 'simple-git';
 import * as infra from '../src/infra/index.js';
 import { AgentOrchestrator } from '../src/orchestration/agent.js';
-import { contributionPrService, gitService, githubService, inboxService, issueRankingService, llmService, proofOfWorkService } from '../src/services/index.js';
+import {
+  contributionPrService,
+  githubService,
+  gitService,
+  inboxService,
+  issueRankingService,
+  llmService,
+  proofOfWorkService,
+} from '../src/services/index.js';
 import type {
   AppConfig,
   ContributionAgentResult,
@@ -15,7 +23,15 @@ import type {
   RepoWorkspaceContext,
   TestResult,
 } from '../src/types/index.js';
-import { createInboxItem, createMemory, createPatchDraft, createProofRecord, createPullRequestDraft, createRankedIssue, createWorkspace } from './helpers/factories.js';
+import {
+  createInboxItem,
+  createMemory,
+  createPatchDraft,
+  createProofRecord,
+  createPullRequestDraft,
+  createRankedIssue,
+  createWorkspace,
+} from './helpers/factories.js';
 
 interface AgentOrchestratorInternals {
   validateConfig(config: AppConfig, options?: { requireLlm?: boolean }): Promise<void>;
@@ -92,11 +108,7 @@ interface AgentOrchestratorInternals {
     proofMarkdown: string;
   }): void;
   showResult(result: ContributionAgentResult): void;
-  showStructuredReviewNotice(input: {
-    title: string;
-    subtitle: string;
-    lines?: string[];
-  }): void;
+  showStructuredReviewNotice(input: { title: string; subtitle: string; lines?: string[] }): void;
   confirmManualHeadlessRun(config: AppConfig): Promise<void>;
   promptForCommitConfirmation(): Promise<boolean>;
   promptForFinalCommitConfirmation(commitMessage: string): Promise<boolean>;
@@ -106,10 +118,13 @@ interface AgentOrchestratorInternals {
     username: string,
     repoName: string,
   ): Promise<{ cloneUrl: string; defaultBranch: string; hasCommits: boolean }>;
-  ensureOriginRemote(git: {
-    getRemotes(verbose: boolean): Promise<Array<{ name: string; refs: { fetch?: string; push?: string } }>>;
-    addRemote(name: string, url: string): Promise<void>;
-  }, remoteUrl: string): Promise<void>;
+  ensureOriginRemote(
+    git: {
+      getRemotes(verbose: boolean): Promise<Array<{ name: string; refs: { fetch?: string; push?: string } }>>;
+      addRemote(name: string, url: string): Promise<void>;
+    },
+    remoteUrl: string,
+  ): Promise<void>;
   getOriginRemoteUrl(git: {
     getRemotes(verbose: boolean): Promise<Array<{ name: string; refs: { fetch?: string; push?: string } }>>;
   }): Promise<string>;
@@ -118,15 +133,19 @@ interface AgentOrchestratorInternals {
     raw(args: string[]): Promise<string>;
     branch(): Promise<{ all: string[]; current: string }>;
   }): Promise<string>;
-  prepareLocalRepository(git: {
-    fetch(remote: string, branch: string): Promise<void>;
-    checkout(args: string[] | string): Promise<void>;
-    branchLocal(): Promise<{ all: string[] }>;
-    checkoutLocalBranch(branch: string): Promise<void>;
-    status(): Promise<{ current?: string; tracking?: string }>;
-    commit(message: string, options?: Record<string, unknown>): Promise<void>;
-    raw(args: string[]): Promise<void>;
-  }, defaultBranch: string, hasRemoteCommits: boolean): Promise<void>;
+  prepareLocalRepository(
+    git: {
+      fetch(remote: string, branch: string): Promise<void>;
+      checkout(args: string[] | string): Promise<void>;
+      branchLocal(): Promise<{ all: string[] }>;
+      checkoutLocalBranch(branch: string): Promise<void>;
+      status(): Promise<{ current?: string; tracking?: string }>;
+      commit(message: string, options?: Record<string, unknown>): Promise<void>;
+      raw(args: string[]): Promise<void>;
+    },
+    defaultBranch: string,
+    hasRemoteCommits: boolean,
+  ): Promise<void>;
   ensureTargetRepo(config: AppConfig): Promise<{ path: string; owner: string; repo: string; defaultBranch: string }>;
   showInbox(): Promise<void>;
   showProofOfWork(): Promise<void>;
@@ -162,7 +181,7 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       skipIfAlreadyGeneratedToday: false,
     },
     scoring: {
-      weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.30, impact: 0.20, riskPenalty: 0.35 },
+      weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.3, impact: 0.2, riskPenalty: 0.35 },
       overallWeights: { technicalMatch: 0.45, opportunityScore: 0.55 },
       preset: 'balanced',
     },
@@ -171,7 +190,9 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   };
 }
 
-function createPublishInput(overrides: Partial<Parameters<AgentOrchestratorInternals['publishArtifactsIfNeeded']>[0]> = {}) {
+function createPublishInput(
+  overrides: Partial<Parameters<AgentOrchestratorInternals['publishArtifactsIfNeeded']>[0]> = {},
+) {
   return {
     config: createConfig(),
     headless: false,
@@ -208,33 +229,46 @@ describe('AgentOrchestrator support behavior', () => {
   test('validateConfig accepts local-only scout runs without an LLM key', async () => {
     const orchestrator = new AgentOrchestrator() as unknown as AgentOrchestratorInternals;
 
-    await expect(orchestrator.validateConfig(createConfig({
-      llm: {
-        provider: 'custom',
-        apiBaseUrl: 'https://example.com/v1',
-        apiKey: '',
-        modelName: 'test-model',
-        apiHeaders: {},
-      },
-    }), { requireLlm: false })).resolves.toBeUndefined();
+    await expect(
+      orchestrator.validateConfig(
+        createConfig({
+          llm: {
+            provider: 'custom',
+            apiBaseUrl: 'https://example.com/v1',
+            apiKey: '',
+            modelName: 'test-model',
+            apiHeaders: {},
+          },
+        }),
+        { requireLlm: false },
+      ),
+    ).resolves.toBeUndefined();
   });
 
   test('validateConfig rejects missing GitHub credentials and required LLM credentials', async () => {
     const orchestrator = new AgentOrchestrator() as unknown as AgentOrchestratorInternals;
 
-    await expect(orchestrator.validateConfig(createConfig({
-      github: { pat: '', username: '' },
-    }))).rejects.toThrow('GitHub configuration is incomplete');
+    await expect(
+      orchestrator.validateConfig(
+        createConfig({
+          github: { pat: '', username: '' },
+        }),
+      ),
+    ).rejects.toThrow('GitHub configuration is incomplete');
 
-    await expect(orchestrator.validateConfig(createConfig({
-      llm: {
-        provider: 'custom',
-        apiBaseUrl: 'https://example.com/v1',
-        apiKey: '',
-        modelName: 'test-model',
-        apiHeaders: {},
-      },
-    }))).rejects.toThrow('LLM API configuration is incomplete');
+    await expect(
+      orchestrator.validateConfig(
+        createConfig({
+          llm: {
+            provider: 'custom',
+            apiBaseUrl: 'https://example.com/v1',
+            apiKey: '',
+            modelName: 'test-model',
+            apiHeaders: {},
+          },
+        }),
+      ),
+    ).rejects.toThrow('LLM API configuration is incomplete');
   });
 
   test('initializeClients skips LLM validation when validateLlm is false', async () => {
@@ -267,7 +301,9 @@ describe('AgentOrchestrator support behavior', () => {
     spyOn(githubService, 'validateCredentials').mockResolvedValue(true);
     spyOn(llmService, 'getLastValidationError').mockReturnValue('custom detail');
     spyOn(llmService, 'validateConnection').mockResolvedValue(false);
-    await expect(orchestrator.initializeClients(createConfig())).rejects.toThrow('LLM validation failed: custom detail');
+    await expect(orchestrator.initializeClients(createConfig())).rejects.toThrow(
+      'LLM validation failed: custom detail',
+    );
 
     githubInit.mockRestore();
     llmInit.mockRestore();
@@ -311,10 +347,12 @@ describe('AgentOrchestrator support behavior', () => {
     const selected = await orchestrator.promptForIssue(issues);
 
     expect(promptSpy).toHaveBeenCalledTimes(2);
-    expect(bannerSpy).toHaveBeenCalledWith(expect.objectContaining({
-      title: 'Invalid selection',
-      tone: 'warning',
-    }));
+    expect(bannerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Invalid selection',
+        tone: 'warning',
+      }),
+    );
     expect(selected.repoFullName).toBe('acme/five');
   });
 
@@ -372,10 +410,15 @@ describe('AgentOrchestrator support behavior', () => {
     expect(orchestrator.normalizePatchPath('../escape.ts')).toBeNull();
     expect(orchestrator.collectPatchDraftPaths(patchDraft)).toEqual(['src/app.ts', 'src/utils.ts']);
     expect(orchestrator.uniqueStrings([' one ', 'two', 'one', ''])).toEqual(['one', 'two']);
-    expect(orchestrator.mergeSnippets(
-      [{ path: 'src/app.ts', content: 'old' }],
-      [{ path: 'src/app.ts', content: 'new' }, { path: 'src/utils.ts', content: 'util' }],
-    )).toEqual([
+    expect(
+      orchestrator.mergeSnippets(
+        [{ path: 'src/app.ts', content: 'old' }],
+        [
+          { path: 'src/app.ts', content: 'new' },
+          { path: 'src/utils.ts', content: 'util' },
+        ],
+      ),
+    ).toEqual([
       { path: 'src/app.ts', content: 'old' },
       { path: 'src/utils.ts', content: 'util' },
     ]);
@@ -393,11 +436,13 @@ describe('AgentOrchestrator support behavior', () => {
     expect(() => orchestrator.parseGitHubRepository('https://example.com/not-github')).toThrow(
       'Unable to parse GitHub repository from remote URL',
     );
-    expect(orchestrator.countValidationStates([
-      { command: 'bun test', exitCode: 0, passed: true, output: 'ok' },
-      { command: 'npm run lint', exitCode: 127, passed: false, output: 'command not found' },
-      { command: 'pytest', exitCode: 1, passed: false, output: 'AssertionError' },
-    ])).toEqual({ passed: 1, unavailable: 1, failed: 1 });
+    expect(
+      orchestrator.countValidationStates([
+        { command: 'bun test', exitCode: 0, passed: true, output: 'ok' },
+        { command: 'npm run lint', exitCode: 127, passed: false, output: 'command not found' },
+        { command: 'pytest', exitCode: 1, passed: false, output: 'AssertionError' },
+      ]),
+    ).toEqual({ passed: 1, unavailable: 1, failed: 1 });
   });
 
   test('submitContributionPullRequestIfPossible skips when there are no changed files or drafts require review', async () => {
@@ -528,21 +573,25 @@ describe('AgentOrchestrator support behavior', () => {
     const targetRepoPath = mkdtempSync(join(tmpdir(), 'openmeta-agent-publish-preview-'));
     tempDirs.push(targetRepoPath);
 
-    const dryRun = await orchestrator.publishArtifactsIfNeeded(createPublishInput({
-      dryRun: true,
-    }));
+    const dryRun = await orchestrator.publishArtifactsIfNeeded(
+      createPublishInput({
+        dryRun: true,
+      }),
+    );
     expect(dryRun).toEqual({ published: false });
 
     const promptSpy = spyOn(infra, 'prompt')
       .mockResolvedValueOnce({ confirmCommit: false })
       .mockResolvedValueOnce({ confirmCommit: true })
       .mockResolvedValueOnce({ finalConfirm: false });
-    spyOn(orchestrator as object as { ensureTargetRepo: () => Promise<unknown> }, 'ensureTargetRepo').mockResolvedValue({
-      path: targetRepoPath,
-      owner: 'octocat',
-      repo: 'openmeta-daily',
-      defaultBranch: 'main',
-    });
+    spyOn(orchestrator as object as { ensureTargetRepo: () => Promise<unknown> }, 'ensureTargetRepo').mockResolvedValue(
+      {
+        path: targetRepoPath,
+        owner: 'octocat',
+        repo: 'openmeta-daily',
+        defaultBranch: 'main',
+      },
+    );
 
     const declinedCommit = await orchestrator.publishArtifactsIfNeeded(createPublishInput());
     expect(declinedCommit).toEqual({ published: false });
@@ -570,12 +619,14 @@ describe('AgentOrchestrator support behavior', () => {
       .mockResolvedValueOnce({ confirmCommit: true })
       .mockResolvedValueOnce({ finalConfirm: true });
 
-    spyOn(orchestrator as object as { ensureTargetRepo: () => Promise<unknown> }, 'ensureTargetRepo').mockResolvedValue({
-      path: targetRepoPath,
-      owner: 'octocat',
-      repo: 'openmeta-daily',
-      defaultBranch: 'main',
-    });
+    spyOn(orchestrator as object as { ensureTargetRepo: () => Promise<unknown> }, 'ensureTargetRepo').mockResolvedValue(
+      {
+        path: targetRepoPath,
+        owner: 'octocat',
+        repo: 'openmeta-daily',
+        defaultBranch: 'main',
+      },
+    );
 
     spyOn(gitService, 'initialize').mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     spyOn(gitService, 'writeAndPublish').mockResolvedValueOnce({
@@ -589,11 +640,13 @@ describe('AgentOrchestrator support behavior', () => {
       `Failed to initialize the target repository at ${targetRepoPath}.`,
     );
 
-    const published = await orchestrator.publishArtifactsIfNeeded(createPublishInput({
-      config,
-      headless: false,
-      pullRequestUrl: 'https://github.com/acme/demo/pull/42',
-    }));
+    const published = await orchestrator.publishArtifactsIfNeeded(
+      createPublishInput({
+        config,
+        headless: false,
+        pullRequestUrl: 'https://github.com/acme/demo/pull/42',
+      }),
+    );
     expect(published).toEqual({ published: true });
     expect(promptSpy).toHaveBeenCalledTimes(3);
   });
@@ -607,10 +660,14 @@ describe('AgentOrchestrator support behavior', () => {
 
     spyOn(inboxService, 'load')
       .mockReturnValueOnce({ items: [] })
-      .mockReturnValueOnce({ items: [createInboxItem({ generatedAt: '2026-06-03T00:00:00.000Z' }) as ContributionInboxItem] });
+      .mockReturnValueOnce({
+        items: [createInboxItem({ generatedAt: '2026-06-03T00:00:00.000Z' }) as ContributionInboxItem],
+      });
     spyOn(proofOfWorkService, 'load')
       .mockReturnValueOnce({ records: [] })
-      .mockReturnValueOnce({ records: [createProofRecord({ generatedAt: '2026-06-03T00:00:00.000Z' }) as ProofOfWorkRecord] });
+      .mockReturnValueOnce({
+        records: [createProofRecord({ generatedAt: '2026-06-03T00:00:00.000Z' }) as ProofOfWorkRecord],
+      });
 
     await orchestrator.showInbox();
     await orchestrator.showInbox();
@@ -692,16 +749,20 @@ describe('AgentOrchestrator support behavior', () => {
     expect(cardSpy).toHaveBeenCalled();
     expect(statsSpy).toHaveBeenCalled();
     expect(keyValuesSpy).toHaveBeenCalled();
-    expect(calloutSpy).toHaveBeenCalledWith(expect.objectContaining({
-      title: 'Needs review',
-      subtitle: 'Take a look before publishing.',
-      lines: ['Line one'],
-      tone: 'warning',
-    }));
-    expect(heroSpy).toHaveBeenCalledWith(expect.objectContaining({
-      title: 'The contribution arc landed cleanly',
-      tone: 'success',
-    }));
+    expect(calloutSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Needs review',
+        subtitle: 'Take a look before publishing.',
+        lines: ['Line one'],
+        tone: 'warning',
+      }),
+    );
+    expect(heroSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'The contribution arc landed cleanly',
+        tone: 'success',
+      }),
+    );
   });
 
   test('shows a validation-empty callout and writes local artifact files', () => {
@@ -711,11 +772,14 @@ describe('AgentOrchestrator support behavior', () => {
     const statsSpy = spyOn(infra.ui, 'stats').mockImplementation(() => {});
     const artifactPaths = orchestrator.prepareLocalArtifactPaths(issue);
 
-    orchestrator.showValidationSummary(createWorkspace({
-      validationCommands: [],
-      testCommands: [],
-      testResults: [],
-    }), []);
+    orchestrator.showValidationSummary(
+      createWorkspace({
+        validationCommands: [],
+        testCommands: [],
+        testResults: [],
+      }),
+      [],
+    );
 
     orchestrator.writeLocalArtifacts({
       artifacts: artifactPaths,
@@ -728,10 +792,12 @@ describe('AgentOrchestrator support behavior', () => {
     });
 
     expect(statsSpy).toHaveBeenCalledTimes(1);
-    expect(calloutSpy).toHaveBeenCalledWith(expect.objectContaining({
-      title: 'Validation was not executed',
-      tone: 'warning',
-    }));
+    expect(calloutSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Validation was not executed',
+        tone: 'warning',
+      }),
+    );
     expect(Bun.file(artifactPaths.dossierPath).exists()).resolves.toBe(true);
     expect(Bun.file(artifactPaths.proofOfWorkPath).exists()).resolves.toBe(true);
   });
@@ -740,10 +806,14 @@ describe('AgentOrchestrator support behavior', () => {
     const orchestrator = new AgentOrchestrator();
     const emptyStateSpy = spyOn(infra.ui, 'emptyState').mockImplementation(() => {});
     spyOn(infra.configService, 'get').mockResolvedValue(createConfig());
-    spyOn(AgentOrchestrator.prototype as unknown as { validateConfig: AgentOrchestratorInternals['validateConfig'] }, 'validateConfig')
-      .mockResolvedValue(undefined as never);
-    spyOn(AgentOrchestrator.prototype as unknown as { initializeClients: AgentOrchestratorInternals['initializeClients'] }, 'initializeClients')
-      .mockResolvedValue(undefined as never);
+    spyOn(
+      AgentOrchestrator.prototype as unknown as { validateConfig: AgentOrchestratorInternals['validateConfig'] },
+      'validateConfig',
+    ).mockResolvedValue(undefined as never);
+    spyOn(
+      AgentOrchestrator.prototype as unknown as { initializeClients: AgentOrchestratorInternals['initializeClients'] },
+      'initializeClients',
+    ).mockResolvedValue(undefined as never);
     spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([]);
 
     await orchestrator.scout({ localOnly: true });
@@ -860,120 +930,150 @@ describe('AgentOrchestrator support behavior', () => {
       },
     };
 
-    await expect(orchestrator.getGitHubRepositoryInfo('octocat', 'openmeta-daily')).resolves.toEqual(expect.objectContaining({
-      default_branch: 'main',
-    }));
+    await expect(orchestrator.getGitHubRepositoryInfo('octocat', 'openmeta-daily')).resolves.toEqual(
+      expect.objectContaining({
+        default_branch: 'main',
+      }),
+    );
   });
 
   test('detectLocalDefaultBranch prefers origin HEAD, common branch names, then the current branch', async () => {
     const orchestrator = new AgentOrchestrator() as unknown as AgentOrchestratorInternals;
 
-    await expect(orchestrator.detectLocalDefaultBranch({
-      raw: async () => 'refs/remotes/origin/master\n',
-      branch: async () => {
-        throw new Error('branch should not be checked when origin HEAD exists');
-      },
-    })).resolves.toBe('master');
+    await expect(
+      orchestrator.detectLocalDefaultBranch({
+        raw: async () => 'refs/remotes/origin/master\n',
+        branch: async () => {
+          throw new Error('branch should not be checked when origin HEAD exists');
+        },
+      }),
+    ).resolves.toBe('master');
 
-    await expect(orchestrator.detectLocalDefaultBranch({
-      raw: async () => {
-        throw new Error('origin HEAD missing');
-      },
-      branch: async () => ({ all: ['openmeta-artifacts', 'main'], current: 'openmeta-artifacts' }),
-    })).resolves.toBe('main');
+    await expect(
+      orchestrator.detectLocalDefaultBranch({
+        raw: async () => {
+          throw new Error('origin HEAD missing');
+        },
+        branch: async () => ({ all: ['openmeta-artifacts', 'main'], current: 'openmeta-artifacts' }),
+      }),
+    ).resolves.toBe('main');
 
-    await expect(orchestrator.detectLocalDefaultBranch({
-      raw: async () => {
-        throw new Error('origin HEAD missing');
-      },
-      branch: async () => ({ all: ['feature'], current: 'feature' }),
-    })).resolves.toBe('feature');
+    await expect(
+      orchestrator.detectLocalDefaultBranch({
+        raw: async () => {
+          throw new Error('origin HEAD missing');
+        },
+        branch: async () => ({ all: ['feature'], current: 'feature' }),
+      }),
+    ).resolves.toBe('feature');
   });
 
   test('manages origin remotes, parses existing origin URLs, and fails clearly when origin is missing', async () => {
     const orchestrator = new AgentOrchestrator() as unknown as AgentOrchestratorInternals;
     let addedRemote = '';
 
-    await orchestrator.ensureOriginRemote({
-      getRemotes: async () => [],
-      addRemote: async (name, url) => {
-        addedRemote = `${name}:${url}`;
+    await orchestrator.ensureOriginRemote(
+      {
+        getRemotes: async () => [],
+        addRemote: async (name, url) => {
+          addedRemote = `${name}:${url}`;
+        },
       },
-    }, 'https://github.com/octocat/openmeta-daily.git');
+      'https://github.com/octocat/openmeta-daily.git',
+    );
     expect(addedRemote).toBe('origin:https://github.com/octocat/openmeta-daily.git');
 
-    await orchestrator.ensureOriginRemote({
-      getRemotes: async () => [{
-        name: 'origin',
-        refs: {
-          fetch: 'https://github.com/other/repo.git',
-          push: 'https://github.com/other/repo.git',
+    await orchestrator.ensureOriginRemote(
+      {
+        getRemotes: async () => [
+          {
+            name: 'origin',
+            refs: {
+              fetch: 'https://github.com/other/repo.git',
+              push: 'https://github.com/other/repo.git',
+            },
+          },
+        ],
+        addRemote: async () => {
+          throw new Error('should not add a new remote');
         },
-      }],
-      addRemote: async () => {
-        throw new Error('should not add a new remote');
       },
-    }, 'https://github.com/octocat/openmeta-daily.git');
+      'https://github.com/octocat/openmeta-daily.git',
+    );
 
-    await expect(orchestrator.getOriginRemoteUrl({
-      getRemotes: async () => [],
-    })).rejects.toThrow('Target repository does not have an origin remote configured.');
+    await expect(
+      orchestrator.getOriginRemoteUrl({
+        getRemotes: async () => [],
+      }),
+    ).rejects.toThrow('Target repository does not have an origin remote configured.');
 
-    await expect(orchestrator.getOriginRemoteUrl({
-      getRemotes: async () => [{
-        name: 'origin',
-        refs: {
-          push: 'git@github.com:octocat/openmeta-daily.git',
-        },
-      }],
-    })).resolves.toBe('git@github.com:octocat/openmeta-daily.git');
+    await expect(
+      orchestrator.getOriginRemoteUrl({
+        getRemotes: async () => [
+          {
+            name: 'origin',
+            refs: {
+              push: 'git@github.com:octocat/openmeta-daily.git',
+            },
+          },
+        ],
+      }),
+    ).resolves.toBe('git@github.com:octocat/openmeta-daily.git');
   });
 
   test('prepareLocalRepository handles remote sync, fallback checkout, and empty repo bootstrap', async () => {
     const orchestrator = new AgentOrchestrator() as unknown as AgentOrchestratorInternals;
 
     const syncedCalls: string[] = [];
-    await orchestrator.prepareLocalRepository({
-      fetch: async (remote, branch) => {
-        syncedCalls.push(`fetch:${remote}/${branch}`);
+    await orchestrator.prepareLocalRepository(
+      {
+        fetch: async (remote, branch) => {
+          syncedCalls.push(`fetch:${remote}/${branch}`);
+        },
+        checkout: async (args) => {
+          syncedCalls.push(`checkout:${Array.isArray(args) ? args.join(' ') : args}`);
+        },
+        branchLocal: async () => ({ all: ['main'] }),
+        checkoutLocalBranch: async () => {
+          syncedCalls.push('checkoutLocalBranch');
+        },
+        status: async () => ({ tracking: 'origin/main' }),
+        commit: async () => {
+          syncedCalls.push('commit');
+        },
+        raw: async () => {
+          syncedCalls.push('raw');
+        },
       },
-      checkout: async (args) => {
-        syncedCalls.push(`checkout:${Array.isArray(args) ? args.join(' ') : args}`);
-      },
-      branchLocal: async () => ({ all: ['main'] }),
-      checkoutLocalBranch: async () => {
-        syncedCalls.push('checkoutLocalBranch');
-      },
-      status: async () => ({ tracking: 'origin/main' }),
-      commit: async () => {
-        syncedCalls.push('commit');
-      },
-      raw: async () => {
-        syncedCalls.push('raw');
-      },
-    }, 'main', true);
+      'main',
+      true,
+    );
     expect(syncedCalls).toEqual(['fetch:origin/main', 'checkout:-B main origin/main']);
 
     const bootstrapCalls: string[] = [];
-    await orchestrator.prepareLocalRepository({
-      fetch: async () => {
-        throw new Error('fetch failed');
+    await orchestrator.prepareLocalRepository(
+      {
+        fetch: async () => {
+          throw new Error('fetch failed');
+        },
+        checkout: async (args) => {
+          bootstrapCalls.push(`checkout:${Array.isArray(args) ? args.join(' ') : args}`);
+        },
+        branchLocal: async () => ({ all: [] }),
+        checkoutLocalBranch: async () => {
+          throw new Error('branch exists elsewhere');
+        },
+        status: async () => ({ current: '', tracking: '' }),
+        commit: async (message) => {
+          bootstrapCalls.push(`commit:${message}`);
+        },
+        raw: async (args) => {
+          bootstrapCalls.push(`raw:${args.join(' ')}`);
+        },
       },
-      checkout: async (args) => {
-        bootstrapCalls.push(`checkout:${Array.isArray(args) ? args.join(' ') : args}`);
-      },
-      branchLocal: async () => ({ all: [] }),
-      checkoutLocalBranch: async () => {
-        throw new Error('branch exists elsewhere');
-      },
-      status: async () => ({ current: '', tracking: '' }),
-      commit: async (message) => {
-        bootstrapCalls.push(`commit:${message}`);
-      },
-      raw: async (args) => {
-        bootstrapCalls.push(`raw:${args.join(' ')}`);
-      },
-    }, 'main', false);
+      'main',
+      false,
+    );
     expect(bootstrapCalls).toEqual([
       'checkout:-B main',
       'commit:chore: initialize repository',
@@ -986,45 +1086,67 @@ describe('AgentOrchestrator support behavior', () => {
     const targetRepoPath = mkdtempSync(join(tmpdir(), 'openmeta-agent-target-repo-'));
     tempDirs.push(targetRepoPath);
 
-    spyOn(orchestrator as object as { getOriginRemoteUrl: () => Promise<string> }, 'getOriginRemoteUrl').mockResolvedValue(
-      'git@github.com:octocat/custom-target.git',
-    );
-    spyOn(orchestrator as object as { getGitHubRepositoryInfo: () => Promise<{ default_branch: string }> }, 'getGitHubRepositoryInfo').mockResolvedValue({
+    spyOn(
+      orchestrator as object as { getOriginRemoteUrl: () => Promise<string> },
+      'getOriginRemoteUrl',
+    ).mockResolvedValue('git@github.com:octocat/custom-target.git');
+    spyOn(
+      orchestrator as object as { getGitHubRepositoryInfo: () => Promise<{ default_branch: string }> },
+      'getGitHubRepositoryInfo',
+    ).mockResolvedValue({
       default_branch: 'develop',
     });
 
-    await expect(orchestrator.ensureTargetRepo(createConfig({
-      github: {
-        pat: 'ghp_test_token',
-        username: 'octocat',
-        targetRepoPath,
-      },
-    }))).resolves.toEqual({
+    await expect(
+      orchestrator.ensureTargetRepo(
+        createConfig({
+          github: {
+            pat: 'ghp_test_token',
+            username: 'octocat',
+            targetRepoPath,
+          },
+        }),
+      ),
+    ).resolves.toEqual({
       path: targetRepoPath,
       owner: 'octocat',
       repo: 'custom-target',
       defaultBranch: 'develop',
     });
 
-    const repoFactorySpy = spyOn(simpleGitModule, 'simpleGit').mockImplementation(() => ({
-      checkIsRepo: async () => false,
-      init: async () => {},
-    } as never));
-    spyOn(orchestrator as object as { ensureManagedRemoteRepo: () => Promise<unknown> }, 'ensureManagedRemoteRepo').mockResolvedValue({
+    const repoFactorySpy = spyOn(simpleGitModule, 'simpleGit').mockImplementation(
+      () =>
+        ({
+          checkIsRepo: async () => false,
+          init: async () => {},
+        }) as never,
+    );
+    spyOn(
+      orchestrator as object as { ensureManagedRemoteRepo: () => Promise<unknown> },
+      'ensureManagedRemoteRepo',
+    ).mockResolvedValue({
       cloneUrl: 'https://github.com/octocat/openmeta-daily.git',
       defaultBranch: 'main',
       hasCommits: true,
     });
-    spyOn(orchestrator as object as { ensureOriginRemote: () => Promise<void> }, 'ensureOriginRemote').mockResolvedValue(undefined);
-    spyOn(orchestrator as object as { prepareLocalRepository: () => Promise<void> }, 'prepareLocalRepository').mockResolvedValue(undefined);
+    spyOn(
+      orchestrator as object as { ensureOriginRemote: () => Promise<void> },
+      'ensureOriginRemote',
+    ).mockResolvedValue(undefined);
+    spyOn(
+      orchestrator as object as { prepareLocalRepository: () => Promise<void> },
+      'prepareLocalRepository',
+    ).mockResolvedValue(undefined);
     (orchestrator as unknown as { octokit: unknown }).octokit = { rest: { repos: {} } };
 
-    const managedTarget = await orchestrator.ensureTargetRepo(createConfig({
-      github: {
-        pat: 'ghp_test_token',
-        username: 'octocat',
-      },
-    }));
+    const managedTarget = await orchestrator.ensureTargetRepo(
+      createConfig({
+        github: {
+          pat: 'ghp_test_token',
+          username: 'octocat',
+        },
+      }),
+    );
     expect(repoFactorySpy).toHaveBeenCalled();
     expect(managedTarget.owner).toBe('octocat');
     expect(managedTarget.repo).toBe('openmeta-daily');
@@ -1036,26 +1158,38 @@ describe('AgentOrchestrator support behavior', () => {
     const targetRepoPath = mkdtempSync(join(tmpdir(), 'openmeta-agent-target-repo-private-'));
     tempDirs.push(targetRepoPath);
 
-    spyOn(simpleGitModule, 'simpleGit').mockImplementation(() => ({
-      getRemotes: async () => [{
-        name: 'origin',
-        refs: {
-          fetch: 'https://github.com/Zbl1007/openmeta.git',
-          push: 'https://github.com/Zbl1007/openmeta.git',
-        },
-      }],
-      raw: async () => 'refs/remotes/origin/master\n',
-      branch: async () => ({ all: ['master', 'openmeta-artifacts'], current: 'openmeta-artifacts' }),
-    } as never));
-    spyOn(orchestrator as object as { getGitHubRepositoryInfo: () => Promise<unknown> }, 'getGitHubRepositoryInfo').mockRejectedValue({ status: 404 });
+    spyOn(simpleGitModule, 'simpleGit').mockImplementation(
+      () =>
+        ({
+          getRemotes: async () => [
+            {
+              name: 'origin',
+              refs: {
+                fetch: 'https://github.com/Zbl1007/openmeta.git',
+                push: 'https://github.com/Zbl1007/openmeta.git',
+              },
+            },
+          ],
+          raw: async () => 'refs/remotes/origin/master\n',
+          branch: async () => ({ all: ['master', 'openmeta-artifacts'], current: 'openmeta-artifacts' }),
+        }) as never,
+    );
+    spyOn(
+      orchestrator as object as { getGitHubRepositoryInfo: () => Promise<unknown> },
+      'getGitHubRepositoryInfo',
+    ).mockRejectedValue({ status: 404 });
 
-    await expect(orchestrator.ensureTargetRepo(createConfig({
-      github: {
-        pat: 'ghp_test_token',
-        username: 'zbl1007',
-        targetRepoPath,
-      },
-    }))).resolves.toEqual({
+    await expect(
+      orchestrator.ensureTargetRepo(
+        createConfig({
+          github: {
+            pat: 'ghp_test_token',
+            username: 'zbl1007',
+            targetRepoPath,
+          },
+        }),
+      ),
+    ).resolves.toEqual({
       path: targetRepoPath,
       owner: 'Zbl1007',
       repo: 'openmeta',

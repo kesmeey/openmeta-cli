@@ -1,9 +1,9 @@
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { type BinaryResolution, inspectBinaryOnPath } from '../../services/index.js';
+import type { SkillHost } from './catalog.js';
 import { getInstallTarget } from './installer.js';
 import { getInstalledSkillFileName } from './renderer.js';
-import type { SkillHost } from './catalog.js';
-import { inspectBinaryOnPath, type BinaryResolution } from '../../services/index.js';
 
 export interface SkillDoctorResult {
   host: SkillHost;

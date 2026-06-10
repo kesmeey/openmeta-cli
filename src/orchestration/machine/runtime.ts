@@ -40,10 +40,7 @@ export function writeMachinePlan(command: string, steps: string[]): void {
     return;
   }
 
-  const lines = [
-    `Machine execution plan for ${command}:`,
-    ...steps.map((step, index) => `${index + 1}. ${step}`),
-  ];
+  const lines = [`Machine execution plan for ${command}:`, ...steps.map((step, index) => `${index + 1}. ${step}`)];
 
   for (const line of lines) {
     process.stderr.write(`${line}\n`);

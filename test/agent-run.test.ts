@@ -2,9 +2,26 @@ import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:
 import * as infra from '../src/infra/index.js';
 import { AgentOrchestrator } from '../src/orchestration/agent.js';
 import { AnalyzeOrchestrator } from '../src/orchestration/analyze.js';
-import { contentService, inboxService, issueRankingService, llmService, memoryService, proofOfWorkService, workspaceService } from '../src/services/index.js';
+import {
+  contentService,
+  inboxService,
+  issueRankingService,
+  llmService,
+  memoryService,
+  proofOfWorkService,
+  workspaceService,
+} from '../src/services/index.js';
 import type { AppConfig, ContributionAgentResult, RankedIssue } from '../src/types/index.js';
-import { createInboxItem, createMemory, createPatchDraft, createProofRecord, createPullRequestDraft, createRankedIssue, createRepositorySuggestion, createWorkspace } from './helpers/factories.js';
+import {
+  createInboxItem,
+  createMemory,
+  createPatchDraft,
+  createProofRecord,
+  createPullRequestDraft,
+  createRankedIssue,
+  createRepositorySuggestion,
+  createWorkspace,
+} from './helpers/factories.js';
 
 interface AgentRunInternals {
   run(options?: {
@@ -65,7 +82,10 @@ interface AnalyzeRunInternals {
   }): Promise<unknown>;
   initializeClients(config: AppConfig): Promise<void>;
   promptForSuggestion<T>(suggestions: T[]): Promise<T>;
-  prepareArtifactPaths(repoFullName: string, suggestionId: string): {
+  prepareArtifactPaths(
+    repoFullName: string,
+    suggestionId: string,
+  ): {
     artifactDir: string;
     analysisPath: string;
     patchDraftPath: string;
@@ -103,7 +123,7 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       skipIfAlreadyGeneratedToday: false,
     },
     scoring: {
-      weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.30, impact: 0.20, riskPenalty: 0.35 },
+      weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.3, impact: 0.2, riskPenalty: 0.35 },
       overallWeights: { technicalMatch: 0.45, opportunityScore: 0.55 },
       preset: 'balanced',
     },
@@ -136,9 +156,11 @@ function muteUi(): void {
   spyOn(infra.ui, 'emptyState').mockImplementation(() => {});
   spyOn(infra.ui, 'banner').mockImplementation(() => {});
   spyOn(infra.ui, 'timeline').mockImplementation(() => {});
-  spyOn(infra.ui, 'task').mockImplementation(async (_options, task) => task({
-    setMessage() {},
-  } as never));
+  spyOn(infra.ui, 'task').mockImplementation(async (_options, task) =>
+    task({
+      setMessage() {},
+    } as never),
+  );
 }
 
 beforeEach(() => {
@@ -154,10 +176,15 @@ describe('AgentOrchestrator run flow', () => {
     const orchestrator = new AgentOrchestrator() as unknown as AgentRunInternals;
     const config = createConfig();
     const emptyStateSpy = spyOn(infra.ui, 'emptyState').mockImplementation(() => {});
-    const confirmSpy = spyOn(orchestrator as object as { confirmManualHeadlessRun: AgentRunInternals['confirmManualHeadlessRun'] }, 'confirmManualHeadlessRun')
-      .mockResolvedValue(undefined);
+    const confirmSpy = spyOn(
+      orchestrator as object as { confirmManualHeadlessRun: AgentRunInternals['confirmManualHeadlessRun'] },
+      'confirmManualHeadlessRun',
+    ).mockResolvedValue(undefined);
     spyOn(infra.configService, 'get').mockResolvedValue(config);
-    spyOn(orchestrator as object as { initializeClients: AgentRunInternals['initializeClients'] }, 'initializeClients').mockResolvedValue(undefined);
+    spyOn(
+      orchestrator as object as { initializeClients: AgentRunInternals['initializeClients'] },
+      'initializeClients',
+    ).mockResolvedValue(undefined);
     spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([]);
 
     await orchestrator.run({ headless: true });
@@ -179,7 +206,10 @@ describe('AgentOrchestrator run flow', () => {
     ).mockResolvedValue(undefined);
 
     spyOn(infra.configService, 'get').mockResolvedValue(config);
-    spyOn(orchestrator as object as { initializeClients: AgentRunInternals['initializeClients'] }, 'initializeClients').mockResolvedValue(undefined);
+    spyOn(
+      orchestrator as object as { initializeClients: AgentRunInternals['initializeClients'] },
+      'initializeClients',
+    ).mockResolvedValue(undefined);
     spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([]);
 
     await orchestrator.run({
@@ -196,7 +226,10 @@ describe('AgentOrchestrator run flow', () => {
     const issue = createRankedIssue();
     const emptyStateSpy = spyOn(infra.ui, 'emptyState').mockImplementation(() => {});
     spyOn(infra.configService, 'get').mockResolvedValue(createConfig());
-    spyOn(orchestrator as object as { initializeClients: AgentRunInternals['initializeClients'] }, 'initializeClients').mockResolvedValue(undefined);
+    spyOn(
+      orchestrator as object as { initializeClients: AgentRunInternals['initializeClients'] },
+      'initializeClients',
+    ).mockResolvedValue(undefined);
     spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([issue]);
     spyOn(issueRankingService, 'selectIssueForAutomation').mockReturnValue(undefined);
 
@@ -222,11 +255,20 @@ describe('AgentOrchestrator run flow', () => {
     const prDraft = createPullRequestDraft();
     const validationResults = [{ command: 'bun test', exitCode: 0, passed: true, output: '1 passed' }];
     const artifacts = createArtifacts();
-    const showResultSpy = spyOn(orchestrator as object as { showResult: AgentRunInternals['showResult'] }, 'showResult').mockImplementation(() => {});
+    const showResultSpy = spyOn(
+      orchestrator as object as { showResult: AgentRunInternals['showResult'] },
+      'showResult',
+    ).mockImplementation(() => {});
 
     spyOn(infra.configService, 'get').mockResolvedValue(config);
-    spyOn(orchestrator as object as { initializeClients: AgentRunInternals['initializeClients'] }, 'initializeClients').mockResolvedValue(undefined);
-    spyOn(orchestrator as object as { promptForIssue: AgentRunInternals['promptForIssue'] }, 'promptForIssue').mockResolvedValue(issue);
+    spyOn(
+      orchestrator as object as { initializeClients: AgentRunInternals['initializeClients'] },
+      'initializeClients',
+    ).mockResolvedValue(undefined);
+    spyOn(
+      orchestrator as object as { promptForIssue: AgentRunInternals['promptForIssue'] },
+      'promptForIssue',
+    ).mockResolvedValue(issue);
     spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([issue]);
     spyOn(memoryService, 'load').mockReturnValue(memory);
     spyOn(workspaceService, 'prepareWorkspace').mockResolvedValue(workspace);
@@ -237,7 +279,10 @@ describe('AgentOrchestrator run flow', () => {
       status: 'success',
       data: patchDraft,
     });
-    spyOn(orchestrator as object as { generateConcretePatch: AgentRunInternals['generateConcretePatch'] }, 'generateConcretePatch').mockResolvedValue({
+    spyOn(
+      orchestrator as object as { generateConcretePatch: AgentRunInternals['generateConcretePatch'] },
+      'generateConcretePatch',
+    ).mockResolvedValue({
       changedFiles: ['src/app.ts'],
       validationResults,
       reviewRequired: false,
@@ -251,17 +296,30 @@ describe('AgentOrchestrator run flow', () => {
     spyOn(contentService, 'formatPatchDraftMarkdown').mockReturnValue('# Patch');
     spyOn(contentService, 'formatPullRequestDraftMarkdown').mockReturnValue('# PR');
     spyOn(contentService, 'formatContributionDossier').mockReturnValue('# Dossier');
-    spyOn(orchestrator as object as { submitContributionPullRequestIfPossible: AgentRunInternals['submitContributionPullRequestIfPossible'] }, 'submitContributionPullRequestIfPossible')
-      .mockResolvedValue({
-        branchName: 'openmeta/agent-42',
-        url: 'https://github.com/acme/demo/pull/42',
-        number: 42,
-        changedFiles: ['src/app.ts'],
-        validationResults,
-      });
-    spyOn(orchestrator as object as { prepareLocalArtifactPaths: AgentRunInternals['prepareLocalArtifactPaths'] }, 'prepareLocalArtifactPaths').mockReturnValue(artifacts);
-    spyOn(orchestrator as object as { writeLocalArtifacts: AgentRunInternals['writeLocalArtifacts'] }, 'writeLocalArtifacts').mockImplementation(() => {});
-    spyOn(orchestrator as object as { publishArtifactsIfNeeded: AgentRunInternals['publishArtifactsIfNeeded'] }, 'publishArtifactsIfNeeded').mockResolvedValue({
+    spyOn(
+      orchestrator as object as {
+        submitContributionPullRequestIfPossible: AgentRunInternals['submitContributionPullRequestIfPossible'];
+      },
+      'submitContributionPullRequestIfPossible',
+    ).mockResolvedValue({
+      branchName: 'openmeta/agent-42',
+      url: 'https://github.com/acme/demo/pull/42',
+      number: 42,
+      changedFiles: ['src/app.ts'],
+      validationResults,
+    });
+    spyOn(
+      orchestrator as object as { prepareLocalArtifactPaths: AgentRunInternals['prepareLocalArtifactPaths'] },
+      'prepareLocalArtifactPaths',
+    ).mockReturnValue(artifacts);
+    spyOn(
+      orchestrator as object as { writeLocalArtifacts: AgentRunInternals['writeLocalArtifacts'] },
+      'writeLocalArtifacts',
+    ).mockImplementation(() => {});
+    spyOn(
+      orchestrator as object as { publishArtifactsIfNeeded: AgentRunInternals['publishArtifactsIfNeeded'] },
+      'publishArtifactsIfNeeded',
+    ).mockResolvedValue({
       published: true,
     });
     spyOn(inboxService, 'saveItem').mockReturnValue([createInboxItem()]);
@@ -274,14 +332,16 @@ describe('AgentOrchestrator run flow', () => {
 
     await orchestrator.run();
 
-    expect(showResultSpy).toHaveBeenCalledWith(expect.objectContaining({
-      issue,
-      workspace: expect.objectContaining({ workspacePath: workspace.workspacePath }),
-      patchDraft,
-      prDraft,
-      pullRequestUrl: 'https://github.com/acme/demo/pull/42',
-      changedFiles: ['src/app.ts'],
-    }));
+    expect(showResultSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue,
+        workspace: expect.objectContaining({ workspacePath: workspace.workspacePath }),
+        patchDraft,
+        prDraft,
+        pullRequestUrl: 'https://github.com/acme/demo/pull/42',
+        changedFiles: ['src/app.ts'],
+      }),
+    );
   });
 
   test('runs against an explicitly targeted issue without discovery selection', async () => {
@@ -300,13 +360,22 @@ describe('AgentOrchestrator run flow', () => {
     const patchDraft = createPatchDraft();
     const prDraft = createPullRequestDraft();
     const artifacts = createArtifacts();
-    const showResultSpy = spyOn(orchestrator as object as { showResult: AgentRunInternals['showResult'] }, 'showResult').mockImplementation(() => {});
+    const showResultSpy = spyOn(
+      orchestrator as object as { showResult: AgentRunInternals['showResult'] },
+      'showResult',
+    ).mockImplementation(() => {});
     const loadTargetIssueSpy = spyOn(issueRankingService, 'loadTargetIssue').mockResolvedValue([issue]);
     const loadRankedIssuesSpy = spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([]);
-    const promptForIssueSpy = spyOn(orchestrator as object as { promptForIssue: AgentRunInternals['promptForIssue'] }, 'promptForIssue').mockResolvedValue(issue);
+    const promptForIssueSpy = spyOn(
+      orchestrator as object as { promptForIssue: AgentRunInternals['promptForIssue'] },
+      'promptForIssue',
+    ).mockResolvedValue(issue);
 
     spyOn(infra.configService, 'get').mockResolvedValue(config);
-    spyOn(orchestrator as object as { initializeClients: AgentRunInternals['initializeClients'] }, 'initializeClients').mockResolvedValue(undefined);
+    spyOn(
+      orchestrator as object as { initializeClients: AgentRunInternals['initializeClients'] },
+      'initializeClients',
+    ).mockResolvedValue(undefined);
     spyOn(memoryService, 'load').mockReturnValue(memory);
     spyOn(workspaceService, 'prepareWorkspace').mockResolvedValue(workspace);
     spyOn(memoryService, 'update').mockReturnValue(memory);
@@ -316,7 +385,10 @@ describe('AgentOrchestrator run flow', () => {
       status: 'success',
       data: patchDraft,
     });
-    spyOn(orchestrator as object as { generateConcretePatch: AgentRunInternals['generateConcretePatch'] }, 'generateConcretePatch').mockResolvedValue({
+    spyOn(
+      orchestrator as object as { generateConcretePatch: AgentRunInternals['generateConcretePatch'] },
+      'generateConcretePatch',
+    ).mockResolvedValue({
       changedFiles: ['src/openai.ts'],
       validationResults: [],
       reviewRequired: false,
@@ -330,17 +402,30 @@ describe('AgentOrchestrator run flow', () => {
     spyOn(contentService, 'formatPatchDraftMarkdown').mockReturnValue('# Patch');
     spyOn(contentService, 'formatPullRequestDraftMarkdown').mockReturnValue('# PR');
     spyOn(contentService, 'formatContributionDossier').mockReturnValue('# Dossier');
-    spyOn(orchestrator as object as { submitContributionPullRequestIfPossible: AgentRunInternals['submitContributionPullRequestIfPossible'] }, 'submitContributionPullRequestIfPossible')
-      .mockResolvedValue({
-        branchName: 'openmeta/agent-3014',
-        url: 'https://github.com/Wei-Shaw/sub2api/pull/3015',
-        number: 3015,
-        changedFiles: ['src/openai.ts'],
-        validationResults: [],
-      });
-    spyOn(orchestrator as object as { prepareLocalArtifactPaths: AgentRunInternals['prepareLocalArtifactPaths'] }, 'prepareLocalArtifactPaths').mockReturnValue(artifacts);
-    spyOn(orchestrator as object as { writeLocalArtifacts: AgentRunInternals['writeLocalArtifacts'] }, 'writeLocalArtifacts').mockImplementation(() => {});
-    spyOn(orchestrator as object as { publishArtifactsIfNeeded: AgentRunInternals['publishArtifactsIfNeeded'] }, 'publishArtifactsIfNeeded').mockResolvedValue({
+    spyOn(
+      orchestrator as object as {
+        submitContributionPullRequestIfPossible: AgentRunInternals['submitContributionPullRequestIfPossible'];
+      },
+      'submitContributionPullRequestIfPossible',
+    ).mockResolvedValue({
+      branchName: 'openmeta/agent-3014',
+      url: 'https://github.com/Wei-Shaw/sub2api/pull/3015',
+      number: 3015,
+      changedFiles: ['src/openai.ts'],
+      validationResults: [],
+    });
+    spyOn(
+      orchestrator as object as { prepareLocalArtifactPaths: AgentRunInternals['prepareLocalArtifactPaths'] },
+      'prepareLocalArtifactPaths',
+    ).mockReturnValue(artifacts);
+    spyOn(
+      orchestrator as object as { writeLocalArtifacts: AgentRunInternals['writeLocalArtifacts'] },
+      'writeLocalArtifacts',
+    ).mockImplementation(() => {});
+    spyOn(
+      orchestrator as object as { publishArtifactsIfNeeded: AgentRunInternals['publishArtifactsIfNeeded'] },
+      'publishArtifactsIfNeeded',
+    ).mockResolvedValue({
       published: false,
     });
     spyOn(inboxService, 'saveItem').mockReturnValue([createInboxItem()]);
@@ -359,11 +444,13 @@ describe('AgentOrchestrator run flow', () => {
     });
     expect(loadRankedIssuesSpy).not.toHaveBeenCalled();
     expect(promptForIssueSpy).not.toHaveBeenCalled();
-    expect(showResultSpy).toHaveBeenCalledWith(expect.objectContaining({
-      issue,
-      pullRequestUrl: 'https://github.com/Wei-Shaw/sub2api/pull/3015',
-      changedFiles: ['src/openai.ts'],
-    }));
+    expect(showResultSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue,
+        pullRequestUrl: 'https://github.com/Wei-Shaw/sub2api/pull/3015',
+        changedFiles: ['src/openai.ts'],
+      }),
+    );
   });
 
   test('keeps the run in review mode when patch and PR drafts require review', async () => {
@@ -375,18 +462,28 @@ describe('AgentOrchestrator run flow', () => {
     });
     const patchDraft = createPatchDraft({ goal: 'Needs review goal' });
     const prDraft = createPullRequestDraft({ title: 'Needs review title' });
-    const reviewNoticeSpy = spyOn(orchestrator as object as { showStructuredReviewNotice: AgentRunInternals['showStructuredReviewNotice'] }, 'showStructuredReviewNotice')
-      .mockImplementation(() => {});
-    const generateConcretePatchSpy = spyOn(orchestrator as object as { generateConcretePatch: AgentRunInternals['generateConcretePatch'] }, 'generateConcretePatch')
-      .mockResolvedValue({
-        changedFiles: [],
-        validationResults: [],
-        reviewRequired: false,
-      });
+    const reviewNoticeSpy = spyOn(
+      orchestrator as object as { showStructuredReviewNotice: AgentRunInternals['showStructuredReviewNotice'] },
+      'showStructuredReviewNotice',
+    ).mockImplementation(() => {});
+    const generateConcretePatchSpy = spyOn(
+      orchestrator as object as { generateConcretePatch: AgentRunInternals['generateConcretePatch'] },
+      'generateConcretePatch',
+    ).mockResolvedValue({
+      changedFiles: [],
+      validationResults: [],
+      reviewRequired: false,
+    });
 
     spyOn(infra.configService, 'get').mockResolvedValue(createConfig());
-    spyOn(orchestrator as object as { initializeClients: AgentRunInternals['initializeClients'] }, 'initializeClients').mockResolvedValue(undefined);
-    spyOn(orchestrator as object as { promptForIssue: AgentRunInternals['promptForIssue'] }, 'promptForIssue').mockResolvedValue(issue);
+    spyOn(
+      orchestrator as object as { initializeClients: AgentRunInternals['initializeClients'] },
+      'initializeClients',
+    ).mockResolvedValue(undefined);
+    spyOn(
+      orchestrator as object as { promptForIssue: AgentRunInternals['promptForIssue'] },
+      'promptForIssue',
+    ).mockResolvedValue(issue);
     spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([issue]);
     spyOn(memoryService, 'load').mockReturnValue(memory);
     spyOn(workspaceService, 'prepareWorkspace').mockResolvedValue(workspace);
@@ -406,14 +503,27 @@ describe('AgentOrchestrator run flow', () => {
     spyOn(contentService, 'formatPatchDraftMarkdown').mockReturnValue('# Patch');
     spyOn(contentService, 'formatPullRequestDraftMarkdown').mockReturnValue('# PR');
     spyOn(contentService, 'formatContributionDossier').mockReturnValue('# Dossier');
-    spyOn(orchestrator as object as { submitContributionPullRequestIfPossible: AgentRunInternals['submitContributionPullRequestIfPossible'] }, 'submitContributionPullRequestIfPossible')
-      .mockResolvedValue({
-        changedFiles: [],
-        validationResults: [],
-      });
-    spyOn(orchestrator as object as { prepareLocalArtifactPaths: AgentRunInternals['prepareLocalArtifactPaths'] }, 'prepareLocalArtifactPaths').mockReturnValue(createArtifacts());
-    spyOn(orchestrator as object as { writeLocalArtifacts: AgentRunInternals['writeLocalArtifacts'] }, 'writeLocalArtifacts').mockImplementation(() => {});
-    spyOn(orchestrator as object as { publishArtifactsIfNeeded: AgentRunInternals['publishArtifactsIfNeeded'] }, 'publishArtifactsIfNeeded').mockResolvedValue({
+    spyOn(
+      orchestrator as object as {
+        submitContributionPullRequestIfPossible: AgentRunInternals['submitContributionPullRequestIfPossible'];
+      },
+      'submitContributionPullRequestIfPossible',
+    ).mockResolvedValue({
+      changedFiles: [],
+      validationResults: [],
+    });
+    spyOn(
+      orchestrator as object as { prepareLocalArtifactPaths: AgentRunInternals['prepareLocalArtifactPaths'] },
+      'prepareLocalArtifactPaths',
+    ).mockReturnValue(createArtifacts());
+    spyOn(
+      orchestrator as object as { writeLocalArtifacts: AgentRunInternals['writeLocalArtifacts'] },
+      'writeLocalArtifacts',
+    ).mockImplementation(() => {});
+    spyOn(
+      orchestrator as object as { publishArtifactsIfNeeded: AgentRunInternals['publishArtifactsIfNeeded'] },
+      'publishArtifactsIfNeeded',
+    ).mockResolvedValue({
       published: false,
     });
     spyOn(inboxService, 'saveItem').mockReturnValue([createInboxItem()]);
@@ -423,16 +533,21 @@ describe('AgentOrchestrator run flow', () => {
     spyOn(proofOfWorkService, 'record').mockReturnValue([createProofRecord()]);
     spyOn(memoryService, 'renderMarkdown').mockReturnValue('# Memory');
     const recordOutcomeSpy = spyOn(memoryService, 'recordOutcome').mockReturnValue(memory);
-    const showResultSpy = spyOn(orchestrator as object as { showResult: AgentRunInternals['showResult'] }, 'showResult').mockImplementation(() => {});
+    const showResultSpy = spyOn(
+      orchestrator as object as { showResult: AgentRunInternals['showResult'] },
+      'showResult',
+    ).mockImplementation(() => {});
 
     await orchestrator.run();
 
     expect(generateConcretePatchSpy).not.toHaveBeenCalled();
     expect(reviewNoticeSpy).toHaveBeenCalledTimes(2);
-    expect(recordOutcomeSpy).toHaveBeenCalledWith(expect.objectContaining({
-      published: false,
-      reviewRequired: true,
-    }));
+    expect(recordOutcomeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        published: false,
+        reviewRequired: true,
+      }),
+    );
     expect(showResultSpy).toHaveBeenCalled();
   });
 });
@@ -467,15 +582,24 @@ describe('AnalyzeOrchestrator run flow', () => {
       patchDraftPath: '/tmp/openmeta/artifacts/analyze/patch-draft.md',
       prDraftPath: '/tmp/openmeta/artifacts/analyze/pr-draft.md',
     };
-    const writeArtifactsSpy = spyOn(orchestrator as object as { writeLocalArtifacts: AnalyzeRunInternals['writeLocalArtifacts'] }, 'writeLocalArtifacts')
-      .mockImplementation(() => {});
-    const showResultSpy = spyOn(orchestrator as object as { showResult: AnalyzeRunInternals['showResult'] }, 'showResult')
-      .mockImplementation(() => {});
-    const promptForSuggestionSpy = spyOn(orchestrator as object as { promptForSuggestion: AnalyzeRunInternals['promptForSuggestion'] }, 'promptForSuggestion')
-      .mockResolvedValue(lowerSuggestion);
+    const writeArtifactsSpy = spyOn(
+      orchestrator as object as { writeLocalArtifacts: AnalyzeRunInternals['writeLocalArtifacts'] },
+      'writeLocalArtifacts',
+    ).mockImplementation(() => {});
+    const showResultSpy = spyOn(
+      orchestrator as object as { showResult: AnalyzeRunInternals['showResult'] },
+      'showResult',
+    ).mockImplementation(() => {});
+    const promptForSuggestionSpy = spyOn(
+      orchestrator as object as { promptForSuggestion: AnalyzeRunInternals['promptForSuggestion'] },
+      'promptForSuggestion',
+    ).mockResolvedValue(lowerSuggestion);
 
     spyOn(infra.configService, 'get').mockResolvedValue(config);
-    spyOn(orchestrator as object as { initializeClients: AnalyzeRunInternals['initializeClients'] }, 'initializeClients').mockResolvedValue(undefined);
+    spyOn(
+      orchestrator as object as { initializeClients: AnalyzeRunInternals['initializeClients'] },
+      'initializeClients',
+    ).mockResolvedValue(undefined);
     spyOn(memoryService, 'load').mockReturnValue(memory);
     spyOn(workspaceService, 'prepareRepositoryWorkspace').mockResolvedValue(workspace);
     spyOn(llmService, 'analyzeRepository').mockResolvedValue({
@@ -499,13 +623,21 @@ describe('AnalyzeOrchestrator run flow', () => {
     spyOn(contentService, 'formatRepositoryAnalysisMarkdown').mockReturnValue('# Repository Analysis');
     spyOn(contentService, 'formatPatchDraftMarkdown').mockReturnValue('# Patch');
     spyOn(contentService, 'formatPullRequestDraftMarkdown').mockReturnValue('# PR');
-    spyOn(orchestrator as object as { prepareArtifactPaths: AnalyzeRunInternals['prepareArtifactPaths'] }, 'prepareArtifactPaths')
-      .mockReturnValue(artifacts);
+    spyOn(
+      orchestrator as object as { prepareArtifactPaths: AnalyzeRunInternals['prepareArtifactPaths'] },
+      'prepareArtifactPaths',
+    ).mockReturnValue(artifacts);
 
     await orchestrator.run({ repo: 'https://github.com/acme/demo', headless: true });
 
     expect(promptForSuggestionSpy).not.toHaveBeenCalled();
-    expect(workspaceService.prepareRepositoryWorkspace).toHaveBeenCalledWith('acme/demo', memory, false, 'headless', undefined);
+    expect(workspaceService.prepareRepositoryWorkspace).toHaveBeenCalledWith(
+      'acme/demo',
+      memory,
+      false,
+      'headless',
+      undefined,
+    );
     expect(llmService.generatePatchDraft).toHaveBeenCalledWith(
       expect.objectContaining({
         repoFullName: 'acme/demo',
@@ -524,11 +656,13 @@ describe('AnalyzeOrchestrator run flow', () => {
       patchDraftMarkdown: '# Patch',
       prDraftMarkdown: '# PR',
     });
-    expect(showResultSpy).toHaveBeenCalledWith(expect.objectContaining({
-      repoFullName: 'acme/demo',
-      selectedSuggestion: topSuggestion,
-      artifacts,
-    }));
+    expect(showResultSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoFullName: 'acme/demo',
+        selectedSuggestion: topSuggestion,
+        artifacts,
+      }),
+    );
   });
 
   test('passes repoPath through repository analysis workflow', async () => {
@@ -548,7 +682,10 @@ describe('AnalyzeOrchestrator run flow', () => {
     const prDraft = createPullRequestDraft();
 
     spyOn(infra.configService, 'get').mockResolvedValue(config);
-    spyOn(orchestrator as object as { initializeClients: AnalyzeRunInternals['initializeClients'] }, 'initializeClients').mockResolvedValue(undefined);
+    spyOn(
+      orchestrator as object as { initializeClients: AnalyzeRunInternals['initializeClients'] },
+      'initializeClients',
+    ).mockResolvedValue(undefined);
     spyOn(memoryService, 'load').mockReturnValue(memory);
     const prepareSpy = spyOn(workspaceService, 'prepareRepositoryWorkspace').mockResolvedValue(workspace);
     spyOn(llmService, 'analyzeRepository').mockResolvedValue({
@@ -572,17 +709,22 @@ describe('AnalyzeOrchestrator run flow', () => {
     spyOn(contentService, 'formatRepositoryAnalysisMarkdown').mockReturnValue('# Repository Analysis');
     spyOn(contentService, 'formatPatchDraftMarkdown').mockReturnValue('# Patch');
     spyOn(contentService, 'formatPullRequestDraftMarkdown').mockReturnValue('# PR');
-    spyOn(orchestrator as object as { prepareArtifactPaths: AnalyzeRunInternals['prepareArtifactPaths'] }, 'prepareArtifactPaths')
-      .mockReturnValue({
-        artifactDir: '/tmp/openmeta/artifacts/analyze',
-        analysisPath: '/tmp/openmeta/artifacts/analyze/repository-analysis.md',
-        patchDraftPath: '/tmp/openmeta/artifacts/analyze/patch-draft.md',
-        prDraftPath: '/tmp/openmeta/artifacts/analyze/pr-draft.md',
-      });
-    spyOn(orchestrator as object as { writeLocalArtifacts: AnalyzeRunInternals['writeLocalArtifacts'] }, 'writeLocalArtifacts')
-      .mockImplementation(() => {});
-    spyOn(orchestrator as object as { showResult: AnalyzeRunInternals['showResult'] }, 'showResult')
-      .mockImplementation(() => {});
+    spyOn(
+      orchestrator as object as { prepareArtifactPaths: AnalyzeRunInternals['prepareArtifactPaths'] },
+      'prepareArtifactPaths',
+    ).mockReturnValue({
+      artifactDir: '/tmp/openmeta/artifacts/analyze',
+      analysisPath: '/tmp/openmeta/artifacts/analyze/repository-analysis.md',
+      patchDraftPath: '/tmp/openmeta/artifacts/analyze/patch-draft.md',
+      prDraftPath: '/tmp/openmeta/artifacts/analyze/pr-draft.md',
+    });
+    spyOn(
+      orchestrator as object as { writeLocalArtifacts: AnalyzeRunInternals['writeLocalArtifacts'] },
+      'writeLocalArtifacts',
+    ).mockImplementation(() => {});
+    spyOn(orchestrator as object as { showResult: AnalyzeRunInternals['showResult'] }, 'showResult').mockImplementation(
+      () => {},
+    );
 
     await orchestrator.run({
       repo: 'acme/demo',

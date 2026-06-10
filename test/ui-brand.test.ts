@@ -9,7 +9,10 @@ describe('ui brand wordmark', () => {
  | | | | |_) |  _| |  \| | |\/| |  _|   | | / _ \  
  | |_| |  __/| |___| |\  | |  | | |___  | |/ ___ \ 
   \___/|_|   |_____|_| \_|_|  |_|_____| |_/_/   \_\
-`.slice(1).trimEnd().split('\n');
+`
+      .slice(1)
+      .trimEnd()
+      .split('\n');
 
     expect(getOpenMetaWordmarkLines()).toEqual(expected);
   });

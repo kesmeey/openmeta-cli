@@ -1,11 +1,28 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import { runInMachineContext } from '../src/infra/execution-context.js';
 import * as infra from '../src/infra/index.js';
+import type { MachineAgentResult } from '../src/orchestration/agent.js';
 import { AgentOrchestrator } from '../src/orchestration/agent.js';
 import { AnalyzeOrchestrator } from '../src/orchestration/analyze.js';
-import { runInMachineContext } from '../src/infra/execution-context.js';
-import { contentService, inboxService, issueRankingService, llmService, memoryService, proofOfWorkService, workspaceService } from '../src/services/index.js';
-import type { MachineAgentResult } from '../src/orchestration/agent.js';
-import { createInboxItem, createMemory, createPatchDraft, createProofRecord, createPullRequestDraft, createRankedIssue, createRepositorySuggestion, createWorkspace } from './helpers/factories.js';
+import {
+  contentService,
+  inboxService,
+  issueRankingService,
+  llmService,
+  memoryService,
+  proofOfWorkService,
+  workspaceService,
+} from '../src/services/index.js';
+import {
+  createInboxItem,
+  createMemory,
+  createPatchDraft,
+  createProofRecord,
+  createPullRequestDraft,
+  createRankedIssue,
+  createRepositorySuggestion,
+  createWorkspace,
+} from './helpers/factories.js';
 
 interface AgentMachineInternals {
   validateConfig(config: unknown, options?: unknown): Promise<void>;
@@ -116,9 +133,11 @@ function muteUi(): void {
   spyOn(infra.ui, 'emptyState').mockImplementation(() => {});
   spyOn(infra.ui, 'banner').mockImplementation(() => {});
   spyOn(infra.ui, 'timeline').mockImplementation(() => {});
-  spyOn(infra.ui, 'task').mockImplementation(async (_options, task) => task({
-    setMessage() {},
-  } as never));
+  spyOn(infra.ui, 'task').mockImplementation(async (_options, task) =>
+    task({
+      setMessage() {},
+    } as never),
+  );
 }
 
 beforeEach(() => {
@@ -182,11 +201,13 @@ describe('machine flow result builders', () => {
     spyOn(contentService, 'formatPatchDraftMarkdown').mockReturnValue('# Patch');
     spyOn(contentService, 'formatPullRequestDraftMarkdown').mockReturnValue('# PR');
 
-    await runInMachineContext(() => orchestrator.runMachine({
-      repo: 'acme/demo',
-      headless: true,
-      dryRun: true,
-    }));
+    await runInMachineContext(() =>
+      orchestrator.runMachine({
+        repo: 'acme/demo',
+        headless: true,
+        dryRun: true,
+      }),
+    );
 
     const combined = stderrWrites.join('');
     expect(combined).toContain('--repo-path <local-path>');
@@ -219,8 +240,12 @@ describe('machine flow result builders', () => {
     const config = createConfig();
     const issue = createRankedIssue();
     const orchestrator = new AgentOrchestrator();
-    const validateSpy = spyOn(orchestrator as AgentOrchestrator, 'validateConfig' as never).mockResolvedValue(undefined);
-    const initializeSpy = spyOn(orchestrator as AgentOrchestrator, 'initializeClients' as never).mockResolvedValue(undefined);
+    const validateSpy = spyOn(orchestrator as AgentOrchestrator, 'validateConfig' as never).mockResolvedValue(
+      undefined,
+    );
+    const initializeSpy = spyOn(orchestrator as AgentOrchestrator, 'initializeClients' as never).mockResolvedValue(
+      undefined,
+    );
 
     spyOn(infra.configService, 'get').mockResolvedValue(config);
     spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([issue]);
@@ -243,9 +268,11 @@ describe('machine flow result builders', () => {
     const result = await orchestrator.scoutMachine({ localOnly: true });
 
     expect(result.opportunities).toEqual([]);
-    expect(result.emptyExplanation).toEqual(expect.objectContaining({
-      title: 'No issues cleared the current filters',
-    }));
+    expect(result.emptyExplanation).toEqual(
+      expect.objectContaining({
+        title: 'No issues cleared the current filters',
+      }),
+    );
     expect(result.emptyExplanation?.detail).toContain('75/100 threshold');
     expect(result.emptyExplanation?.suggestions[0]).toContain('Lower automation.minMatchScore');
     expect(result.nextActions).toEqual(['broaden_profile_filters']);
@@ -442,11 +469,13 @@ describe('machine flow result builders', () => {
     spyOn(memoryService, 'renderMarkdown').mockReturnValue('# Memory');
     const recordOutcomeSpy = spyOn(memoryService, 'recordOutcome').mockReturnValue(memory);
 
-    const result = await runInMachineContext(() => orchestrator.runMachine({
-      issue: 'https://github.com/acme/demo/issues/42',
-      draftOnly: true,
-      localArtifactsOnly: true,
-    }));
+    const result = await runInMachineContext(() =>
+      orchestrator.runMachine({
+        issue: 'https://github.com/acme/demo/issues/42',
+        draftOnly: true,
+        localArtifactsOnly: true,
+      }),
+    );
 
     expect(result.executionOutcome).toBe('local_artifacts_written');
     expect(result.repoMutated).toBe(false);

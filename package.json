@@ -24,13 +24,19 @@
     "build": "bun build --target=bun --outfile=bin/openmeta.js ./src/cli.ts",
     "dev": "bun run ./src/cli.ts",
     "start": "bun run ./src/cli.ts",
+    "lint": "biome lint --max-diagnostics=1000 src test index.ts package.json tsconfig.json",
+    "format": "biome check --write --linter-enabled=false src test index.ts package.json tsconfig.json",
+    "format:check": "biome check --linter-enabled=false src test index.ts package.json tsconfig.json",
+    "check": "biome check --linter-enabled=false src test index.ts package.json tsconfig.json",
+    "ci:biome": "biome ci --linter-enabled=false src test index.ts package.json tsconfig.json",
     "typecheck": "tsgo --noEmit",
     "test": "bun test"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.4.16",
     "@types/bun": "latest",
     "@types/crypto-js": "^4.2.2",
-    "@typescript/native-preview": "^7.0.0-dev"
+    "@typescript/native-preview": "^7.0.0-dev.20260608.1"
   },
   "dependencies": {
     "@clack/prompts": "^1.2.0",

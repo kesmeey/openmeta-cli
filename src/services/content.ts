@@ -1,15 +1,15 @@
 import type { PatchDraft, PullRequestDraft, RepositoryImprovementSuggestion } from '../contracts/index.js';
+import { getLocalDateStamp } from '../infra/date.js';
 import type {
   ContentType,
   ContributionInboxItem,
   GeneratedContent,
+  MatchedIssue,
   ProofOfWorkRecord,
   RankedIssue,
   RepoMemory,
   RepoWorkspaceContext,
-  MatchedIssue,
 } from '../types/index.js';
-import { getLocalDateStamp } from '../infra/date.js';
 
 export class ContentService {
   generateResearchNote(issues: MatchedIssue[], reportContent: string): GeneratedContent {
@@ -84,13 +84,13 @@ export class ContentService {
       '',
       '## Proposed Changes',
       '',
-      ...draft.proposedChanges.flatMap((change) => ([
+      ...draft.proposedChanges.flatMap((change) => [
         `### ${change.title}`,
         '',
         change.details,
         ...(change.files.length > 0 ? ['', `Files: ${change.files.join(', ')}`] : []),
         '',
-      ])),
+      ]),
       '## Risks',
       '',
       ...(draft.risks.length > 0 ? draft.risks.map((risk) => `- ${risk}`) : ['- None']),
@@ -128,11 +128,7 @@ export class ContentService {
   }
 
   formatPullRequestDraftMarkdown(draft: PullRequestDraft): string {
-    return [
-      `Title: ${draft.title}`,
-      '',
-      this.formatPullRequestDraftBody(draft),
-    ].join('\n');
+    return [`Title: ${draft.title}`, '', this.formatPullRequestDraftBody(draft)].join('\n');
   }
 
   formatRepositoryAnalysisMarkdown(
@@ -162,12 +158,7 @@ export class ContentService {
     ];
 
     if (selectedSuggestion) {
-      lines.push(
-        '## Selected Suggestion',
-        '',
-        ...this.formatRepositorySuggestionMarkdown(selectedSuggestion),
-        '',
-      );
+      lines.push('## Selected Suggestion', '', ...this.formatRepositorySuggestionMarkdown(selectedSuggestion), '');
     }
 
     lines.push(
@@ -175,11 +166,11 @@ export class ContentService {
       '',
       ...(suggestions.length > 0
         ? suggestions.flatMap((suggestion) => [
-          `### ${suggestion.title}`,
-          '',
-          ...this.formatRepositorySuggestionMarkdown(suggestion),
-          '',
-        ])
+            `### ${suggestion.title}`,
+            '',
+            ...this.formatRepositorySuggestionMarkdown(suggestion),
+            '',
+          ])
         : ['- No repository suggestions were generated.', '']),
       `_Generated at ${new Date().toISOString()}_`,
       '',
@@ -206,7 +197,9 @@ export class ContentService {
       ...suggestion.proposedChanges.map((change) => `- ${change}`),
       '',
       'Validation Plan:',
-      ...(suggestion.validationPlan.length > 0 ? suggestion.validationPlan.map((step) => `- ${step}`) : ['- Not specified']),
+      ...(suggestion.validationPlan.length > 0
+        ? suggestion.validationPlan.map((step) => `- ${step}`)
+        : ['- Not specified']),
       '',
       'Risks:',
       ...(suggestion.risks.length > 0 ? suggestion.risks.map((risk) => `- ${risk}`) : ['- None']),
@@ -257,20 +250,29 @@ export class ContentService {
       '',
       '## Detected Test Commands',
       '',
-      ...(workspace.testCommands.length > 0 ? workspace.testCommands.map((item) => `- \`${item.command}\` | ${item.reason} | ${item.source}`) : ['- None detected']),
+      ...(workspace.testCommands.length > 0
+        ? workspace.testCommands.map((item) => `- \`${item.command}\` | ${item.reason} | ${item.source}`)
+        : ['- None detected']),
       '',
       '## Runnable Validation Commands',
       '',
-      ...(workspace.validationCommands.length > 0 ? workspace.validationCommands.map((item) => `- \`${item.command}\` | ${item.source}`) : ['- None selected']),
+      ...(workspace.validationCommands.length > 0
+        ? workspace.validationCommands.map((item) => `- \`${item.command}\` | ${item.source}`)
+        : ['- None selected']),
       '',
       '## Validation Safety Notes',
       '',
-      ...(workspace.validationWarnings.length > 0 ? workspace.validationWarnings.map((warning) => `- ${warning}`) : ['- None']),
+      ...(workspace.validationWarnings.length > 0
+        ? workspace.validationWarnings.map((warning) => `- ${warning}`)
+        : ['- None']),
       '',
       '## Baseline Test Results',
       '',
       ...(workspace.testResults.length > 0
-        ? workspace.testResults.map((result) => `- \`${result.command}\` | ${result.passed ? 'passed' : `failed (${result.exitCode ?? 'n/a'})`}`)
+        ? workspace.testResults.map(
+            (result) =>
+              `- \`${result.command}\` | ${result.passed ? 'passed' : `failed (${result.exitCode ?? 'n/a'})`}`,
+          )
         : ['- Not executed']),
       '',
       '## Repo Memory',
@@ -299,7 +301,10 @@ export class ContentService {
       '# Contribution Inbox',
       '',
       ...(items.length > 0
-        ? items.map((item) => `- [${item.status.toUpperCase()}] ${item.repoFullName}#${item.issueNumber} | overall ${item.overallScore} | ${item.summary}`)
+        ? items.map(
+            (item) =>
+              `- [${item.status.toUpperCase()}] ${item.repoFullName}#${item.issueNumber} | overall ${item.overallScore} | ${item.summary}`,
+          )
         : ['- Inbox is empty']),
       '',
     ];
@@ -312,7 +317,12 @@ export class ContentService {
       '# Proof of Work',
       '',
       ...(records.length > 0
-        ? records.slice(0, 20).map((record) => `- ${record.repoFullName}#${record.issueNumber} | overall ${record.overallScore} | published=${record.published}`)
+        ? records
+            .slice(0, 20)
+            .map(
+              (record) =>
+                `- ${record.repoFullName}#${record.issueNumber} | overall ${record.overallScore} | published=${record.published}`,
+            )
         : ['- No activity recorded']),
       '',
     ];

@@ -9,9 +9,9 @@ export async function runCommand(
   const shouldRecordRun = options.recordRun ?? true;
   const run = shouldRecordRun
     ? runHistoryService.start({
-      commandName,
-      args: process.argv.slice(2),
-    })
+        commandName,
+        args: process.argv.slice(2),
+      })
     : null;
 
   try {

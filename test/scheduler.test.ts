@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
 import { SchedulerService } from '../src/services/scheduler.js';
 import type { AppConfig } from '../src/types/index.js';
 
@@ -65,7 +65,7 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       skipIfAlreadyGeneratedToday: true,
     },
     scoring: {
-      weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.30, impact: 0.20, riskPenalty: 0.35 },
+      weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.3, impact: 0.2, riskPenalty: 0.35 },
       overallWeights: { technicalMatch: 0.45, opportunityScore: 0.55 },
       preset: 'balanced',
     },
@@ -138,7 +138,8 @@ describe('SchedulerService', () => {
       expect(result).toEqual({
         provider: 'manual',
         status: 'manual',
-        detail: 'Automatic scheduling is not supported on this platform. Use your system scheduler to run OpenMeta agent in headless mode.',
+        detail:
+          'Automatic scheduling is not supported on this platform. Use your system scheduler to run OpenMeta agent in headless mode.',
         command: "'/usr/bin/node' '/tmp/openmeta-cli.js' 'agent' '--headless' '--scheduler-run'",
       });
     } finally {
@@ -168,29 +169,26 @@ describe('SchedulerService', () => {
           '15 7 * * * /usr/bin/true',
         ].join('\n'),
       });
-      scheduler.runCommand = (
-        _command: string,
-        _args: string[],
-        _allowFailure: boolean = false,
-        input?: string,
-      ) => {
+      scheduler.runCommand = (_command: string, _args: string[], _allowFailure: boolean = false, input?: string) => {
         appliedCrontab = input || '';
         return { success: true };
       };
 
-      const result = await scheduler.sync(createConfig({
-        automation: {
-          ...createConfig().automation,
-          scheduleTime: '18:05',
-        },
-      }));
+      const result = await scheduler.sync(
+        createConfig({
+          automation: {
+            ...createConfig().automation,
+            scheduleTime: '18:05',
+          },
+        }),
+      );
 
       expect(result.status).toBe('installed');
       expect(appliedCrontab).toContain('MAILTO=dev@example.com');
       expect(appliedCrontab).toContain('15 7 * * * /usr/bin/true');
-      expect(appliedCrontab).toContain("5 18 * * *");
+      expect(appliedCrontab).toContain('5 18 * * *');
       expect(appliedCrontab).toContain("'agent' '--headless' '--scheduler-run'");
-      expect(appliedCrontab).not.toContain("/tmp/old.js");
+      expect(appliedCrontab).not.toContain('/tmp/old.js');
     } finally {
       scheduler.detectProvider = originalDetectProvider;
       scheduler.getSchedulerContext = originalGetSchedulerContext;
@@ -215,22 +213,19 @@ describe('SchedulerService', () => {
           '15 7 * * * /usr/bin/true',
         ].join('\n'),
       });
-      scheduler.runCommand = (
-        _command: string,
-        _args: string[],
-        _allowFailure: boolean = false,
-        input?: string,
-      ) => {
+      scheduler.runCommand = (_command: string, _args: string[], _allowFailure: boolean = false, input?: string) => {
         appliedCrontab = input || '';
         return { success: true };
       };
 
-      const result = await scheduler.sync(createConfig({
-        automation: {
-          ...createConfig().automation,
-          enabled: false,
-        },
-      }));
+      const result = await scheduler.sync(
+        createConfig({
+          automation: {
+            ...createConfig().automation,
+            enabled: false,
+          },
+        }),
+      );
 
       expect(result).toEqual({
         provider: 'cron',

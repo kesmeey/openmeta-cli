@@ -1,10 +1,10 @@
-import { Octokit } from '@octokit/rest';
 import type { RestEndpointMethodTypes } from '@octokit/plugin-rest-endpoint-methods';
+import { Octokit } from '@octokit/rest';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import type { GitHubIssue } from '../types/index.js';
 import { ensureDirectory, getOpenMetaStateDir, parseGitHubRepoFullName } from '../infra/index.js';
 import { logger } from '../infra/logger.js';
+import type { GitHubIssue } from '../types/index.js';
 
 const FILTER_LABEL_GROUPS = [
   ['good first issue', 'good-first-issue'],
@@ -29,8 +29,7 @@ const RATE_LIMIT_RETRY_FALLBACK_DELAY_MS = 10_000;
 const MAX_ISSUES_PER_REPO = 3;
 const MIN_REPO_STARS = 50;
 
-type SearchIssueItem =
-  RestEndpointMethodTypes['search']['issuesAndPullRequests']['response']['data']['items'][number];
+type SearchIssueItem = RestEndpointMethodTypes['search']['issuesAndPullRequests']['response']['data']['items'][number];
 
 interface RepoIdentifier {
   owner: string;
@@ -158,7 +157,9 @@ export class GitHubService {
           const failure = this.describeSearchFailure(error);
           failures.push({ labelGroup: [repoFullName], ...failure });
           logger.debug(`Issue search failed for repository "${repoFullName}". ${failure.reason}`);
-          options.onStatus?.('GitHub search is being stubborn, but OpenMeta is still pulling together the best issue set it can.');
+          options.onStatus?.(
+            'GitHub search is being stubborn, but OpenMeta is still pulling together the best issue set it can.',
+          );
         }
       } else {
         const searchGroups: Array<{ query: string; label: string }> = [];
@@ -195,7 +196,9 @@ export class GitHubService {
             const failure = this.describeSearchFailure(error);
             failures.push({ labelGroup: [group.label], ...failure });
             logger.debug(`Issue search failed for "${group.label}". ${failure.reason}`);
-            options.onStatus?.('GitHub search is being stubborn, but OpenMeta is still pulling together the best issue set it can.');
+            options.onStatus?.(
+              'GitHub search is being stubborn, but OpenMeta is still pulling together the best issue set it can.',
+            );
           }
         }
       }
@@ -204,9 +207,7 @@ export class GitHubService {
         throw new Error(this.buildDiscoveryFailureMessage(failures));
       }
 
-      candidateItems.sort((left, right) =>
-        new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
-      );
+      candidateItems.sort((left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime());
 
       for (const item of candidateItems) {
         const repoId = this.parseRepositoryUrl(item.repository_url);
@@ -234,9 +235,11 @@ export class GitHubService {
         });
       }
 
-      logger.success(repoFullName
-        ? `Fetched ${issues.length} open issues from ${repoFullName}`
-        : `Fetched ${issues.length} trending issues from ${FILTER_LABEL_GROUPS.length} label searches`);
+      logger.success(
+        repoFullName
+          ? `Fetched ${issues.length} open issues from ${repoFullName}`
+          : `Fetched ${issues.length} trending issues from ${FILTER_LABEL_GROUPS.length} label searches`,
+      );
       this.saveCachedIssues(issues, repoFullName);
     } catch (error) {
       if (error instanceof Error && error.message.startsWith('GitHub issue discovery')) {
@@ -269,7 +272,9 @@ export class GitHubService {
     const item = response.data as SearchIssueItem;
 
     if (!this.shouldIncludeIssue(item)) {
-      throw new Error(`${normalizedRepo}#${issueNumber} cannot be handled automatically because it is a pull request, locked, assigned, or carries an action-blocking label.`);
+      throw new Error(
+        `${normalizedRepo}#${issueNumber} cannot be handled automatically because it is a pull request, locked, assigned, or carries an action-blocking label.`,
+      );
     }
 
     const repoId = this.parseRepositoryUrl(item.repository_url || `https://api.github.com/repos/${normalizedRepo}`);
@@ -317,13 +322,17 @@ export class GitHubService {
   }
 
   private buildTechSearchQuery(techTerms: string[]): string {
-    const joinedLabels = FILTER_LABEL_GROUPS
-      .flat()
+    const joinedLabels = FILTER_LABEL_GROUPS.flat()
       .map((label) => `label:"${label}"`)
       .join(' OR ');
     const joinedTech = techTerms
       .slice(0, 3)
-      .map((term) => term.toLowerCase().replace(/[^a-z0-9+#]/g, ' ').trim())
+      .map((term) =>
+        term
+          .toLowerCase()
+          .replace(/[^a-z0-9+#]/g, ' ')
+          .trim(),
+      )
       .filter(Boolean)
       .join(' OR ');
     if (!joinedTech) {
@@ -356,19 +365,16 @@ export class GitHubService {
   private hasActionBlockingLabel(labels: string[]): boolean {
     const normalizedLabels = labels.map((label) => this.normalizeLabel(label));
 
-    return normalizedLabels.some((label) => ACTION_BLOCKING_LABELS.some((blockedLabel) =>
-      label === blockedLabel ||
-      label.endsWith(` ${blockedLabel}`) ||
-      label.includes(`${blockedLabel}:`)
-    ));
+    return normalizedLabels.some((label) =>
+      ACTION_BLOCKING_LABELS.some(
+        (blockedLabel) =>
+          label === blockedLabel || label.endsWith(` ${blockedLabel}`) || label.includes(`${blockedLabel}:`),
+      ),
+    );
   }
 
   private normalizeLabel(label: string): string {
-    return label
-      .toLowerCase()
-      .replace(/[-_]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    return label.toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   private parseRepositoryUrl(repositoryUrl: string): RepoIdentifier {
@@ -404,10 +410,7 @@ export class GitHubService {
     };
   }
 
-  private async fetchRepoMetadata(
-    repoId: RepoIdentifier,
-    cache: Map<string, RepoMetadata>,
-  ): Promise<RepoMetadata> {
+  private async fetchRepoMetadata(repoId: RepoIdentifier, cache: Map<string, RepoMetadata>): Promise<RepoMetadata> {
     const cached = cache.get(repoId.fullName);
     if (cached) {
       return cached;
@@ -556,14 +559,18 @@ export class GitHubService {
               }
             }
 
-            logger.debug(`Rate limited during pagination (attempt ${attempt}/${MAX_PAGINATION_RETRIES}). Retrying in ${Math.round(delayMs / 1000)}s...`);
+            logger.debug(
+              `Rate limited during pagination (attempt ${attempt}/${MAX_PAGINATION_RETRIES}). Retrying in ${Math.round(delayMs / 1000)}s...`,
+            );
             onStatus?.('GitHub is throttling search requests. Holding briefly and trying again...');
             await this.delay(delayMs);
             continue;
           } else if (items.length > 0) {
             // MAX_PAGINATION_RETRIES exhausted, but we have some data. Graceful return.
             logger.debug(`Pagination retries exhausted. Yielding ${items.length} items collected so far.`);
-            onStatus?.('GitHub kept throttling search requests, so OpenMeta is continuing with the strongest issues already collected.');
+            onStatus?.(
+              'GitHub kept throttling search requests, so OpenMeta is continuing with the strongest issues already collected.',
+            );
             return items;
           }
         }
@@ -594,9 +601,7 @@ export class GitHubService {
   }
 
   private getCachePath(repoFullName?: string): string {
-    const cacheFile = repoFullName
-      ? `github-issues-${repoFullName.replace(/\//g, '__')}.json`
-      : 'github-issues.json';
+    const cacheFile = repoFullName ? `github-issues-${repoFullName.replace(/\//g, '__')}.json` : 'github-issues.json';
     return join(ensureDirectory(join(getOpenMetaStateDir(), 'cache')), cacheFile);
   }
 

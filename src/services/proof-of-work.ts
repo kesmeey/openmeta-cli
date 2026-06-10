@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { ensureDirectory, getOpenMetaStateDir, getLocalDateStamp } from '../infra/index.js';
+import { ensureDirectory, getLocalDateStamp, getOpenMetaStateDir } from '../infra/index.js';
 import type { ProofOfWorkRecord } from '../types/index.js';
 
 interface ProofOfWorkState {
@@ -71,7 +71,12 @@ export class ProofOfWorkService {
       '## Recent Activity',
       '',
       ...(records.slice(0, 10).length > 0
-        ? records.slice(0, 10).map((record) => `- ${record.repoFullName}#${record.issueNumber} | overall ${record.overallScore} | published=${record.published}${record.pullRequestUrl ? ` | pr=${record.pullRequestUrl}` : ''}`)
+        ? records
+            .slice(0, 10)
+            .map(
+              (record) =>
+                `- ${record.repoFullName}#${record.issueNumber} | overall ${record.overallScore} | published=${record.published}${record.pullRequestUrl ? ` | pr=${record.pullRequestUrl}` : ''}`,
+            )
         : ['- No activity recorded']),
       '',
       `_Snapshot Date: ${getLocalDateStamp()}_`,

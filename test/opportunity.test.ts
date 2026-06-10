@@ -32,9 +32,7 @@ describe('opportunityService', () => {
   });
 
   test('includes technical fit in the opportunity breakdown', () => {
-    const ranked = opportunityService.rankIssues([
-      createMatchedIssue({ matchScore: 73 }),
-    ]);
+    const ranked = opportunityService.rankIssues([createMatchedIssue({ matchScore: 73 })]);
 
     expect(ranked[0]?.opportunity.breakdown.technicalFit).toBe(73);
   });
@@ -65,6 +63,8 @@ describe('opportunityService', () => {
 
     expect(ranked[0]?.number).toBe(10);
     expect(ranked[0]?.opportunity.overallScore).toBeGreaterThan(ranked[1]?.opportunity.overallScore ?? 0);
-    expect(ranked[1]?.opportunity.breakdown.onboardingClarity).toBeLessThan(ranked[0]?.opportunity.breakdown.onboardingClarity ?? 0);
+    expect(ranked[1]?.opportunity.breakdown.onboardingClarity).toBeLessThan(
+      ranked[0]?.opportunity.breakdown.onboardingClarity ?? 0,
+    );
   });
 });

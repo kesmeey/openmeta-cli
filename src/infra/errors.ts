@@ -1,8 +1,4 @@
-const PROMPT_ABORT_ERROR_NAMES = new Set([
-  'ExitPromptError',
-  'AbortPromptError',
-  'PromptAbortError',
-]);
+const PROMPT_ABORT_ERROR_NAMES = new Set(['ExitPromptError', 'AbortPromptError', 'PromptAbortError']);
 
 export class UserCancelledError extends Error {
   constructor(message: string = 'User cancelled the current command.') {
@@ -27,10 +23,7 @@ export function isUserCancelledError(error: unknown): boolean {
   return error instanceof UserCancelledError || isPromptAbortError(error);
 }
 
-export function getErrorMessage(
-  error: unknown,
-  fallback: string = 'Something went wrong. Please try again.',
-): string {
+export function getErrorMessage(error: unknown, fallback: string = 'Something went wrong. Please try again.'): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message.trim();
   }

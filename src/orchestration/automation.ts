@@ -7,7 +7,9 @@ export class AutomationOrchestrator {
 
     ui.hero({
       label: 'OpenMeta Automation',
-      title: config.automation.enabled ? 'The unattended loop is warm and waiting' : 'The unattended loop is quiet, waiting for your signal',
+      title: config.automation.enabled
+        ? 'The unattended loop is warm and waiting'
+        : 'The unattended loop is quiet, waiting for your signal',
       subtitle: config.automation.enabled
         ? 'A persistent scheduler is already holding the line for headless agent runs.'
         : 'No persistent scheduler is active right now. Manual runs are still one clean command away.',
@@ -45,7 +47,11 @@ export class AutomationOrchestrator {
       { label: 'Schedule', value: `${config.automation.scheduleTime} (${config.automation.timezone})`, tone: 'info' },
       { label: 'Scheduler', value: config.automation.scheduler, tone: 'info' },
       { label: 'Headless agent', value: 'yes', tone: 'warning' },
-      { label: 'Skip if already generated today', value: config.automation.skipIfAlreadyGeneratedToday ? 'yes' : 'no', tone: 'info' },
+      {
+        label: 'Skip if already generated today',
+        value: config.automation.skipIfAlreadyGeneratedToday ? 'yes' : 'no',
+        tone: 'info',
+      },
       { label: 'Disable command', value: 'openmeta automation disable', tone: 'muted' },
     ]);
 
@@ -79,7 +85,8 @@ export class AutomationOrchestrator {
     ui.callout({
       label: 'OpenMeta Automation',
       title: 'Persistent automation warning',
-      subtitle: 'Enabling this installs a long-running scheduled task that will execute the OpenMeta agent every day until disabled.',
+      subtitle:
+        'Enabling this installs a long-running scheduled task that will execute the OpenMeta agent every day until disabled.',
       lines: [
         `Schedule: ${config.automation.scheduleTime} (${config.automation.timezone})`,
         'Scheduled runs use headless agent mode and can commit and push generated artifacts without interactive review.',

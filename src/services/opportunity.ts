@@ -87,11 +87,9 @@ function computeImpactScore(issue: MatchedIssue): number {
 }
 
 function summarizeOpportunity(opportunity: OpportunityAnalysis): string {
-  const strongest = Object.entries(opportunity.breakdown)
-    .sort((left, right) => right[1] - left[1])[0];
+  const strongest = Object.entries(opportunity.breakdown).sort((left, right) => right[1] - left[1])[0];
 
-  const weakest = Object.entries(opportunity.breakdown)
-    .sort((left, right) => left[1] - right[1])[0];
+  const weakest = Object.entries(opportunity.breakdown).sort((left, right) => left[1] - right[1])[0];
 
   if (!strongest || !weakest) {
     return 'Opportunity score is based on repository fit and issue freshness.';
@@ -101,17 +99,16 @@ function summarizeOpportunity(opportunity: OpportunityAnalysis): string {
 }
 
 function normalizeLabel(label: string): string {
-  return label
-    .toLowerCase()
-    .replace(/[-_]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return label.toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function hasRiskLabel(issue: MatchedIssue): boolean {
   return issue.labels
     .map(normalizeLabel)
-    .some((label) => ACTION_RISK_LABELS.has(label) || [...ACTION_RISK_LABELS].some((riskLabel) => label.endsWith(` ${riskLabel}`)));
+    .some(
+      (label) =>
+        ACTION_RISK_LABELS.has(label) || [...ACTION_RISK_LABELS].some((riskLabel) => label.endsWith(` ${riskLabel}`)),
+    );
 }
 
 function hasReferencedPath(content: string): boolean {
@@ -160,10 +157,10 @@ export class OpportunityService {
         const impact = computeImpactScore(issue);
         const opportunityScore = clampScore(
           freshness * w.freshness +
-          onboardingClarity * w.onboardingClarity +
-          mergePotential * w.mergePotential +
-          impact * w.impact -
-          riskPenalty * w.riskPenalty,
+            onboardingClarity * w.onboardingClarity +
+            mergePotential * w.mergePotential +
+            impact * w.impact -
+            riskPenalty * w.riskPenalty,
         );
         const overallScore = clampScore(issue.matchScore * ow.technicalMatch + opportunityScore * ow.opportunityScore);
 

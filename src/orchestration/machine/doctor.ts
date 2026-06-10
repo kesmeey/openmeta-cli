@@ -6,10 +6,12 @@ export class MachineDoctorOrchestrator {
   async execute(): Promise<void> {
     try {
       const report = await doctorOrchestrator.inspect();
-      writeMachinePayload(buildMachineEnvelope('machine doctor', {
-        ...report,
-        nextActions: report.ready ? [] : ['run_machine_config_set'],
-      }));
+      writeMachinePayload(
+        buildMachineEnvelope('machine doctor', {
+          ...report,
+          nextActions: report.ready ? [] : ['run_machine_config_set'],
+        }),
+      );
     } catch (error) {
       const mapped = mapMachineError('machine doctor', error);
       writeMachinePayload(mapped.payload);

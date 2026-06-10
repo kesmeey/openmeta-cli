@@ -1,32 +1,32 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
+import { join } from 'path';
 import { AgentOrchestrator } from '../src/orchestration/agent.js';
 import { llmService, workspaceService } from '../src/services/index.js';
-import {
-  createPatchDraft,
-  createRankedIssue,
-  createWorkspace,
-} from './helpers/factories.js';
+import { createPatchDraft, createRankedIssue, createWorkspace } from './helpers/factories.js';
 
 interface AgentInternals {
   buildImplementationWorkspace(
     workspace: ReturnType<typeof createWorkspace>,
     patchDraft: ReturnType<typeof createPatchDraft>,
   ): ReturnType<typeof createWorkspace>;
-  formatValidationSummary(results: Array<{
-    command: string;
-    exitCode: number | null;
-    passed: boolean;
-    output: string;
-  }>): string;
-  hasBlockingValidationFailures(results: Array<{
-    command: string;
-    exitCode: number | null;
-    passed: boolean;
-    output: string;
-  }>): boolean;
+  formatValidationSummary(
+    results: Array<{
+      command: string;
+      exitCode: number | null;
+      passed: boolean;
+      output: string;
+    }>,
+  ): string;
+  hasBlockingValidationFailures(
+    results: Array<{
+      command: string;
+      exitCode: number | null;
+      passed: boolean;
+      output: string;
+    }>,
+  ): boolean;
   generateConcretePatch(
     issue: ReturnType<typeof createRankedIssue>,
     workspace: ReturnType<typeof createWorkspace>,
@@ -75,8 +75,16 @@ describe('AgentOrchestrator patch workflow', () => {
     const workspacePath = mkdtempSync(join(tmpdir(), 'openmeta-agent-context-'));
     tempDirs.push(workspacePath);
     mkdirSync(join(workspacePath, 'src', 'components'), { recursive: true });
-    writeFileSync(join(workspacePath, 'src', 'components', 'IconButton.tsx'), 'export function IconButton() { return null; }\n', 'utf-8');
-    writeFileSync(join(workspacePath, 'src', 'components', 'IconButton.test.tsx'), 'test("icon button", () => {});\n', 'utf-8');
+    writeFileSync(
+      join(workspacePath, 'src', 'components', 'IconButton.tsx'),
+      'export function IconButton() { return null; }\n',
+      'utf-8',
+    );
+    writeFileSync(
+      join(workspacePath, 'src', 'components', 'IconButton.test.tsx'),
+      'test("icon button", () => {});\n',
+      'utf-8',
+    );
 
     const orchestrator = new AgentOrchestrator() as unknown as AgentInternals;
     const workspace = orchestrator.buildImplementationWorkspace(
@@ -126,23 +134,27 @@ describe('AgentOrchestrator patch workflow', () => {
   test('treats infrastructure validation failures as non-blocking', () => {
     const orchestrator = new AgentOrchestrator() as unknown as AgentInternals;
 
-    expect(orchestrator.hasBlockingValidationFailures([
-      {
-        command: 'npm run lint',
-        exitCode: 127,
-        passed: false,
-        output: 'command not found',
-      },
-    ])).toBe(false);
+    expect(
+      orchestrator.hasBlockingValidationFailures([
+        {
+          command: 'npm run lint',
+          exitCode: 127,
+          passed: false,
+          output: 'command not found',
+        },
+      ]),
+    ).toBe(false);
 
-    expect(orchestrator.hasBlockingValidationFailures([
-      {
-        command: 'pytest',
-        exitCode: 1,
-        passed: false,
-        output: 'AssertionError',
-      },
-    ])).toBe(true);
+    expect(
+      orchestrator.hasBlockingValidationFailures([
+        {
+          command: 'pytest',
+          exitCode: 1,
+          passed: false,
+          output: 'AssertionError',
+        },
+      ]),
+    ).toBe(true);
   });
 
   test('attempts a single validation repair pass after blocking failures', async () => {

@@ -61,9 +61,7 @@ describe('agent contracts', () => {
   test('requires structured patch drafts with target files and change steps', () => {
     const parsed = PatchDraftSchema.parse({
       goal: 'Add accessible labels to icon-only buttons',
-      targetFiles: [
-        { path: 'src/components/IconButton.tsx', reason: 'Primary component logic' },
-      ],
+      targetFiles: [{ path: 'src/components/IconButton.tsx', reason: 'Primary component logic' }],
       proposedChanges: [
         {
           title: 'Update component props',
@@ -137,9 +135,7 @@ describe('agent contracts', () => {
       status: 'success',
       data: {
         goal: 'Add accessible labels to icon-only buttons',
-        targetFiles: [
-          { path: 'src/components/IconButton.tsx', reason: 'Primary component logic' },
-        ],
+        targetFiles: [{ path: 'src/components/IconButton.tsx', reason: 'Primary component logic' }],
         proposedChanges: [
           {
             title: 'Update component props',

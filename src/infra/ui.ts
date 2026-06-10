@@ -1,4 +1,3 @@
-export { ui } from './ui/index.js';
 export type {
   CardOptions,
   KeyValueItem,
@@ -10,3 +9,4 @@ export type {
   TimelineItem,
   Tone,
 } from './ui/index.js';
+export { ui } from './ui/index.js';

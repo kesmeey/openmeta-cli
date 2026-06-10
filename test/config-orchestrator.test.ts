@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
 import { ConfigService, configService } from '../src/infra/config.js';
 import { ConfigOrchestrator } from '../src/orchestration/config.js';
 import type { AppConfig } from '../src/types/index.js';
@@ -55,9 +55,7 @@ describe('ConfigOrchestrator', () => {
     const loaded = await configService.get();
     expect(loaded.llm.reasoningEffort).toBe('high');
 
-    await expect(orchestrator.set('llm.reasoningEffort', 'unsupported')).rejects.toThrow(
-      'llm.reasoningEffort must be',
-    );
+    await expect(orchestrator.set('llm.reasoningEffort', 'unsupported')).rejects.toThrow('llm.reasoningEffort must be');
   });
 
   test('sets and validates LLM streaming from dotted config keys', async () => {
@@ -69,9 +67,7 @@ describe('ConfigOrchestrator', () => {
     await orchestrator.set('llm.stream', 'false');
     expect((await configService.get()).llm.stream).toBe(false);
 
-    await expect(orchestrator.set('llm.stream', 'maybe')).rejects.toThrow(
-      'llm.stream must be a boolean value.',
-    );
+    await expect(orchestrator.set('llm.stream', 'maybe')).rejects.toThrow('llm.stream must be a boolean value.');
   });
 
   test('returns a masked machine config snapshot', async () => {

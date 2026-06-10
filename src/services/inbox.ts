@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { ensureDirectory, getOpenMetaStateDir, getLocalDateStamp } from '../infra/index.js';
+import { ensureDirectory, getLocalDateStamp, getOpenMetaStateDir } from '../infra/index.js';
 import type { ContributionInboxItem } from '../types/index.js';
 
 interface InboxState {
@@ -35,10 +35,9 @@ export class InboxService {
 
   saveItem(item: ContributionInboxItem): ContributionInboxItem[] {
     const state = this.load();
-    const items = [
-      item,
-      ...state.items.filter((entry) => entry.id !== item.id),
-    ].sort((left, right) => right.overallScore - left.overallScore);
+    const items = [item, ...state.items.filter((entry) => entry.id !== item.id)].sort(
+      (left, right) => right.overallScore - left.overallScore,
+    );
 
     const targetPath = this.getInboxPath();
     const tmpPath = `${targetPath}.tmp.${process.pid}`;
@@ -61,7 +60,10 @@ export class InboxService {
       '# Contribution Inbox',
       '',
       ...(items.length > 0
-        ? items.map((item) => `- [${item.status.toUpperCase()}] ${item.repoFullName}#${item.issueNumber} | overall ${item.overallScore} | ${item.summary}`)
+        ? items.map(
+            (item) =>
+              `- [${item.status.toUpperCase()}] ${item.repoFullName}#${item.issueNumber} | overall ${item.overallScore} | ${item.summary}`,
+          )
         : ['- Inbox is empty']),
       '',
       `_Snapshot Date: ${getLocalDateStamp()}_`,

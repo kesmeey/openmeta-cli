@@ -1,6 +1,13 @@
-import { configService, DEFAULT_LLM_REASONING_EFFORT, LLM_REASONING_EFFORTS, parseLLMReasoningEffort, prompt, selectPrompt, ui } from '../infra/index.js';
-import { LLM_PROVIDER_PRESETS, findLLMProviderPreset } from '../services/index.js';
-import { llmService } from '../services/index.js';
+import {
+  configService,
+  DEFAULT_LLM_REASONING_EFFORT,
+  LLM_REASONING_EFFORTS,
+  parseLLMReasoningEffort,
+  prompt,
+  selectPrompt,
+  ui,
+} from '../infra/index.js';
+import { findLLMProviderPreset, LLM_PROVIDER_PRESETS, llmService } from '../services/index.js';
 import type { AppConfig, LLMProvider, LLMProviderProfile, LLMReasoningEffort } from '../types/index.js';
 
 interface ProviderAddOptions {
@@ -59,7 +66,12 @@ function parseHeaderInput(value: string): Record<string, string> {
     return {};
   }
 
-  return parseHeaders(trimmed.split(',').map((item) => item.trim()).filter(Boolean));
+  return parseHeaders(
+    trimmed
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
 }
 
 function parseProvider(value: string | undefined): LLMProvider {
@@ -138,9 +150,7 @@ export class ProviderOrchestrator {
       label: 'OpenMeta Provider',
       title: names.length > 0 ? 'Saved provider profiles are ready to switch' : 'No provider profiles saved yet',
       subtitle: 'Provider profiles let you keep multiple LLM backends available without repeating config set commands.',
-      lines: [
-        `Active profile: ${config.llm.activeProfile || '(none)'}`,
-      ],
+      lines: [`Active profile: ${config.llm.activeProfile || '(none)'}`],
       tone: names.length > 0 ? 'accent' : 'warning',
     });
 
@@ -153,24 +163,24 @@ export class ProviderOrchestrator {
       return;
     }
 
-    ui.recordList('Provider profiles', names.map((name) => {
-      const profile = profiles[name]!;
-      return {
-        title: name,
-        subtitle: `${profile.provider} / ${profile.modelName}`,
-        meta: [
-          profile.apiBaseUrl,
-          config.llm.activeProfile === name ? 'active' : 'saved',
-        ],
-        lines: [
-          `API key: ${ui.maskSecret(profile.apiKey)}`,
-          `Reasoning effort: ${profile.reasoningEffort || DEFAULT_LLM_REASONING_EFFORT}`,
-          `Streaming: ${profile.stream ? 'yes' : 'no'}`,
-          `Extra headers: ${Object.keys(profile.apiHeaders || {}).length > 0 ? JSON.stringify(profile.apiHeaders) : '(none)'}`,
-        ],
-        tone: config.llm.activeProfile === name ? 'success' : 'info',
-      };
-    }));
+    ui.recordList(
+      'Provider profiles',
+      names.map((name) => {
+        const profile = profiles[name]!;
+        return {
+          title: name,
+          subtitle: `${profile.provider} / ${profile.modelName}`,
+          meta: [profile.apiBaseUrl, config.llm.activeProfile === name ? 'active' : 'saved'],
+          lines: [
+            `API key: ${ui.maskSecret(profile.apiKey)}`,
+            `Reasoning effort: ${profile.reasoningEffort || DEFAULT_LLM_REASONING_EFFORT}`,
+            `Streaming: ${profile.stream ? 'yes' : 'no'}`,
+            `Extra headers: ${Object.keys(profile.apiHeaders || {}).length > 0 ? JSON.stringify(profile.apiHeaders) : '(none)'}`,
+          ],
+          tone: config.llm.activeProfile === name ? 'success' : 'info',
+        };
+      }),
+    );
   }
 
   async save(nameInput: string): Promise<void> {
@@ -200,7 +210,9 @@ export class ProviderOrchestrator {
     ui.card({
       label: 'OpenMeta Provider',
       title: 'Provider profile saved',
-      subtitle: options.validate ? 'The profile was saved. Run provider use to activate and validate it.' : 'The profile is available for fast switching.',
+      subtitle: options.validate
+        ? 'The profile was saved. Run provider use to activate and validate it.'
+        : 'The profile is available for fast switching.',
       lines: [
         `Profile: ${result.profileName}`,
         `Provider: ${result.provider}`,
@@ -220,7 +232,8 @@ export class ProviderOrchestrator {
     ui.hero({
       label: 'OpenMeta Provider',
       title: 'Configure a provider profile without memorizing flags',
-      subtitle: 'Save one LLM backend as a named profile, then switch to it whenever OpenMeta needs a different model route.',
+      subtitle:
+        'Save one LLM backend as a named profile, then switch to it whenever OpenMeta needs a different model route.',
       lines: [
         `Current provider: ${config.llm.provider} / ${config.llm.modelName || '(no model)'}`,
         `Active profile: ${config.llm.activeProfile || '(none)'}`,
@@ -472,11 +485,10 @@ export class ProviderOrchestrator {
     ui.card({
       label: 'OpenMeta Provider',
       title: 'Provider profile removed',
-      subtitle: activeProfile ? 'The active provider remained unchanged.' : 'The removed profile was active, so no profile is now marked active.',
-      lines: [
-        `Profile: ${name}`,
-        `Active profile: ${activeProfile || '(none)'}`,
-      ],
+      subtitle: activeProfile
+        ? 'The active provider remained unchanged.'
+        : 'The removed profile was active, so no profile is now marked active.',
+      lines: [`Profile: ${name}`, `Active profile: ${activeProfile || '(none)'}`],
       tone: 'success',
     });
   }
@@ -484,16 +496,16 @@ export class ProviderOrchestrator {
   private normalizeProfileName(nameInput: string): string {
     const name = nameInput.trim();
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(name)) {
-      throw new Error('Provider profile name must start with a letter or number and may contain letters, numbers, dots, underscores, or dashes.');
+      throw new Error(
+        'Provider profile name must start with a letter or number and may contain letters, numbers, dots, underscores, or dashes.',
+      );
     }
 
     return name;
   }
 
   private getProviderDefault(provider: LLMProvider): LLMProvider {
-    return LLM_PROVIDER_PRESETS.some((option) => option.value === provider)
-      ? provider
-      : 'custom';
+    return LLM_PROVIDER_PRESETS.some((option) => option.value === provider) ? provider : 'custom';
   }
 
   private suggestProfileName(config: AppConfig): string {
@@ -502,11 +514,13 @@ export class ProviderOrchestrator {
     }
 
     const model = config.llm.modelName || 'default';
-    return `${config.llm.provider}-${model}`
-      .toLowerCase()
-      .replace(/[^a-z0-9._-]+/g, '-')
-      .replace(/^[^a-z0-9]+/, '')
-      .slice(0, 64) || 'default';
+    return (
+      `${config.llm.provider}-${model}`
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]+/g, '-')
+        .replace(/^[^a-z0-9]+/, '')
+        .slice(0, 64) || 'default'
+    );
   }
 
   private formatHeaderInput(headers: Record<string, string>): string {

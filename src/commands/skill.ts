@@ -1,5 +1,12 @@
 import { Command } from 'commander';
-import { doctorSkillBundle, getSkillsRoot, getSupportedSkillHosts, installSkillBundle, renderSkillBundle, type SkillHost } from '../orchestration/skill/index.js';
+import {
+  doctorSkillBundle,
+  getSkillsRoot,
+  getSupportedSkillHosts,
+  installSkillBundle,
+  renderSkillBundle,
+  type SkillHost,
+} from '../orchestration/skill/index.js';
 
 function parseHost(value: string): SkillHost {
   if (value === 'claude-code' || value === 'openclaw') {
@@ -10,18 +17,22 @@ function parseHost(value: string): SkillHost {
 }
 
 export function registerSkillCommand(program: Command): void {
-  const skill = program
-    .command('skill')
-    .description('Host-generated OpenMeta skill bundle management');
+  const skill = program.command('skill').description('Host-generated OpenMeta skill bundle management');
 
   skill
     .command('list')
     .description('List supported skill hosts and the canonical asset source path')
     .action(() => {
-      process.stdout.write(`${JSON.stringify({
-        hosts: getSupportedSkillHosts(),
-        sourceRoot: getSkillsRoot(),
-      }, null, 2)}\n`);
+      process.stdout.write(
+        `${JSON.stringify(
+          {
+            hosts: getSupportedSkillHosts(),
+            sourceRoot: getSkillsRoot(),
+          },
+          null,
+          2,
+        )}\n`,
+      );
     });
 
   skill

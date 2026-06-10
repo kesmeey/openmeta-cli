@@ -4,10 +4,10 @@ const trimmedString = z.string().trim();
 const nonEmptyTrimmedString = trimmedString.min(1);
 const StructuredOutputStatusSchema = z.enum(['success', 'needs_review']);
 
-function createStructuredOutputEnvelopeSchema<
-  TKind extends string,
-  TDataSchema extends z.ZodTypeAny,
->(kind: TKind, dataSchema: TDataSchema) {
+function createStructuredOutputEnvelopeSchema<TKind extends string, TDataSchema extends z.ZodTypeAny>(
+  kind: TKind,
+  dataSchema: TDataSchema,
+) {
   return z.object({
     version: z.literal('1'),
     kind: z.literal(kind),
@@ -29,18 +29,21 @@ export const IssueMatchSchema = z.object({
 });
 
 export const IssueMatchListSchema = z.object({
-  matches: z.array(IssueMatchSchema).default([]).transform((matches) => {
-    const dedupedMatches = new Map<string, IssueMatch>();
+  matches: z
+    .array(IssueMatchSchema)
+    .default([])
+    .transform((matches) => {
+      const dedupedMatches = new Map<string, IssueMatch>();
 
-    for (const match of matches) {
-      const existing = dedupedMatches.get(match.issueReference);
-      if (!existing || match.score >= existing.score) {
-        dedupedMatches.set(match.issueReference, match);
+      for (const match of matches) {
+        const existing = dedupedMatches.get(match.issueReference);
+        if (!existing || match.score >= existing.score) {
+          dedupedMatches.set(match.issueReference, match);
+        }
       }
-    }
 
-    return [...dedupedMatches.values()].sort((left, right) => right.score - left.score);
-  }),
+      return [...dedupedMatches.values()].sort((left, right) => right.score - left.score);
+    }),
 });
 
 export const PatchTargetFileSchema = z.object({
@@ -70,15 +73,18 @@ export const GeneratedFileChangeSchema = z.object({
 
 export const ImplementationDraftSchema = z.object({
   summary: trimmedString.default(''),
-  fileChanges: z.array(GeneratedFileChangeSchema).default([]).transform((fileChanges) => {
-    const dedupedChanges = new Map<string, GeneratedFileChange>();
+  fileChanges: z
+    .array(GeneratedFileChangeSchema)
+    .default([])
+    .transform((fileChanges) => {
+      const dedupedChanges = new Map<string, GeneratedFileChange>();
 
-    for (const change of fileChanges) {
-      dedupedChanges.set(change.path, change);
-    }
+      for (const change of fileChanges) {
+        dedupedChanges.set(change.path, change);
+      }
 
-    return [...dedupedChanges.values()];
-  }),
+      return [...dedupedChanges.values()];
+    }),
 });
 
 export const PullRequestDraftSchema = z.object({
@@ -103,25 +109,40 @@ export const RepositoryImprovementSuggestionSchema = z.object({
 });
 
 export const RepositorySuggestionListSchema = z.object({
-  suggestions: z.array(RepositoryImprovementSuggestionSchema).default([]).transform((suggestions) => {
-    const dedupedSuggestions = new Map<string, RepositoryImprovementSuggestion>();
+  suggestions: z
+    .array(RepositoryImprovementSuggestionSchema)
+    .default([])
+    .transform((suggestions) => {
+      const dedupedSuggestions = new Map<string, RepositoryImprovementSuggestion>();
 
-    for (const suggestion of suggestions) {
-      const existing = dedupedSuggestions.get(suggestion.id);
-      if (!existing || suggestion.prPotentialScore >= existing.prPotentialScore) {
-        dedupedSuggestions.set(suggestion.id, suggestion);
+      for (const suggestion of suggestions) {
+        const existing = dedupedSuggestions.get(suggestion.id);
+        if (!existing || suggestion.prPotentialScore >= existing.prPotentialScore) {
+          dedupedSuggestions.set(suggestion.id, suggestion);
+        }
       }
-    }
 
-    return [...dedupedSuggestions.values()].sort((left, right) => right.prPotentialScore - left.prPotentialScore);
-  }),
+      return [...dedupedSuggestions.values()].sort((left, right) => right.prPotentialScore - left.prPotentialScore);
+    }),
 });
 
-export const IssueMatchListEnvelopeSchema = createStructuredOutputEnvelopeSchema('issue_match_list', IssueMatchListSchema);
+export const IssueMatchListEnvelopeSchema = createStructuredOutputEnvelopeSchema(
+  'issue_match_list',
+  IssueMatchListSchema,
+);
 export const PatchDraftEnvelopeSchema = createStructuredOutputEnvelopeSchema('patch_draft', PatchDraftSchema);
-export const ImplementationDraftEnvelopeSchema = createStructuredOutputEnvelopeSchema('implementation_draft', ImplementationDraftSchema);
-export const PullRequestDraftEnvelopeSchema = createStructuredOutputEnvelopeSchema('pull_request_draft', PullRequestDraftSchema);
-export const RepositorySuggestionListEnvelopeSchema = createStructuredOutputEnvelopeSchema('repository_suggestion_list', RepositorySuggestionListSchema);
+export const ImplementationDraftEnvelopeSchema = createStructuredOutputEnvelopeSchema(
+  'implementation_draft',
+  ImplementationDraftSchema,
+);
+export const PullRequestDraftEnvelopeSchema = createStructuredOutputEnvelopeSchema(
+  'pull_request_draft',
+  PullRequestDraftSchema,
+);
+export const RepositorySuggestionListEnvelopeSchema = createStructuredOutputEnvelopeSchema(
+  'repository_suggestion_list',
+  RepositorySuggestionListSchema,
+);
 
 export type IssueMatch = z.infer<typeof IssueMatchSchema>;
 export type IssueMatchList = z.infer<typeof IssueMatchListSchema>;

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { ensureDirectory, getOpenMetaStateDir, getLocalDateStamp } from '../infra/index.js';
+import { ensureDirectory, getLocalDateStamp, getOpenMetaStateDir } from '../infra/index.js';
 import type { RankedIssue, RepoMemory, RepoWorkspaceContext, TestResult } from '../types/index.js';
 
 function sanitizeRepoName(repoFullName: string): string {
@@ -146,7 +146,8 @@ export class MemoryService {
   }): RepoMemory {
     const current = this.load(input.issue.repoFullName);
     const now = new Date().toISOString();
-    const validationSucceeded = input.validationResults.length > 0 && input.validationResults.every((result) => result.passed);
+    const validationSucceeded =
+      input.validationResults.length > 0 && input.validationResults.every((result) => result.passed);
     const validationFailed = input.validationResults.some((result) => !result.passed);
     const issueReference = `${input.issue.repoFullName}#${input.issue.number}`;
     const validationSummary = summarizeValidationResults(input.validationResults);
@@ -240,26 +241,37 @@ export class MemoryService {
       '',
       ...(memory.pathSignals.length > 0
         ? memory.pathSignals
-          .slice(0, 10)
-          .map((signal) => `- ${signal.path} | candidate ${signal.candidateCount} | changed ${signal.changedCount} | validation ${signal.successfulValidationCount} | published ${signal.publishedCount}`)
+            .slice(0, 10)
+            .map(
+              (signal) =>
+                `- ${signal.path} | candidate ${signal.candidateCount} | changed ${signal.changedCount} | validation ${signal.successfulValidationCount} | published ${signal.publishedCount}`,
+            )
         : ['- No path history recorded']),
       '',
       '## Detected Test Commands',
       '',
-      ...(memory.detectedTestCommands.length > 0 ? memory.detectedTestCommands.map((command) => `- \`${command}\``) : ['- None detected']),
+      ...(memory.detectedTestCommands.length > 0
+        ? memory.detectedTestCommands.map((command) => `- \`${command}\``)
+        : ['- None detected']),
       '',
       '## Validation Failure Signals',
       '',
       ...(memory.validationSignals.length > 0
         ? memory.validationSignals
-          .slice(0, 10)
-          .map((signal) => `- \`${signal.command}\` | failures ${signal.failureCount} | last exit ${signal.lastExitCode ?? 'n/a'}${signal.sampleOutput ? ` | sample ${signal.sampleOutput}` : ''}`)
+            .slice(0, 10)
+            .map(
+              (signal) =>
+                `- \`${signal.command}\` | failures ${signal.failureCount} | last exit ${signal.lastExitCode ?? 'n/a'}${signal.sampleOutput ? ` | sample ${signal.sampleOutput}` : ''}`,
+            )
         : ['- No validation failures recorded']),
       '',
       '## Recent Issues',
       '',
       ...(memory.recentIssues.length > 0
-        ? memory.recentIssues.map((issue) => `- ${issue.reference} | score ${issue.overallScore} | status ${issue.status} | changed ${issue.changedFiles.length} | published ${issue.published ? 'yes' : 'no'} | validation ${issue.validationSummary}`)
+        ? memory.recentIssues.map(
+            (issue) =>
+              `- ${issue.reference} | score ${issue.overallScore} | status ${issue.status} | changed ${issue.changedFiles.length} | published ${issue.published ? 'yes' : 'no'} | validation ${issue.validationSummary}`,
+          )
         : ['- No issues recorded']),
       '',
       `_Snapshot Date: ${getLocalDateStamp()}_`,
@@ -271,12 +283,14 @@ export class MemoryService {
 
   private derivePreferredPaths(pathSignals: RepoMemory['pathSignals']): string[] {
     return [...pathSignals]
-      .sort((left, right) =>
-        (right.publishedCount - left.publishedCount) ||
-        (right.successfulValidationCount - left.successfulValidationCount) ||
-        (right.changedCount - left.changedCount) ||
-        (right.candidateCount - left.candidateCount) ||
-        right.lastSeenAt.localeCompare(left.lastSeenAt))
+      .sort(
+        (left, right) =>
+          right.publishedCount - left.publishedCount ||
+          right.successfulValidationCount - left.successfulValidationCount ||
+          right.changedCount - left.changedCount ||
+          right.candidateCount - left.candidateCount ||
+          right.lastSeenAt.localeCompare(left.lastSeenAt),
+      )
       .map((signal) => signal.path)
       .slice(0, 12);
   }

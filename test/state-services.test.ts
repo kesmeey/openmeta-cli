@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
 import { ConfigService } from '../src/infra/config.js';
 import { inboxService } from '../src/services/inbox.js';
 import { memoryService } from '../src/services/memory.js';
@@ -82,11 +82,15 @@ describe('stateful services', () => {
 
     rmSync(join(tempRoot, '.config'), { recursive: true, force: true });
     mkdirSync(join(tempRoot, '.config', 'openmeta'), { recursive: true });
-    writeFileSync(configPath, JSON.stringify({
-      github: {
-        username: 'partial-user',
-      },
-    }), 'utf-8');
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        github: {
+          username: 'partial-user',
+        },
+      }),
+      'utf-8',
+    );
 
     const loaded = await service.load();
 
@@ -133,17 +137,21 @@ describe('stateful services', () => {
   test('memory service fills defaults when loading legacy partial state', () => {
     const targetPath = memoryService.getPath('acme/demo');
     mkdirSync(join(tempRoot, '.openmeta', 'repo-memory'), { recursive: true });
-    writeFileSync(targetPath, JSON.stringify({
-      repoFullName: 'acme/demo',
-      recentIssues: [
-        {
-          reference: 'acme/demo#42',
-          title: 'Legacy record',
-          overallScore: 81,
-          generatedAt: '2026-04-10T08:00:00.000Z',
-        },
-      ],
-    }), 'utf-8');
+    writeFileSync(
+      targetPath,
+      JSON.stringify({
+        repoFullName: 'acme/demo',
+        recentIssues: [
+          {
+            reference: 'acme/demo#42',
+            title: 'Legacy record',
+            overallScore: 81,
+            generatedAt: '2026-04-10T08:00:00.000Z',
+          },
+        ],
+      }),
+      'utf-8',
+    );
 
     const loaded = memoryService.load('acme/demo');
 
@@ -180,7 +188,9 @@ describe('stateful services', () => {
 
   test('inbox service deduplicates items and keeps higher scores first', () => {
     inboxService.saveItem(createInboxItem({ id: 'one', overallScore: 70, repoFullName: 'acme/one', issueNumber: 1 }));
-    const items = inboxService.saveItem(createInboxItem({ id: 'two', overallScore: 90, repoFullName: 'acme/two', issueNumber: 2 }));
+    const items = inboxService.saveItem(
+      createInboxItem({ id: 'two', overallScore: 90, repoFullName: 'acme/two', issueNumber: 2 }),
+    );
 
     expect(items).toHaveLength(2);
     expect(items[0]?.id).toBe('two');
@@ -198,13 +208,15 @@ describe('stateful services', () => {
 
   test('proof-of-work service summarizes empty and unpublished activity correctly', () => {
     const emptyMarkdown = proofOfWorkService.renderMarkdown([]);
-    const records = proofOfWorkService.record(createProofRecord({
-      id: 'acme/demo#40@1',
-      repoFullName: 'acme/demo',
-      issueNumber: 40,
-      published: false,
-      pullRequestUrl: undefined,
-    }));
+    const records = proofOfWorkService.record(
+      createProofRecord({
+        id: 'acme/demo#40@1',
+        repoFullName: 'acme/demo',
+        issueNumber: 40,
+        published: false,
+        pullRequestUrl: undefined,
+      }),
+    );
     const markdown = proofOfWorkService.renderMarkdown(records);
 
     expect(emptyMarkdown).toContain('- Total Draft Contributions: 0');

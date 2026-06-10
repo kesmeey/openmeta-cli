@@ -176,6 +176,8 @@ Scout issues
 
 #### 安装
 
+如果你是要本地开发或从源码运行，推荐使用 Bun：
+
 ```bash
 # 1. 安装依赖
 bun install
@@ -189,7 +191,26 @@ bun link
 
 执行 `bun link` 后，`openmeta` 命令即可在任意终端路径下使用。如需取消链接，执行 `bun unlink`。
 
-你也可以通过 `npm link` 或 `npm install -g .` 达到同样效果。
+如果你是普通使用者，更适合直接通过 npm 全局安装：
+
+```bash
+npm install -g openmeta-cli
+```
+
+安装完成后可直接运行：
+
+```bash
+openmeta --help
+openmeta --version
+```
+
+如果你是从当前仓库本地安装，也可以使用：
+
+```bash
+npm link
+# 或
+npm install -g .
+```
 
 #### 验证安装
 
@@ -222,6 +243,43 @@ openmeta config set llm.apiKey <your-api-key>
 
 # 6. 检查本地运行前置条件
 openmeta doctor
+```
+
+### 接入 Claude Code
+
+OpenMeta 已内置 Claude Code skill bundle，可以直接安装到 Claude Code 的默认技能目录。
+
+```bash
+# 1. 确保 openmeta 已安装并可执行
+openmeta --version
+
+# 2. 安装 OpenMeta 的 Claude Code skill
+openmeta skill install --host claude-code
+
+# 3. 检查接入状态
+openmeta skill doctor --host claude-code
+```
+
+默认安装路径：
+
+```text
+~/.claude/skills/openmeta/SKILL.md
+```
+
+如果 `doctor` 返回 `supported: true` 且 `skillFileExists: true`，说明 Claude Code 已能发现这套 OpenMeta skill。
+
+升级 OpenMeta CLI 后，建议重新执行一次：
+
+```bash
+openmeta skill install --host claude-code
+```
+
+如果你希望让 Claude Code 通过结构化命令驱动 OpenMeta，优先使用 `openmeta machine` 命令族，而不是解析面向人的终端文案。例如：
+
+```bash
+openmeta machine doctor
+openmeta machine scout --limit 10
+openmeta machine analyze --repo owner/name --dry-run
 ```
 
 ### 命令一览
@@ -462,6 +520,8 @@ Scout issues
 
 #### Install
 
+If you want to develop locally or run from source, Bun is the recommended path:
+
 ```bash
 # 1. Install dependencies
 bun install
@@ -475,7 +535,26 @@ bun link
 
 After running `bun link`, the `openmeta` command is available in any terminal session. To unlink, run `bun unlink`.
 
-You can also use `npm link` or `npm install -g .` to achieve the same result.
+If you just want to use OpenMeta as a CLI, install it globally with npm:
+
+```bash
+npm install -g openmeta-cli
+```
+
+Then verify the install:
+
+```bash
+openmeta --help
+openmeta --version
+```
+
+If you are installing from this repository checkout, you can also use:
+
+```bash
+npm link
+# or
+npm install -g .
+```
 
 #### Verify
 
@@ -508,6 +587,43 @@ openmeta config set llm.apiKey <your-api-key>
 
 # 6. Check local prerequisites before a full run
 openmeta doctor
+```
+
+### Connect Claude Code
+
+OpenMeta ships with a Claude Code skill bundle that can be installed directly into Claude Code's default skill directory.
+
+```bash
+# 1. Make sure openmeta is installed and on PATH
+openmeta --version
+
+# 2. Install the OpenMeta Claude Code skill bundle
+openmeta skill install --host claude-code
+
+# 3. Verify the integration
+openmeta skill doctor --host claude-code
+```
+
+Default install path:
+
+```text
+~/.claude/skills/openmeta/SKILL.md
+```
+
+If `doctor` reports `supported: true` and `skillFileExists: true`, Claude Code should be able to discover the OpenMeta skill bundle.
+
+After upgrading OpenMeta CLI, reinstall the bundle so Claude Code picks up the latest generated skill file:
+
+```bash
+openmeta skill install --host claude-code
+```
+
+When driving OpenMeta from Claude Code, prefer the structured `openmeta machine` command family instead of scraping human-facing CLI prose. For example:
+
+```bash
+openmeta machine doctor
+openmeta machine scout --limit 10
+openmeta machine analyze --repo owner/name --dry-run
 ```
 
 ### Command Surface

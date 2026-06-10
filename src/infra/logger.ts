@@ -28,9 +28,7 @@ export class Logger {
       debug: chalk.gray('[DEBUG]'),
     };
 
-    const renderedArgs = args
-      .map((arg) => this.renderArg(arg))
-      .filter((arg): arg is string => arg.length > 0);
+    const renderedArgs = args.map((arg) => this.renderArg(arg)).filter((arg): arg is string => arg.length > 0);
 
     const line = [`${chalk.gray(timestamp)} ${format[level]} ${prefix}${message}`, ...renderedArgs]
       .filter(Boolean)

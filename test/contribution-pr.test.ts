@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
+import { join } from 'path';
 import { ContributionPrService, contributionPrService, githubService } from '../src/services/index.js';
 import { createPullRequestDraft, createRankedIssue } from './helpers/factories.js';
 
@@ -143,15 +143,16 @@ describe('ContributionPrService', () => {
     service.initialize({
       rest: {
         repos: {
-          get: async ({ owner }: { owner: string; repo: string }) => owner === 'acme'
-            ? { data: { default_branch: 'main' } }
-            : {
-              data: {
-                fork: true,
-                parent: { full_name: 'acme/demo' },
-                default_branch: 'main',
-              },
-            },
+          get: async ({ owner }: { owner: string; repo: string }) =>
+            owner === 'acme'
+              ? { data: { default_branch: 'main' } }
+              : {
+                  data: {
+                    fork: true,
+                    parent: { full_name: 'acme/demo' },
+                    default_branch: 'main',
+                  },
+                },
           getBranch: async () => ({
             data: {
               commit: {
@@ -209,15 +210,16 @@ describe('ContributionPrService', () => {
     service.initialize({
       rest: {
         repos: {
-          get: async ({ owner }: { owner: string; repo: string }) => owner === 'acme'
-            ? { data: { default_branch: 'main' } }
-            : {
-              data: {
-                fork: true,
-                parent: { full_name: 'acme/demo' },
-                default_branch: 'main',
-              },
-            },
+          get: async ({ owner }: { owner: string; repo: string }) =>
+            owner === 'acme'
+              ? { data: { default_branch: 'main' } }
+              : {
+                  data: {
+                    fork: true,
+                    parent: { full_name: 'acme/demo' },
+                    default_branch: 'main',
+                  },
+                },
           getBranch: async () => ({
             data: {
               commit: {
@@ -277,15 +279,16 @@ describe('ContributionPrService', () => {
     service.initialize({
       rest: {
         repos: {
-          get: async ({ owner }: { owner: string; repo: string }) => owner === 'acme'
-            ? { data: { default_branch: 'main' } }
-            : {
-              data: {
-                fork: true,
-                parent: { full_name: 'acme/demo' },
-                default_branch: 'main',
-              },
-            },
+          get: async ({ owner }: { owner: string; repo: string }) =>
+            owner === 'acme'
+              ? { data: { default_branch: 'main' } }
+              : {
+                  data: {
+                    fork: true,
+                    parent: { full_name: 'acme/demo' },
+                    default_branch: 'main',
+                  },
+                },
           getBranch: async () => ({
             data: {
               commit: {
@@ -346,15 +349,16 @@ describe('ContributionPrService', () => {
     service.initialize({
       rest: {
         repos: {
-          get: async ({ owner }: { owner: string; repo: string }) => owner === 'acme'
-            ? { data: { default_branch: 'main' } }
-            : {
-              data: {
-                fork: true,
-                parent: { full_name: 'acme/demo' },
-                default_branch: 'main',
-              },
-            },
+          get: async ({ owner }: { owner: string; repo: string }) =>
+            owner === 'acme'
+              ? { data: { default_branch: 'main' } }
+              : {
+                  data: {
+                    fork: true,
+                    parent: { full_name: 'acme/demo' },
+                    default_branch: 'main',
+                  },
+                },
           getBranch: async () => ({
             data: {
               commit: {
@@ -385,12 +389,14 @@ describe('ContributionPrService', () => {
     });
 
     try {
-      await expect(service.submitDraftPullRequest({
-        issue: createRankedIssue({ repoFullName: 'acme/demo', number: 9 }),
-        prDraft: createPullRequestDraft(),
-        workspacePath,
-        changedFiles: ['src/app.ts'],
-      })).rejects.toEqual(expect.objectContaining({ status: 500 }));
+      await expect(
+        service.submitDraftPullRequest({
+          issue: createRankedIssue({ repoFullName: 'acme/demo', number: 9 }),
+          prDraft: createPullRequestDraft(),
+          workspacePath,
+          changedFiles: ['src/app.ts'],
+        }),
+      ).rejects.toEqual(expect.objectContaining({ status: 500 }));
     } finally {
       (githubService as unknown as { getUsername: () => string }).getUsername = originalGetUsername;
     }
@@ -399,24 +405,28 @@ describe('ContributionPrService', () => {
   test('fails clearly when the service is not initialized', async () => {
     const service = new ContributionPrService() as unknown as ContributionPrInternals;
 
-    await expect(service.submitDraftPullRequest({
-      issue: createRankedIssue({ repoFullName: 'acme/demo', number: 10 }),
-      prDraft: createPullRequestDraft(),
-      workspacePath: '/tmp/nowhere',
-      changedFiles: ['src/app.ts'],
-    })).rejects.toThrow('GitHub service not initialized');
+    await expect(
+      service.submitDraftPullRequest({
+        issue: createRankedIssue({ repoFullName: 'acme/demo', number: 10 }),
+        prDraft: createPullRequestDraft(),
+        workspacePath: '/tmp/nowhere',
+        changedFiles: ['src/app.ts'],
+      }),
+    ).rejects.toThrow('GitHub service not initialized');
   });
 
   test('rejects invalid issue repository references before making API calls', async () => {
     const service = new ContributionPrService() as unknown as ContributionPrInternals;
     service.initialize({ rest: { repos: {}, pulls: {}, git: {} } });
 
-    await expect(service.submitDraftPullRequest({
-      issue: createRankedIssue({ repoFullName: 'invalid-repo-name' }),
-      prDraft: createPullRequestDraft(),
-      workspacePath: '/tmp/nowhere',
-      changedFiles: ['src/app.ts'],
-    })).rejects.toThrow('Invalid issue repository reference: invalid-repo-name');
+    await expect(
+      service.submitDraftPullRequest({
+        issue: createRankedIssue({ repoFullName: 'invalid-repo-name' }),
+        prDraft: createPullRequestDraft(),
+        workspacePath: '/tmp/nowhere',
+        changedFiles: ['src/app.ts'],
+      }),
+    ).rejects.toThrow('Invalid issue repository reference: invalid-repo-name');
   });
 
   test('rejects an existing repository that is not a fork of the upstream repo', async () => {
@@ -432,15 +442,16 @@ describe('ContributionPrService', () => {
     service.initialize({
       rest: {
         repos: {
-          get: async ({ owner }: { owner: string; repo: string }) => owner === 'acme'
-            ? { data: { default_branch: 'main' } }
-            : {
-              data: {
-                fork: false,
-                parent: { full_name: 'someone/else' },
-                default_branch: 'main',
-              },
-            },
+          get: async ({ owner }: { owner: string; repo: string }) =>
+            owner === 'acme'
+              ? { data: { default_branch: 'main' } }
+              : {
+                  data: {
+                    fork: false,
+                    parent: { full_name: 'someone/else' },
+                    default_branch: 'main',
+                  },
+                },
         },
         pulls: {},
         git: {},
@@ -448,12 +459,14 @@ describe('ContributionPrService', () => {
     });
 
     try {
-      await expect(service.submitDraftPullRequest({
-        issue: createRankedIssue({ repoFullName: 'acme/demo', number: 11 }),
-        prDraft: createPullRequestDraft(),
-        workspacePath,
-        changedFiles: ['src/app.ts'],
-      })).rejects.toThrow('exists but is not a fork of acme/demo');
+      await expect(
+        service.submitDraftPullRequest({
+          issue: createRankedIssue({ repoFullName: 'acme/demo', number: 11 }),
+          prDraft: createPullRequestDraft(),
+          workspacePath,
+          changedFiles: ['src/app.ts'],
+        }),
+      ).rejects.toThrow('exists but is not a fork of acme/demo');
     } finally {
       (githubService as unknown as { getUsername: () => string }).getUsername = originalGetUsername;
     }
@@ -583,12 +596,14 @@ describe('ContributionPrService', () => {
     });
 
     try {
-      await expect(service.submitDraftPullRequest({
-        issue: createRankedIssue({ repoFullName: 'acme/demo', number: 13 }),
-        prDraft: createPullRequestDraft(),
-        workspacePath,
-        changedFiles: ['src/app.ts'],
-      })).rejects.toThrow('Fork octocat/demo was not ready in time.');
+      await expect(
+        service.submitDraftPullRequest({
+          issue: createRankedIssue({ repoFullName: 'acme/demo', number: 13 }),
+          prDraft: createPullRequestDraft(),
+          workspacePath,
+          changedFiles: ['src/app.ts'],
+        }),
+      ).rejects.toThrow('Fork octocat/demo was not ready in time.');
     } finally {
       (githubService as unknown as { getUsername: () => string }).getUsername = originalGetUsername;
       globalThis.setTimeout = originalSetTimeout;

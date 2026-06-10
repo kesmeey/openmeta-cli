@@ -1,6 +1,6 @@
+import { spawnSync } from 'child_process';
 import { existsSync, lstatSync, readlinkSync, realpathSync } from 'fs';
 import { dirname, isAbsolute, join, normalize, resolve } from 'path';
-import { spawnSync } from 'child_process';
 
 export interface BinaryResolution {
   onPath: boolean;
@@ -32,7 +32,10 @@ function classifyBinarySource(
     return 'bun-link';
   }
 
-  if (homeDir && normalizedSymlinkTarget.startsWith(normalize(join(homeDir, '.bun', 'install', 'global', 'node_modules')))) {
+  if (
+    homeDir &&
+    normalizedSymlinkTarget.startsWith(normalize(join(homeDir, '.bun', 'install', 'global', 'node_modules')))
+  ) {
     return 'bun-link';
   }
 
@@ -40,7 +43,10 @@ function classifyBinarySource(
     return 'workspace';
   }
 
-  if (homeDir && normalizedResolvedPath.startsWith(normalize(join(homeDir, '.bun', 'install', 'global', 'node_modules')))) {
+  if (
+    homeDir &&
+    normalizedResolvedPath.startsWith(normalize(join(homeDir, '.bun', 'install', 'global', 'node_modules')))
+  ) {
     return 'bun-link';
   }
 
@@ -83,7 +89,10 @@ export function inspectBinaryOnPath(command: string): BinaryResolution {
       onPath: false,
       command,
       source: 'missing',
-      error: lookup.error?.message || (lookup.stderr || lookup.stdout || '').trim() || `${command} is not available on PATH.`,
+      error:
+        lookup.error?.message ||
+        (lookup.stderr || lookup.stdout || '').trim() ||
+        `${command} is not available on PATH.`,
     };
   }
 

@@ -3,15 +3,18 @@ import { mapMachineError } from './errors.js';
 import { buildMachineEnvelope, writeMachinePayload } from './runtime.js';
 
 export class MachineProviderOrchestrator {
-  async add(name: string, options: {
-    provider?: string;
-    baseUrl?: string;
-    model?: string;
-    apiKey?: string;
-    reasoningEffort?: string;
-    stream?: string;
-    header?: string[];
-  }): Promise<void> {
+  async add(
+    name: string,
+    options: {
+      provider?: string;
+      baseUrl?: string;
+      model?: string;
+      apiKey?: string;
+      reasoningEffort?: string;
+      stream?: string;
+      header?: string[];
+    },
+  ): Promise<void> {
     try {
       const result = await providerOrchestrator.addProfile(name, options);
       writeMachinePayload(buildMachineEnvelope('machine provider add', result));

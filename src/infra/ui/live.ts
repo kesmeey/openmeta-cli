@@ -17,9 +17,10 @@ function resolveHeartbeatMessage(options: TaskOptions, elapsedMs: number): strin
     return null;
   }
 
-  const message = typeof options.heartbeat.message === 'function'
-    ? options.heartbeat.message({ elapsedMs })
-    : options.heartbeat.message;
+  const message =
+    typeof options.heartbeat.message === 'function'
+      ? options.heartbeat.message({ elapsedMs })
+      : options.heartbeat.message;
 
   return message ? renderStepLabel({ ...options, title: message }) : null;
 }

@@ -2,9 +2,28 @@ import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { Command } from 'commander';
 import { registerMachineCommand } from '../src/commands/machine.js';
 import * as infra from '../src/infra/index.js';
-import { agentOrchestrator, analyzeOrchestrator, configOrchestrator, providerOrchestrator } from '../src/orchestration/index.js';
-import { contentService, githubService, issueRankingService, llmService, memoryService, workspaceService } from '../src/services/index.js';
-import { createMemory, createPatchDraft, createPullRequestDraft, createRankedIssue, createRepositorySuggestion, createWorkspace } from './helpers/factories.js';
+import {
+  agentOrchestrator,
+  analyzeOrchestrator,
+  configOrchestrator,
+  providerOrchestrator,
+} from '../src/orchestration/index.js';
+import {
+  contentService,
+  githubService,
+  issueRankingService,
+  llmService,
+  memoryService,
+  workspaceService,
+} from '../src/services/index.js';
+import {
+  createMemory,
+  createPatchDraft,
+  createPullRequestDraft,
+  createRankedIssue,
+  createRepositorySuggestion,
+  createWorkspace,
+} from './helpers/factories.js';
 
 function captureStdout(): string[] {
   const writes: string[] = [];
@@ -51,7 +70,8 @@ describe('machine commands', () => {
 
     const machineCommand = program.commands.find((command) => command.name() === 'machine');
     const help = machineCommand?.helpInformation() ?? '';
-    const analyzeHelp = machineCommand?.commands.find((command) => command.name() === 'analyze')?.helpInformation() ?? '';
+    const analyzeHelp =
+      machineCommand?.commands.find((command) => command.name() === 'analyze')?.helpInformation() ?? '';
     const agentHelp = machineCommand?.commands.find((command) => command.name() === 'agent')?.helpInformation() ?? '';
 
     expect(help).toContain('doctor');
@@ -205,20 +225,23 @@ describe('machine commands', () => {
       validationMessage: 'Validation skipped.',
     });
 
-    await program.parseAsync([
-      'machine',
-      'provider',
-      'add',
-      'machine-add',
-      '--base-url',
-      'https://example.com/v1',
-      '--model',
-      'example-model',
-      '--api-key',
-      'sk-secret',
-      '--header',
-      'X-Test=yes',
-    ], { from: 'user' });
+    await program.parseAsync(
+      [
+        'machine',
+        'provider',
+        'add',
+        'machine-add',
+        '--base-url',
+        'https://example.com/v1',
+        '--model',
+        'example-model',
+        '--api-key',
+        'sk-secret',
+        '--header',
+        'X-Test=yes',
+      ],
+      { from: 'user' },
+    );
 
     const output = JSON.parse(writes.join(''));
     expect(output.command).toBe('machine provider add');
@@ -285,8 +308,14 @@ describe('machine commands', () => {
       scoring: DEFAULT_SCORING,
       commitTemplate: 'feat: {{title}}',
     });
-    spyOn(analyzeOrchestrator as unknown as { validateConfig(config: unknown): Promise<void> }, 'validateConfig').mockResolvedValue(undefined);
-    spyOn(analyzeOrchestrator as unknown as { initializeClients(config: unknown): Promise<void> }, 'initializeClients').mockResolvedValue(undefined);
+    spyOn(
+      analyzeOrchestrator as unknown as { validateConfig(config: unknown): Promise<void> },
+      'validateConfig',
+    ).mockResolvedValue(undefined);
+    spyOn(
+      analyzeOrchestrator as unknown as { initializeClients(config: unknown): Promise<void> },
+      'initializeClients',
+    ).mockResolvedValue(undefined);
     spyOn(memoryService, 'load').mockReturnValue(createMemory({ repoFullName: 'acme/demo' }));
     spyOn(workspaceService, 'prepareRepositoryWorkspace').mockResolvedValue(workspace);
     spyOn(llmService, 'analyzeRepository').mockResolvedValue({
@@ -311,7 +340,19 @@ describe('machine commands', () => {
     spyOn(contentService, 'formatPatchDraftMarkdown').mockReturnValue('# Patch');
     spyOn(contentService, 'formatPullRequestDraftMarkdown').mockReturnValue('# PR');
 
-    await program.parseAsync(['machine', 'analyze', '--repo', 'acme/demo', '--repo-path', '/Users/example/src/demo', '--headless', '--dry-run'], { from: 'user' });
+    await program.parseAsync(
+      [
+        'machine',
+        'analyze',
+        '--repo',
+        'acme/demo',
+        '--repo-path',
+        '/Users/example/src/demo',
+        '--headless',
+        '--dry-run',
+      ],
+      { from: 'user' },
+    );
 
     const output = JSON.parse(writes.join(''));
     expect(output.command).toBe('machine analyze');
@@ -372,7 +413,10 @@ describe('machine commands', () => {
       pullRequestNumber: undefined,
     });
 
-    await program.parseAsync(['machine', 'agent', '--issue', 'https://github.com/acme/demo/issues/42', '--draft-only', '--dry-run'], { from: 'user' });
+    await program.parseAsync(
+      ['machine', 'agent', '--issue', 'https://github.com/acme/demo/issues/42', '--draft-only', '--dry-run'],
+      { from: 'user' },
+    );
 
     const output = JSON.parse(writes.join(''));
     expect(output.command).toBe('machine agent');
@@ -426,19 +470,24 @@ describe('machine commands', () => {
       pullRequestNumber: undefined,
     });
 
-    await program.parseAsync([
-      'machine',
-      'agent',
-      '--issue',
-      'https://github.com/acme/demo/issues/42',
-      '--draft-only',
-      '--local-artifacts-only',
-    ], { from: 'user' });
+    await program.parseAsync(
+      [
+        'machine',
+        'agent',
+        '--issue',
+        'https://github.com/acme/demo/issues/42',
+        '--draft-only',
+        '--local-artifacts-only',
+      ],
+      { from: 'user' },
+    );
 
-    expect(runSpy).toHaveBeenCalledWith(expect.objectContaining({
-      draftOnly: true,
-      localArtifactsOnly: true,
-    }));
+    expect(runSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        draftOnly: true,
+        localArtifactsOnly: true,
+      }),
+    );
   });
 
   test('machine scout suppresses human task output during real machine execution', async () => {

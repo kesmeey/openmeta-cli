@@ -1,17 +1,23 @@
 import { existsSync } from 'fs';
-import type { AppConfig } from '../types/index.js';
-import type { UserProficiency } from '../types/config.types.js';
 import {
-  githubService,
-  llmService,
-  schedulerService,
-  LLM_PROVIDER_PRESETS,
+  configService,
+  DEFAULT_LLM_REASONING_EFFORT,
+  LLM_REASONING_EFFORTS,
+  prompt,
+  selectPrompt,
+  ui,
+} from '../infra/index.js';
+import {
   findLLMProviderPreset,
+  githubService,
+  LLM_PROVIDER_PRESETS,
+  llmService,
   type SchedulerSyncResult,
+  schedulerService,
 } from '../services/index.js';
-import { configService, DEFAULT_LLM_REASONING_EFFORT, LLM_REASONING_EFFORTS, prompt, selectPrompt, ui } from '../infra/index.js';
+import type { UserProficiency } from '../types/config.types.js';
 import type { ContentType } from '../types/content.types.js';
-import type { LLMReasoningEffort } from '../types/index.js';
+import type { AppConfig, LLMReasoningEffort } from '../types/index.js';
 
 const TECH_STACK_CHOICES = [
   'TypeScript',
@@ -73,7 +79,8 @@ export class InitOrchestrator {
     ui.hero({
       label: 'OpenMeta Init',
       title: 'Assemble a sharper cockpit for contribution work',
-      subtitle: 'Connect GitHub, your model, and your preferences so every later run feels guided instead of improvised.',
+      subtitle:
+        'Connect GitHub, your model, and your preferences so every later run feels guided instead of improvised.',
       lines: [
         'Local-first by default. Only the APIs you explicitly authorize ever leave the machine.',
         'Once saved, OpenMeta remembers the route as well as the result. Press Ctrl+C at any time to step away cleanly.',
@@ -162,7 +169,12 @@ export class InitOrchestrator {
               { type: 'confirm', name: 'retry', message: 'Try another GitHub token?', default: true },
             ]);
             if (!retry) {
-              ui.callout({ label: 'OpenMeta Init', title: 'Setup paused', subtitle: 'GitHub access was not configured. Run "openmeta init" again whenever you are ready.', tone: 'warning' });
+              ui.callout({
+                label: 'OpenMeta Init',
+                title: 'Setup paused',
+                subtitle: 'GitHub access was not configured. Run "openmeta init" again whenever you are ready.',
+                tone: 'warning',
+              });
               return false;
             }
           }
@@ -202,7 +214,11 @@ export class InitOrchestrator {
           { label: 'Reasoning effort', value: reasoningEffort, tone: 'info' },
           { label: 'Streaming', value: stream ? 'yes' : 'no', tone: stream ? 'info' : 'muted' },
           { label: 'Endpoint', value: apiBaseUrl, tone: 'info' },
-          { label: 'Extra headers', value: Object.keys(apiHeaders).length > 0 ? JSON.stringify(apiHeaders) : '(none)', tone: 'info' },
+          {
+            label: 'Extra headers',
+            value: Object.keys(apiHeaders).length > 0 ? JSON.stringify(apiHeaders) : '(none)',
+            tone: 'info',
+          },
           { label: 'API key', value: ui.maskSecret(apiKey), tone: 'success' },
         ]);
       },
@@ -210,15 +226,15 @@ export class InitOrchestrator {
       async () => {
         let llmValid = false;
         while (!llmValid) {
-          providerValue = await selectPrompt<string>({
+          providerValue = (await selectPrompt<string>({
             message: 'Select LLM provider:',
             default: this.getProviderDefault(config.llm.provider),
-            choices: LLM_PROVIDER_PRESETS.map(provider => ({
+            choices: LLM_PROVIDER_PRESETS.map((provider) => ({
               name: provider.name,
               value: provider.value,
               description: provider.baseUrl || 'Bring your own compatible endpoint',
             })),
-          }) as AppConfig['llm']['provider'];
+          })) as AppConfig['llm']['provider'];
 
           selectedProvider = findLLMProviderPreset(providerValue as AppConfig['llm']['provider']);
           if (!selectedProvider) throw new Error(`Provider not found: ${providerValue}`);
@@ -231,16 +247,24 @@ export class InitOrchestrator {
           modelValue = selectedProvider.allowCustomModel
             ? await this.promptModelName(config.llm.modelName)
             : await selectPrompt<string>({
-              message: 'Select model:',
-              default: config.llm.modelName,
-              choices: selectedProvider.models.map((model) => ({ name: model.name, value: model.value })),
-            });
+                message: 'Select model:',
+                default: config.llm.modelName,
+                choices: selectedProvider.models.map((model) => ({ name: model.name, value: model.value })),
+              });
 
           reasoningEffort = await this.promptReasoningEffort(config.llm.reasoningEffort);
           stream = await this.promptLlmStreaming(config.llm.stream);
           apiKey = await this.promptAPIKey();
 
-          llmService.initialize(apiKey, apiBaseUrl, modelValue, apiHeaders, selectedProvider.value as AppConfig['llm']['provider'], reasoningEffort, stream);
+          llmService.initialize(
+            apiKey,
+            apiBaseUrl,
+            modelValue,
+            apiHeaders,
+            selectedProvider.value as AppConfig['llm']['provider'],
+            reasoningEffort,
+            stream,
+          );
           llmValid = await this.validateLlmConnection();
 
           if (!llmValid) {
@@ -261,20 +285,39 @@ export class InitOrchestrator {
               { type: 'confirm', name: 'retry', message: 'Try another provider or API key?', default: true },
             ]);
             if (!retry) {
-              ui.callout({ label: 'OpenMeta Init', title: 'Setup paused', subtitle: 'The LLM provider was not configured. Run "openmeta init" again when you want to continue.', tone: 'warning' });
+              ui.callout({
+                label: 'OpenMeta Init',
+                title: 'Setup paused',
+                subtitle: 'The LLM provider was not configured. Run "openmeta init" again when you want to continue.',
+                tone: 'warning',
+              });
               return false;
             }
           }
         }
         completedSteps.add('llm');
-        await commit({ llm: { provider: providerValue as AppConfig['llm']['provider'], apiBaseUrl, apiKey, modelName: modelValue, apiHeaders, reasoningEffort, stream } });
+        await commit({
+          llm: {
+            provider: providerValue as AppConfig['llm']['provider'],
+            apiBaseUrl,
+            apiKey,
+            modelName: modelValue,
+            apiHeaders,
+            reasoningEffort,
+            stream,
+          },
+        });
         ui.keyValues('LLM provider connected', [
           { label: 'Provider', value: selectedProvider!.name, tone: 'success' },
           { label: 'Model', value: modelValue, tone: 'success' },
           { label: 'Reasoning effort', value: reasoningEffort, tone: 'info' },
           { label: 'Streaming', value: stream ? 'yes' : 'no', tone: stream ? 'info' : 'muted' },
           { label: 'Endpoint', value: apiBaseUrl, tone: 'info' },
-          { label: 'Extra headers', value: Object.keys(apiHeaders).length > 0 ? JSON.stringify(apiHeaders) : '(none)', tone: 'info' },
+          {
+            label: 'Extra headers',
+            value: Object.keys(apiHeaders).length > 0 ? JSON.stringify(apiHeaders) : '(none)',
+            tone: 'info',
+          },
           { label: 'API key', value: ui.maskSecret(apiKey), tone: 'success' },
         ]);
         return true;
@@ -307,7 +350,11 @@ export class InitOrchestrator {
             type: 'checkbox',
             name: 'techStack',
             message: '  Select your tech stack (Space to select, Enter to confirm):',
-            choices: TECH_STACK_CHOICES.map(tech => ({ name: tech, value: tech, checked: config.userProfile.techStack.includes(tech) })),
+            choices: TECH_STACK_CHOICES.map((tech) => ({
+              name: tech,
+              value: tech,
+              checked: config.userProfile.techStack.includes(tech),
+            })),
             validate: (input: string[]) => input.length > 0 || 'Select at least one technology',
           },
         ]));
@@ -317,7 +364,11 @@ export class InitOrchestrator {
           default: config.userProfile.proficiency,
           choices: [
             { name: 'Beginner', value: 'beginner', description: 'New to the stack, prefer guided issues.' },
-            { name: 'Intermediate', value: 'intermediate', description: 'Comfortable with the stack, can handle moderate tasks.' },
+            {
+              name: 'Intermediate',
+              value: 'intermediate',
+              description: 'Comfortable with the stack, can handle moderate tasks.',
+            },
             { name: 'Advanced', value: 'advanced', description: 'Deep experience, ready for complex changes.' },
           ],
         });
@@ -327,7 +378,10 @@ export class InitOrchestrator {
             type: 'checkbox',
             name: 'focusAreas',
             message: '  Select your focus areas (Space to select, Enter to confirm):',
-            choices: FOCUS_AREA_CHOICES.map(area => ({ ...area, checked: config.userProfile.focusAreas.includes(area.value) })),
+            choices: FOCUS_AREA_CHOICES.map((area) => ({
+              ...area,
+              checked: config.userProfile.focusAreas.includes(area.value),
+            })),
             validate: (input: string[]) => input.length > 0 || 'Select at least one focus area',
           },
         ]));
@@ -345,7 +399,11 @@ export class InitOrchestrator {
 
     // ── Step 4: Target repo ───────────────────────────────────────────────────
 
-    this.renderStep('targetRepo', completedSteps, 'Leave this blank if you want OpenMeta to manage a dedicated private repo for you.');
+    this.renderStep(
+      'targetRepo',
+      completedSteps,
+      'Leave this blank if you want OpenMeta to manage a dedicated private repo for you.',
+    );
 
     const { targetRepoPath } = await prompt<{ targetRepoPath: string }>([
       {
@@ -367,15 +425,28 @@ export class InitOrchestrator {
     completedSteps.add('targetRepo');
     await commit({ github: { targetRepoPath: targetRepoPath || undefined } });
     ui.keyValues('Target repository policy', [
-      { label: 'Publish destination', value: targetRepoPath || 'Auto-managed private repository', tone: targetRepoPath ? 'info' : 'accent' },
+      {
+        label: 'Publish destination',
+        value: targetRepoPath || 'Auto-managed private repository',
+        tone: targetRepoPath ? 'info' : 'accent',
+      },
     ]);
 
     // ── Step 5: Automation ────────────────────────────────────────────────────
 
-    this.renderStep('automation', completedSteps, 'OpenMeta can install a system scheduler so one init keeps your autonomous contribution agent running unattended.');
+    this.renderStep(
+      'automation',
+      completedSteps,
+      'OpenMeta can install a system scheduler so one init keeps your autonomous contribution agent running unattended.',
+    );
 
     const { automationEnabled } = await prompt<{ automationEnabled: boolean }>([
-      { type: 'confirm', name: 'automationEnabled', message: 'Enable unattended agent automation?', default: config.automation.enabled },
+      {
+        type: 'confirm',
+        name: 'automationEnabled',
+        message: 'Enable unattended agent automation?',
+        default: config.automation.enabled,
+      },
     ]);
 
     let scheduleTime = config.automation.scheduleTime;
@@ -401,7 +472,11 @@ export class InitOrchestrator {
         default: config.automation.contentType,
         choices: [
           { name: 'Research Notes', value: 'research_note', description: 'Safer default for unattended runs.' },
-          { name: 'Development Diary', value: 'development_diary', description: 'Generates diary-style summaries without code snippets.' },
+          {
+            name: 'Development Diary',
+            value: 'development_diary',
+            description: 'Generates diary-style summaries without code snippets.',
+          },
         ],
       });
 
@@ -411,7 +486,10 @@ export class InitOrchestrator {
           label: 'OpenMeta Init',
           title: 'Automation not enabled',
           subtitle: 'Persistent unattended execution was cancelled before any scheduler changes were made.',
-          lines: ['You can still run "openmeta daily" manually.', 'Enable later with "openmeta init" or "openmeta automation enable".'],
+          lines: [
+            'You can still run "openmeta daily" manually.',
+            'Enable later with "openmeta init" or "openmeta automation enable".',
+          ],
           tone: 'warning',
         });
         return;
@@ -419,12 +497,23 @@ export class InitOrchestrator {
     }
 
     await ui.task(
-      { title: 'Saving local configuration', doneMessage: 'Local configuration saved', failedMessage: 'Saving local configuration failed', tone: 'info' },
-      async () => commit({ automation: { enabled: automationEnabled, scheduleTime, timezone, contentType, scheduler } }),
+      {
+        title: 'Saving local configuration',
+        doneMessage: 'Local configuration saved',
+        failedMessage: 'Saving local configuration failed',
+        tone: 'info',
+      },
+      async () =>
+        commit({ automation: { enabled: automationEnabled, scheduleTime, timezone, contentType, scheduler } }),
     );
 
     const schedulerResult = await ui.task(
-      { title: 'Syncing automation policy', doneMessage: 'Automation policy synced', failedMessage: 'Automation policy sync failed', tone: automationEnabled ? 'warning' : 'info' },
+      {
+        title: 'Syncing automation policy',
+        doneMessage: 'Automation policy synced',
+        failedMessage: 'Automation policy sync failed',
+        tone: automationEnabled ? 'warning' : 'info',
+      },
       async () => schedulerService.sync(workingConfig),
     );
     const nextStepMessage = this.getNextStepMessage(workingConfig, schedulerResult);
@@ -444,14 +533,22 @@ export class InitOrchestrator {
       { label: 'Reasoning', value: reasoningEffort, tone: 'info' },
       { label: 'Streaming', value: stream ? 'YES' : 'NO', tone: stream ? 'info' : 'muted' },
       { label: 'Repo policy', value: targetRepoPath ? 'CUSTOM' : 'MANAGED', tone: 'accent' },
-      { label: 'Automation', value: automationEnabled ? 'ENABLED' : 'MANUAL', tone: automationEnabled ? 'warning' : 'muted' },
+      {
+        label: 'Automation',
+        value: automationEnabled ? 'ENABLED' : 'MANUAL',
+        tone: automationEnabled ? 'warning' : 'muted',
+      },
     ]);
     ui.keyValues('Saved preferences', [
       { label: 'Tech stack', value: techStack.join(', '), tone: 'info' },
       { label: 'Proficiency', value: proficiency, tone: 'info' },
       { label: 'Focus areas', value: focusAreas.join(', '), tone: 'info' },
       { label: 'Target repo', value: targetRepoPath || 'Auto-managed private repository', tone: 'info' },
-      { label: 'Automation', value: this.formatAutomationSummary(workingConfig, schedulerResult), tone: schedulerResult.status === 'failed' ? 'warning' : 'success' },
+      {
+        label: 'Automation',
+        value: this.formatAutomationSummary(workingConfig, schedulerResult),
+        tone: schedulerResult.status === 'failed' ? 'warning' : 'success',
+      },
     ]);
   }
 
@@ -549,9 +646,7 @@ export class InitOrchestrator {
   }
 
   private getProviderDefault(provider: AppConfig['llm']['provider']): string {
-    return LLM_PROVIDER_PRESETS.some((option) => option.value === provider)
-      ? provider
-      : 'custom';
+    return LLM_PROVIDER_PRESETS.some((option) => option.value === provider) ? provider : 'custom';
   }
 
   private formatAutomationSummary(config: AppConfig, result: SchedulerSyncResult): string {
@@ -574,7 +669,8 @@ export class InitOrchestrator {
     ui.callout({
       label: 'OpenMeta Init',
       title: 'Persistent automation warning',
-      subtitle: 'When enabled, OpenMeta installs a system-level scheduled task that runs the autonomous contribution agent every day until you turn it off.',
+      subtitle:
+        'When enabled, OpenMeta installs a system-level scheduled task that runs the autonomous contribution agent every day until you turn it off.',
       lines: [
         `Current target time: ${scheduleTime} (${timezone})`,
         'Scheduled runs use headless agent mode and can commit and push generated artifacts without interactive review.',
@@ -647,17 +743,20 @@ export class InitOrchestrator {
 
   private async validateGitHubCredentials(): Promise<boolean> {
     try {
-      await ui.task({
-        title: 'Validating GitHub credentials',
-        doneMessage: 'GitHub credentials verified',
-        failedMessage: 'GitHub credentials rejected',
-        tone: 'info',
-      }, async () => {
-        const valid = await githubService.validateCredentials();
-        if (!valid) {
-          throw new Error('GitHub validation failed');
-        }
-      });
+      await ui.task(
+        {
+          title: 'Validating GitHub credentials',
+          doneMessage: 'GitHub credentials verified',
+          failedMessage: 'GitHub credentials rejected',
+          tone: 'info',
+        },
+        async () => {
+          const valid = await githubService.validateCredentials();
+          if (!valid) {
+            throw new Error('GitHub validation failed');
+          }
+        },
+      );
       return true;
     } catch {
       return false;
@@ -666,17 +765,20 @@ export class InitOrchestrator {
 
   private async validateLlmConnection(): Promise<boolean> {
     try {
-      await ui.task({
-        title: 'Validating LLM provider',
-        doneMessage: 'LLM provider verified',
-        failedMessage: 'LLM provider rejected',
-        tone: 'info',
-      }, async () => {
-        const valid = await llmService.validateConnection();
-        if (!valid) {
-          throw new Error('LLM validation failed');
-        }
-      });
+      await ui.task(
+        {
+          title: 'Validating LLM provider',
+          doneMessage: 'LLM provider verified',
+          failedMessage: 'LLM provider rejected',
+          tone: 'info',
+        },
+        async () => {
+          const valid = await llmService.validateConnection();
+          if (!valid) {
+            throw new Error('LLM validation failed');
+          }
+        },
+      );
       return true;
     } catch {
       return false;

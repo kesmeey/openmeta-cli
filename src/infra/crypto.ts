@@ -1,8 +1,8 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import CryptoJS from 'crypto-js';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import CryptoJS from 'crypto-js';
 
 const CONFIG_DIR = process.env['OPENMETA_CONFIG_DIR'] || join(homedir(), '.config', 'openmeta');
 const KEY_FILE = join(CONFIG_DIR, 'secret.key');
@@ -27,12 +27,9 @@ export class CryptoService {
     const encrypted = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()]);
     const authTag = cipher.getAuthTag();
 
-    return [
-      ENCRYPTION_PREFIX,
-      iv.toString('base64'),
-      authTag.toString('base64'),
-      encrypted.toString('base64'),
-    ].join(':');
+    return [ENCRYPTION_PREFIX, iv.toString('base64'), authTag.toString('base64'), encrypted.toString('base64')].join(
+      ':',
+    );
   }
 
   static decrypt(cipherText: string): string {

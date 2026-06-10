@@ -17,14 +17,16 @@ describe('InitOrchestrator LLM reasoning setup', () => {
       const selected = await orchestrator.promptReasoningEffort();
 
       expect(selected).toBe('none');
-      expect(selectSpy).toHaveBeenCalledWith(expect.objectContaining({
-        message: 'Select reasoning effort:',
-        default: 'none',
-        choices: expect.arrayContaining([
-          expect.objectContaining({ name: 'none', value: 'none' }),
-          expect.objectContaining({ name: 'high', value: 'high' }),
-        ]),
-      }));
+      expect(selectSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Select reasoning effort:',
+          default: 'none',
+          choices: expect.arrayContaining([
+            expect.objectContaining({ name: 'none', value: 'none' }),
+            expect.objectContaining({ name: 'high', value: 'high' }),
+          ]),
+        }),
+      );
     } finally {
       selectSpy.mockRestore();
     }

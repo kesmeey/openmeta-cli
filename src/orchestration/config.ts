@@ -1,9 +1,18 @@
 import { configService, parseLLMReasoningEffort, prompt, selectPrompt, ui } from '../infra/index.js';
-import { schedulerService, SCORING_PRESETS, getPreset, normalizeWeights, normalizeOverallWeights } from '../services/index.js';
-import type { AppConfig, ScoringWeights, OverallWeights } from '../types/index.js';
+import {
+  getPreset,
+  normalizeOverallWeights,
+  normalizeWeights,
+  SCORING_PRESETS,
+  schedulerService,
+} from '../services/index.js';
+import type { AppConfig, OverallWeights, ScoringWeights } from '../types/index.js';
 
 export class ConfigOrchestrator {
-  async setMachineValue(key: string, value: string): Promise<{
+  async setMachineValue(
+    key: string,
+    value: string,
+  ): Promise<{
     updatedKey: string;
     appliedValue: string;
     snapshot: Awaited<ReturnType<ConfigOrchestrator['getMachineSnapshot']>>;
@@ -13,9 +22,7 @@ export class ConfigOrchestrator {
     };
   }> {
     const updated = await this.applyConfigValue(key, value);
-    const syncResult = key.startsWith('automation.')
-      ? await schedulerService.sync(updated)
-      : null;
+    const syncResult = key.startsWith('automation.') ? await schedulerService.sync(updated) : null;
 
     return {
       updatedKey: key,
@@ -23,13 +30,13 @@ export class ConfigOrchestrator {
       snapshot: await this.getMachineSnapshot(),
       scheduler: syncResult
         ? {
-          status: syncResult.status === 'failed' ? 'failed' : 'synced',
-          detail: syncResult.detail,
-        }
+            status: syncResult.status === 'failed' ? 'failed' : 'synced',
+            detail: syncResult.detail,
+          }
         : {
-          status: 'unchanged',
-          detail: 'Scheduler state unchanged.',
-        },
+            status: 'unchanged',
+            detail: 'Scheduler state unchanged.',
+          },
     };
   }
 
@@ -79,11 +86,7 @@ export class ConfigOrchestrator {
 
   async view(): Promise<void> {
     const config = await configService.get();
-    const missingRequired = [
-      !config.github.username,
-      !config.github.pat,
-      !config.llm.apiKey,
-    ].filter(Boolean).length;
+    const missingRequired = [!config.github.username, !config.github.pat, !config.llm.apiKey].filter(Boolean).length;
 
     ui.hero({
       label: 'OpenMeta Config',
@@ -91,7 +94,9 @@ export class ConfigOrchestrator {
       subtitle: 'Profile, credentials, defaults, and automation policy arranged into one readable control surface.',
       lines: [
         `Config path: ${configService.getConfigPath()}`,
-        missingRequired === 0 ? 'Critical settings are present.' : `${missingRequired} critical setting group${missingRequired === 1 ? '' : 's'} still need attention.`,
+        missingRequired === 0
+          ? 'Critical settings are present.'
+          : `${missingRequired} critical setting group${missingRequired === 1 ? '' : 's'} still need attention.`,
       ],
       tone: missingRequired === 0 ? 'accent' : 'warning',
     });
@@ -120,36 +125,76 @@ export class ConfigOrchestrator {
     ]);
 
     ui.keyValues('User profile', [
-      { label: 'Tech stack', value: config.userProfile.techStack.join(', ') || '(not set)', tone: config.userProfile.techStack.length > 0 ? 'info' : 'warning' },
-      { label: 'Proficiency', value: config.userProfile.proficiency || '(not set)', tone: config.userProfile.proficiency ? 'info' : 'warning' },
-      { label: 'Focus areas', value: config.userProfile.focusAreas.join(', ') || '(not set)', tone: config.userProfile.focusAreas.length > 0 ? 'info' : 'warning' },
+      {
+        label: 'Tech stack',
+        value: config.userProfile.techStack.join(', ') || '(not set)',
+        tone: config.userProfile.techStack.length > 0 ? 'info' : 'warning',
+      },
+      {
+        label: 'Proficiency',
+        value: config.userProfile.proficiency || '(not set)',
+        tone: config.userProfile.proficiency ? 'info' : 'warning',
+      },
+      {
+        label: 'Focus areas',
+        value: config.userProfile.focusAreas.join(', ') || '(not set)',
+        tone: config.userProfile.focusAreas.length > 0 ? 'info' : 'warning',
+      },
     ]);
 
     ui.keyValues('GitHub', [
-      { label: 'Username', value: config.github.username || '(not set)', tone: config.github.username ? 'info' : 'warning' },
+      {
+        label: 'Username',
+        value: config.github.username || '(not set)',
+        tone: config.github.username ? 'info' : 'warning',
+      },
       { label: 'PAT', value: ui.maskSecret(config.github.pat), tone: config.github.pat ? 'info' : 'warning' },
       { label: 'Target repo', value: config.github.targetRepoPath || 'Auto-managed private repository', tone: 'info' },
     ]);
 
     ui.keyValues('LLM', [
-      { label: 'Active profile', value: config.llm.activeProfile || '(none)', tone: config.llm.activeProfile ? 'success' : 'muted' },
+      {
+        label: 'Active profile',
+        value: config.llm.activeProfile || '(none)',
+        tone: config.llm.activeProfile ? 'success' : 'muted',
+      },
       { label: 'Provider', value: config.llm.provider || '(not set)', tone: config.llm.provider ? 'info' : 'warning' },
-      { label: 'Base URL', value: config.llm.apiBaseUrl || '(not set)', tone: config.llm.apiBaseUrl ? 'info' : 'warning' },
+      {
+        label: 'Base URL',
+        value: config.llm.apiBaseUrl || '(not set)',
+        tone: config.llm.apiBaseUrl ? 'info' : 'warning',
+      },
       { label: 'Model', value: config.llm.modelName || '(not set)', tone: config.llm.modelName ? 'info' : 'warning' },
       { label: 'Reasoning effort', value: config.llm.reasoningEffort || 'none', tone: 'info' },
       { label: 'Streaming', value: config.llm.stream ? 'yes' : 'no', tone: config.llm.stream ? 'info' : 'muted' },
-      { label: 'Extra headers', value: Object.keys(config.llm.apiHeaders || {}).length > 0 ? JSON.stringify(config.llm.apiHeaders) : '(none)', tone: 'info' },
+      {
+        label: 'Extra headers',
+        value: Object.keys(config.llm.apiHeaders || {}).length > 0 ? JSON.stringify(config.llm.apiHeaders) : '(none)',
+        tone: 'info',
+      },
       { label: 'API key', value: ui.maskSecret(config.llm.apiKey), tone: config.llm.apiKey ? 'info' : 'warning' },
-      { label: 'Saved profiles', value: String(Object.keys(config.llm.profiles || {}).length), tone: Object.keys(config.llm.profiles || {}).length > 0 ? 'info' : 'muted' },
+      {
+        label: 'Saved profiles',
+        value: String(Object.keys(config.llm.profiles || {}).length),
+        tone: Object.keys(config.llm.profiles || {}).length > 0 ? 'info' : 'muted',
+      },
     ]);
 
     ui.keyValues('Automation', [
-      { label: 'Enabled', value: config.automation.enabled ? 'yes' : 'no', tone: config.automation.enabled ? 'warning' : 'muted' },
+      {
+        label: 'Enabled',
+        value: config.automation.enabled ? 'yes' : 'no',
+        tone: config.automation.enabled ? 'warning' : 'muted',
+      },
       { label: 'Schedule', value: `${config.automation.scheduleTime} (${config.automation.timezone})`, tone: 'info' },
       { label: 'Scheduler', value: config.automation.scheduler, tone: 'info' },
       { label: 'Content type', value: config.automation.contentType, tone: 'info' },
       { label: 'Min match score', value: String(config.automation.minMatchScore), tone: 'info' },
-      { label: 'Skip if already generated today', value: config.automation.skipIfAlreadyGeneratedToday ? 'yes' : 'no', tone: 'info' },
+      {
+        label: 'Skip if already generated today',
+        value: config.automation.skipIfAlreadyGeneratedToday ? 'yes' : 'no',
+        tone: 'info',
+      },
     ]);
 
     ui.card({
@@ -163,7 +208,11 @@ export class ConfigOrchestrator {
     const sw = config.scoring.weights;
     const ow = config.scoring.overallWeights;
     ui.keyValues('Scoring weights', [
-      { label: 'Active preset', value: config.scoring.preset || 'custom', tone: config.scoring.preset ? 'success' : 'muted' },
+      {
+        label: 'Active preset',
+        value: config.scoring.preset || 'custom',
+        tone: config.scoring.preset ? 'success' : 'muted',
+      },
       { label: 'Freshness', value: `${(sw.freshness * 100).toFixed(0)}%`, tone: 'info' },
       { label: 'Onboarding Clarity', value: `${(sw.onboardingClarity * 100).toFixed(0)}%`, tone: 'info' },
       { label: 'Merge Potential', value: `${(sw.mergePotential * 100).toFixed(0)}%`, tone: 'info' },
@@ -177,7 +226,8 @@ export class ConfigOrchestrator {
       ui.callout({
         label: 'OpenMeta Config',
         title: 'Configuration still needs attention',
-        subtitle: 'Run "openmeta init" after updating credentials so validation can confirm your GitHub and LLM connections.',
+        subtitle:
+          'Run "openmeta init" after updating credentials so validation can confirm your GitHub and LLM connections.',
         tone: 'warning',
       });
     }
@@ -241,25 +291,46 @@ export class ConfigOrchestrator {
       newWeights = { ...preset.weights };
       newOverallWeights = { ...preset.overallWeights };
     } else {
-      ui.section('Custom weights', 'Enter a value between 0 and 100 for each dimension. They will be normalized automatically.');
+      ui.section(
+        'Custom weights',
+        'Enter a value between 0 and 100 for each dimension. They will be normalized automatically.',
+      );
 
       const current = config.scoring.weights;
       const entries: Array<{ key: keyof ScoringWeights; label: string; default: number }> = [
-        { key: 'freshness', label: 'Freshness (newer issues rank higher)', default: Math.round(current.freshness * 100) },
-        { key: 'onboardingClarity', label: 'Onboarding Clarity (clear descriptions, good-first-issue)', default: Math.round(current.onboardingClarity * 100) },
-        { key: 'mergePotential', label: 'Merge Potential (likely to be accepted)', default: Math.round(current.mergePotential * 100) },
+        {
+          key: 'freshness',
+          label: 'Freshness (newer issues rank higher)',
+          default: Math.round(current.freshness * 100),
+        },
+        {
+          key: 'onboardingClarity',
+          label: 'Onboarding Clarity (clear descriptions, good-first-issue)',
+          default: Math.round(current.onboardingClarity * 100),
+        },
+        {
+          key: 'mergePotential',
+          label: 'Merge Potential (likely to be accepted)',
+          default: Math.round(current.mergePotential * 100),
+        },
         { key: 'impact', label: 'Impact (repo stars and visibility)', default: Math.round(current.impact * 100) },
-        { key: 'riskPenalty', label: 'Risk Penalty (reduce score for risky issues)', default: Math.round(current.riskPenalty * 100) },
+        {
+          key: 'riskPenalty',
+          label: 'Risk Penalty (reduce score for risky issues)',
+          default: Math.round(current.riskPenalty * 100),
+        },
       ];
 
       const rawWeights: Record<string, number> = {};
       for (const entry of entries) {
-        const result = await prompt<{ value: string }>([{
-          type: 'input',
-          name: 'value',
-          message: `${entry.label} (0-100)`,
-          default: String(entry.default),
-        }]);
+        const result = await prompt<{ value: string }>([
+          {
+            type: 'input',
+            name: 'value',
+            message: `${entry.label} (0-100)`,
+            default: String(entry.default),
+          },
+        ]);
         const num = Number.parseFloat(result.value);
         if (Number.isNaN(num) || num < 0 || num > 100) {
           throw new Error('Weight must be a number between 0 and 100.');
@@ -273,18 +344,28 @@ export class ConfigOrchestrator {
       ui.section('Overall weights', 'Adjust the balance between technical match and opportunity score.');
 
       const owEntries: Array<{ key: keyof OverallWeights; label: string; default: number }> = [
-        { key: 'technicalMatch', label: 'Technical Match (your stack vs issue)', default: Math.round(owCurrent.technicalMatch * 100) },
-        { key: 'opportunityScore', label: 'Opportunity Score (freshness, impact, clarity)', default: Math.round(owCurrent.opportunityScore * 100) },
+        {
+          key: 'technicalMatch',
+          label: 'Technical Match (your stack vs issue)',
+          default: Math.round(owCurrent.technicalMatch * 100),
+        },
+        {
+          key: 'opportunityScore',
+          label: 'Opportunity Score (freshness, impact, clarity)',
+          default: Math.round(owCurrent.opportunityScore * 100),
+        },
       ];
 
       const rawOverall: Record<string, number> = {};
       for (const entry of owEntries) {
-        const result = await prompt<{ value: string }>([{
-          type: 'input',
-          name: 'value',
-          message: `${entry.label} (0-100)`,
-          default: String(entry.default),
-        }]);
+        const result = await prompt<{ value: string }>([
+          {
+            type: 'input',
+            name: 'value',
+            message: `${entry.label} (0-100)`,
+            default: String(entry.default),
+          },
+        ]);
         const num = Number.parseFloat(result.value);
         if (Number.isNaN(num) || num < 0 || num > 100) {
           throw new Error('Weight must be a number between 0 and 100.');
@@ -306,12 +387,14 @@ export class ConfigOrchestrator {
       { label: 'Opportunity Score', value: `${(newOverallWeights.opportunityScore * 100).toFixed(0)}%`, tone: 'info' },
     ]);
 
-    const { confirm } = await prompt<{ confirm: boolean }>([{
-      type: 'confirm',
-      name: 'confirm',
-      message: 'Save these scoring weights?',
-      default: true,
-    }]);
+    const { confirm } = await prompt<{ confirm: boolean }>([
+      {
+        type: 'confirm',
+        name: 'confirm',
+        message: 'Save these scoring weights?',
+        default: true,
+      },
+    ]);
 
     if (confirm) {
       const presetName = selectedPreset === 'custom' ? 'custom' : selectedPreset;
@@ -399,15 +482,34 @@ export class ConfigOrchestrator {
 
   private async applyConfigValue(key: string, value: string): Promise<AppConfig> {
     const config = await configService.get();
-    const validPaths = ['userProfile.techStack', 'userProfile.proficiency', 'userProfile.focusAreas',
-                       'github.username', 'github.pat', 'github.targetRepoPath', 'llm.provider', 'llm.apiBaseUrl', 'llm.apiKey', 'llm.modelName', 'llm.reasoningEffort', 'llm.stream',
-                       'automation.enabled', 'automation.scheduleTime', 'automation.contentType',
-                       'automation.minMatchScore', 'automation.skipIfAlreadyGeneratedToday',
-                       'scoring.weights.freshness', 'scoring.weights.onboardingClarity',
-                       'scoring.weights.mergePotential', 'scoring.weights.impact', 'scoring.weights.riskPenalty',
-                       'scoring.overallWeights.technicalMatch', 'scoring.overallWeights.opportunityScore',
-                       'scoring.preset',
-                       'commitTemplate'];
+    const validPaths = [
+      'userProfile.techStack',
+      'userProfile.proficiency',
+      'userProfile.focusAreas',
+      'github.username',
+      'github.pat',
+      'github.targetRepoPath',
+      'llm.provider',
+      'llm.apiBaseUrl',
+      'llm.apiKey',
+      'llm.modelName',
+      'llm.reasoningEffort',
+      'llm.stream',
+      'automation.enabled',
+      'automation.scheduleTime',
+      'automation.contentType',
+      'automation.minMatchScore',
+      'automation.skipIfAlreadyGeneratedToday',
+      'scoring.weights.freshness',
+      'scoring.weights.onboardingClarity',
+      'scoring.weights.mergePotential',
+      'scoring.weights.impact',
+      'scoring.weights.riskPenalty',
+      'scoring.overallWeights.technicalMatch',
+      'scoring.overallWeights.opportunityScore',
+      'scoring.preset',
+      'commitTemplate',
+    ];
 
     if (!validPaths.includes(key)) {
       throw new Error(`Unknown configuration key "${key}".`);
@@ -415,19 +517,31 @@ export class ConfigOrchestrator {
 
     if (key === 'userProfile.techStack') {
       return configService.update({
-        userProfile: { ...config.userProfile, techStack: value.split(',').map((item) => item.trim()).filter(Boolean) }
+        userProfile: {
+          ...config.userProfile,
+          techStack: value
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+        },
       });
     }
 
     if (key === 'userProfile.focusAreas') {
       return configService.update({
-        userProfile: { ...config.userProfile, focusAreas: value.split(',').map((item) => item.trim()).filter(Boolean) }
+        userProfile: {
+          ...config.userProfile,
+          focusAreas: value
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+        },
       });
     }
 
     if (key === 'userProfile.proficiency') {
       return configService.update({
-        userProfile: { ...config.userProfile, proficiency: value as 'beginner' | 'intermediate' | 'advanced' }
+        userProfile: { ...config.userProfile, proficiency: value as 'beginner' | 'intermediate' | 'advanced' },
       });
     }
 
@@ -445,7 +559,9 @@ export class ConfigOrchestrator {
 
     if (key === 'llm.provider') {
       if (!['openai', 'minimax', 'moonshot', 'zhipu', 'gemini', 'claude', 'custom'].includes(value)) {
-        throw new Error('llm.provider must be "openai", "minimax", "moonshot", "zhipu", "gemini", "claude", or "custom".');
+        throw new Error(
+          'llm.provider must be "openai", "minimax", "moonshot", "zhipu", "gemini", "claude", or "custom".',
+        );
       }
       return configService.update({ llm: { ...config.llm, provider: value as AppConfig['llm']['provider'] } });
     }
@@ -552,7 +668,9 @@ export class ConfigOrchestrator {
     if (key === 'scoring.preset') {
       const preset = getPreset(value);
       if (!preset) {
-        throw new Error(`Unknown scoring preset "${value}". Available: ${SCORING_PRESETS.map((p) => p.name).join(', ')}`);
+        throw new Error(
+          `Unknown scoring preset "${value}". Available: ${SCORING_PRESETS.map((p) => p.name).join(', ')}`,
+        );
       }
       return configService.update({
         scoring: { weights: preset.weights, overallWeights: preset.overallWeights, preset: preset.name },

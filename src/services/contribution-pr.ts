@@ -1,9 +1,9 @@
+import type { Octokit } from '@octokit/rest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import type { Octokit } from '@octokit/rest';
 import type { PullRequestDraft } from '../contracts/index.js';
-import type { RankedIssue } from '../types/index.js';
 import { logger } from '../infra/index.js';
+import type { RankedIssue } from '../types/index.js';
 import { contentService } from './content.js';
 import { githubService } from './github.js';
 
@@ -54,7 +54,12 @@ export class ContributionPrService {
       commitMessage,
     });
 
-    const contributionPullRequest = await this.createContributionPullRequest(upstreamRepo, forkRepo.owner, branchName, draftPullRequest);
+    const contributionPullRequest = await this.createContributionPullRequest(
+      upstreamRepo,
+      forkRepo.owner,
+      branchName,
+      draftPullRequest,
+    );
 
     return {
       branchName,
@@ -99,7 +104,9 @@ export class ContributionPrService {
     };
   }
 
-  private async ensureForkRepository(upstreamRepo: ContributionRepositoryContext): Promise<ContributionRepositoryContext> {
+  private async ensureForkRepository(
+    upstreamRepo: ContributionRepositoryContext,
+  ): Promise<ContributionRepositoryContext> {
     const octokit = this.getOctokit();
     const forkOwner = githubService.getUsername();
 
@@ -110,7 +117,9 @@ export class ContributionPrService {
       });
 
       if (!data.fork || data.parent?.full_name !== `${upstreamRepo.owner}/${upstreamRepo.repo}`) {
-        throw new Error(`Repository ${forkOwner}/${upstreamRepo.repo} exists but is not a fork of ${upstreamRepo.owner}/${upstreamRepo.repo}.`);
+        throw new Error(
+          `Repository ${forkOwner}/${upstreamRepo.repo} exists but is not a fork of ${upstreamRepo.owner}/${upstreamRepo.repo}.`,
+        );
       }
 
       await this.syncForkWithUpstream(forkOwner, upstreamRepo.repo, data.default_branch || upstreamRepo.defaultBranch);

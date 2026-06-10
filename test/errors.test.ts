@@ -1,10 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  UserCancelledError,
-  getErrorMessage,
-  isPromptAbortError,
-  isUserCancelledError,
-} from '../src/infra/errors.js';
+import { getErrorMessage, isPromptAbortError, isUserCancelledError, UserCancelledError } from '../src/infra/errors.js';
 
 describe('error helpers', () => {
   test('detects known prompt abort errors by name and message', () => {

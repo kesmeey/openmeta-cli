@@ -1,10 +1,10 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 import type { AppConfig } from '../types/index.js';
 import { CryptoService } from './crypto.js';
-import { logger } from './logger.js';
 import { DEFAULT_LLM_REASONING_EFFORT, parseLLMReasoningEffort } from './llm-reasoning.js';
+import { logger } from './logger.js';
 
 function getConfigDirPath(): string {
   return process.env['OPENMETA_CONFIG_DIR'] || join(homedir(), '.config', 'openmeta');
@@ -62,8 +62,8 @@ function createDefaultConfig(): AppConfig {
       weights: {
         freshness: 0.25,
         onboardingClarity: 0.25,
-        mergePotential: 0.30,
-        impact: 0.20,
+        mergePotential: 0.3,
+        impact: 0.2,
         riskPenalty: 0.35,
       },
       overallWeights: {
@@ -229,30 +229,31 @@ export class ConfigService {
     };
   }
 
-  private encryptProviderProfiles(
-    profiles: AppConfig['llm']['profiles'] = {},
-  ): AppConfig['llm']['profiles'] {
-    return Object.fromEntries(Object.entries(profiles).map(([name, profile]) => [
-      name,
-      {
-        ...profile,
-        apiKey: profile.apiKey ? CryptoService.encrypt(profile.apiKey) : '',
-      },
-    ]));
+  private encryptProviderProfiles(profiles: AppConfig['llm']['profiles'] = {}): AppConfig['llm']['profiles'] {
+    return Object.fromEntries(
+      Object.entries(profiles).map(([name, profile]) => [
+        name,
+        {
+          ...profile,
+          apiKey: profile.apiKey ? CryptoService.encrypt(profile.apiKey) : '',
+        },
+      ]),
+    );
   }
 
-  private decryptProviderProfiles(
-    profiles: AppConfig['llm']['profiles'] = {},
-  ): AppConfig['llm']['profiles'] {
-    return Object.fromEntries(Object.entries(profiles).map(([name, profile]) => [
-      name,
-      {
-        ...profile,
-        apiKey: profile.apiKey && CryptoService.isEncrypted(profile.apiKey)
-          ? CryptoService.decrypt(profile.apiKey)
-          : profile.apiKey,
-      },
-    ]));
+  private decryptProviderProfiles(profiles: AppConfig['llm']['profiles'] = {}): AppConfig['llm']['profiles'] {
+    return Object.fromEntries(
+      Object.entries(profiles).map(([name, profile]) => [
+        name,
+        {
+          ...profile,
+          apiKey:
+            profile.apiKey && CryptoService.isEncrypted(profile.apiKey)
+              ? CryptoService.decrypt(profile.apiKey)
+              : profile.apiKey,
+        },
+      ]),
+    );
   }
 
   private normalizeReasoningEffort(value: unknown): AppConfig['llm']['reasoningEffort'] {
@@ -267,18 +268,18 @@ export class ConfigService {
     }
   }
 
-  private normalizeProviderProfiles(
-    profiles: AppConfig['llm']['profiles'] = {},
-  ): AppConfig['llm']['profiles'] {
-    return Object.fromEntries(Object.entries(profiles).map(([name, profile]) => [
-      name,
-      {
-        ...profile,
-        apiHeaders: profile.apiHeaders ?? {},
-        reasoningEffort: this.normalizeReasoningEffort(profile.reasoningEffort),
-        stream: profile.stream === true,
-      },
-    ]));
+  private normalizeProviderProfiles(profiles: AppConfig['llm']['profiles'] = {}): AppConfig['llm']['profiles'] {
+    return Object.fromEntries(
+      Object.entries(profiles).map(([name, profile]) => [
+        name,
+        {
+          ...profile,
+          apiHeaders: profile.apiHeaders ?? {},
+          reasoningEffort: this.normalizeReasoningEffort(profile.reasoningEffort),
+          stream: profile.stream === true,
+        },
+      ]),
+    );
   }
 }
 

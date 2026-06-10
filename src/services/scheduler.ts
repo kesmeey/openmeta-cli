@@ -54,15 +54,14 @@ export class SchedulerService {
       return {
         provider,
         status: 'manual',
-        detail: 'Automatic scheduling is not supported on this platform. Use your system scheduler to run OpenMeta agent in headless mode.',
+        detail:
+          'Automatic scheduling is not supported on this platform. Use your system scheduler to run OpenMeta agent in headless mode.',
         command: this.buildCommandString(context),
       };
     }
 
     const context = this.getSchedulerContext();
-    return provider === 'launchd'
-      ? this.installLaunchd(config, context)
-      : this.installCron(config, context);
+    return provider === 'launchd' ? this.installLaunchd(config, context) : this.installCron(config, context);
   }
 
   private uninstall(provider: SchedulerProvider): SchedulerSyncResult {
@@ -202,9 +201,7 @@ export class SchedulerService {
 
     const cronLine = `${minute} ${hour} * * * PATH=${this.shellEscape(process.env['PATH'] || DEFAULT_PATH)} HOME=${this.shellEscape(homedir())} ${this.buildCommandString(context)} >> ${this.shellEscape(stdoutPath)} 2>> ${this.shellEscape(stderrPath)} ${CRON_TAG}`;
 
-    const lines = currentCron.content
-      .split(/\r?\n/)
-      .filter(line => Boolean(line.trim()) && !line.includes(CRON_TAG));
+    const lines = currentCron.content.split(/\r?\n/).filter((line) => Boolean(line.trim()) && !line.includes(CRON_TAG));
     lines.push(cronLine);
 
     const updatedContent = `${lines.join('\n')}\n`;
@@ -240,7 +237,7 @@ export class SchedulerService {
 
     const filteredLines = currentCron.content
       .split(/\r?\n/)
-      .filter(line => Boolean(line.trim()) && !line.includes(CRON_TAG));
+      .filter((line) => Boolean(line.trim()) && !line.includes(CRON_TAG));
 
     const updatedContent = filteredLines.length > 0 ? `${filteredLines.join('\n')}\n` : '';
     const applyResult = this.runCommand('crontab', ['-'], false, updatedContent);
@@ -287,12 +284,7 @@ export class SchedulerService {
     };
   }
 
-  private runCommand(
-    command: string,
-    args: string[],
-    allowFailure: boolean = false,
-    input?: string,
-  ): CommandResult {
+  private runCommand(command: string, args: string[], allowFailure: boolean = false, input?: string): CommandResult {
     const result = spawnSync(command, args, {
       encoding: 'utf-8',
       input,
@@ -337,13 +329,9 @@ export class SchedulerService {
   }
 
   private buildCommandString(context: SchedulerContext): string {
-    return [
-      context.executablePath,
-      context.entryScriptPath,
-      'agent',
-      '--headless',
-      '--scheduler-run',
-    ].map(value => this.shellEscape(value)).join(' ');
+    return [context.executablePath, context.entryScriptPath, 'agent', '--headless', '--scheduler-run']
+      .map((value) => this.shellEscape(value))
+      .join(' ');
   }
 
   private parseScheduleTime(value: string): { hour: number; minute: number } {

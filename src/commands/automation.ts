@@ -3,9 +3,7 @@ import { automationOrchestrator } from '../orchestration/index.js';
 import { runCommand } from './run-command.js';
 
 export function registerAutomationCommand(program: Command): void {
-  const automation = program
-    .command('automation')
-    .description('Manage unattended daily automation');
+  const automation = program.command('automation').description('Manage unattended daily automation');
 
   automation
     .command('status')

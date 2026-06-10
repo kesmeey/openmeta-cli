@@ -24,23 +24,25 @@ describe('ui task progress', () => {
       return true;
     });
 
-    await runInMachineContext(() => runTask(
-      capabilities,
-      {
-        title: 'Waiting for repository analysis',
-        doneMessage: 'Repository analysis finished',
-        step: { index: 2, total: 4 },
-        heartbeat: {
-          intervalMs: 5,
-          message: ({ elapsedMs }) => `Still working after ${elapsedMs}ms`,
+    await runInMachineContext(() =>
+      runTask(
+        capabilities,
+        {
+          title: 'Waiting for repository analysis',
+          doneMessage: 'Repository analysis finished',
+          step: { index: 2, total: 4 },
+          heartbeat: {
+            intervalMs: 5,
+            message: ({ elapsedMs }) => `Still working after ${elapsedMs}ms`,
+          },
         },
-      },
-      async (task) => {
-        task.setMessage('Captured repository context');
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        return true;
-      },
-    ));
+        async (task) => {
+          task.setMessage('Captured repository context');
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          return true;
+        },
+      ),
+    );
 
     const combined = stderrWrites.join('');
     expect(combined).toContain('Step 2/4 Waiting for repository analysis');

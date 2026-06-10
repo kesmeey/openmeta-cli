@@ -3,9 +3,7 @@ import { configOrchestrator } from '../orchestration/index.js';
 import { runCommand } from './run-command.js';
 
 export function registerConfigCommand(program: Command): void {
-  const config = program
-    .command('config')
-    .description('View and modify OpenMeta CLI configuration');
+  const config = program.command('config').description('View and modify OpenMeta CLI configuration');
 
   config
     .command('view')

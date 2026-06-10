@@ -27,7 +27,9 @@ export function parseGitHubRepoFullName(value: string): string {
     }
   }
 
-  throw new Error('Repository must be owner/name or a GitHub repository URL, for example: vercel/next.js or https://github.com/vercel/next.js.');
+  throw new Error(
+    'Repository must be owner/name or a GitHub repository URL, for example: vercel/next.js or https://github.com/vercel/next.js.',
+  );
 }
 
 export interface GitHubIssueReference {

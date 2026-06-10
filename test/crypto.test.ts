@@ -53,8 +53,7 @@ describe('CryptoService', () => {
 
     {
       const CryptoService = await loadCryptoService();
-      expect(() => CryptoService.decrypt('enc:v2:ZmFrZWl2MTIzNDU2:ZmFrZXRhZw==:ZmFrZWNpcGhlcg=='))
-        .toThrow('missing');
+      expect(() => CryptoService.decrypt('enc:v2:ZmFrZWl2MTIzNDU2:ZmFrZXRhZw==:ZmFrZWNpcGhlcg==')).toThrow('missing');
     }
 
     writeFileSync(getKeyPath(), Buffer.from('too-short').toString('base64'), 'utf-8');

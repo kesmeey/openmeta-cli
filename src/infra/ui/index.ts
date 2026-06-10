@@ -121,12 +121,7 @@ function clackLines(lines: string | string[]): void {
   });
 }
 
-function renderPrefixedLines(
-  text: string,
-  width: number,
-  prefix: string,
-  continuationPrefix: string,
-): string[] {
+function renderPrefixedLines(text: string, width: number, prefix: string, continuationPrefix: string): string[] {
   const wrapped = wrapLine(text, Math.max(12, width - visibleLength(prefix)));
   return wrapped.map((line, index) => `${index === 0 ? prefix : continuationPrefix}${line}`);
 }
@@ -155,7 +150,10 @@ function renderBrandMark(capabilities: UiCapabilities, tone: Tone = 'accent'): s
     return lines;
   }
 
-  return gradientForTone.multiline(lines.join('\n')).split('\n').map((line) => chalk.bold(line));
+  return gradientForTone
+    .multiline(lines.join('\n'))
+    .split('\n')
+    .map((line) => chalk.bold(line));
 }
 
 function renderRule(capabilities: UiCapabilities, tone: Tone, width: number): string {
@@ -184,12 +182,7 @@ function buildCardText(capabilities: UiCapabilities, options: CardOptions, varia
       rows.push(chalk.gray(renderRule(capabilities, tone, Math.min(24, width))));
     }
 
-    rows.push(...options.lines.flatMap((line) => renderPrefixedLines(
-      line,
-      width,
-      `${figures.bullet} `,
-      '  ',
-    )));
+    rows.push(...options.lines.flatMap((line) => renderPrefixedLines(line, width, `${figures.bullet} `, '  ')));
   }
 
   return rows.join('\n');
@@ -204,15 +197,17 @@ function printCard(capabilities: UiCapabilities, options: CardOptions, variant: 
   const content = buildCardText(capabilities, options, variant);
 
   printBlankLine();
-  process.stdout.write(`${boxen(content, {
-    borderColor: capabilities.supportsColor ? palette.borderColor : undefined,
-    borderStyle: capabilities.supportsUnicode ? (variant === 'callout' ? 'double' : 'round') : 'single',
-    padding: { top: 0, right: 1, bottom: 0, left: 1 },
-    margin: { top: 0, bottom: 0, left: 0, right: 0 },
-    width: Math.max(54, Math.min(capabilities.width, 96)),
-    title: options.label && !genericCommandLabel(options.label) ? ` ${options.label.toUpperCase()} ` : undefined,
-    titleAlignment: 'left',
-  })}\n`);
+  process.stdout.write(
+    `${boxen(content, {
+      borderColor: capabilities.supportsColor ? palette.borderColor : undefined,
+      borderStyle: capabilities.supportsUnicode ? (variant === 'callout' ? 'double' : 'round') : 'single',
+      padding: { top: 0, right: 1, bottom: 0, left: 1 },
+      margin: { top: 0, bottom: 0, left: 0, right: 0 },
+      width: Math.max(54, Math.min(capabilities.width, 96)),
+      title: options.label && !genericCommandLabel(options.label) ? ` ${options.label.toUpperCase()} ` : undefined,
+      titleAlignment: 'left',
+    })}\n`,
+  );
 }
 
 function printHero(capabilities: UiCapabilities, options: CardOptions): void {
@@ -235,14 +230,13 @@ function printHero(capabilities: UiCapabilities, options: CardOptions): void {
 
   if (options.lines && options.lines.length > 0) {
     clackLines(chalk.gray(rule));
-    const rendered = options.lines.flatMap((entry) => renderPrefixedLines(
-      entry,
-      width - 2,
-      `${bullet} `,
-      '  ',
-    )).map((line) => line.startsWith(`${bullet} `)
-      ? `${palette.accent(bullet)} ${chalk.white(line.slice(2))}`
-      : `  ${chalk.white(line.trimStart())}`);
+    const rendered = options.lines
+      .flatMap((entry) => renderPrefixedLines(entry, width - 2, `${bullet} `, '  '))
+      .map((line) =>
+        line.startsWith(`${bullet} `)
+          ? `${palette.accent(bullet)} ${chalk.white(line.slice(2))}`
+          : `  ${chalk.white(line.trimStart())}`,
+      );
     clackLines(rendered);
   }
 }
@@ -264,14 +258,13 @@ function printCelebration(capabilities: UiCapabilities, options: CardOptions): v
     clackLines(wrapLine(options.subtitle, width).map((line) => chalk.gray(line)));
   }
 
-  const rendered = (options.lines ?? []).flatMap((entry) => renderPrefixedLines(
-      entry,
-      width - 2,
-      `${figures.pointerSmall} `,
-      '  ',
-    )).map((line) => line.startsWith(`${figures.pointerSmall} `)
-    ? `${palette.accent(figures.pointerSmall)} ${chalk.white(line.slice(2))}`
-    : `  ${chalk.white(line.trimStart())}`);
+  const rendered = (options.lines ?? [])
+    .flatMap((entry) => renderPrefixedLines(entry, width - 2, `${figures.pointerSmall} `, '  '))
+    .map((line) =>
+      line.startsWith(`${figures.pointerSmall} `)
+        ? `${palette.accent(figures.pointerSmall)} ${chalk.white(line.slice(2))}`
+        : `  ${chalk.white(line.trimStart())}`,
+    );
   if (rendered.length > 0) {
     clackLines(rendered);
   }
@@ -287,7 +280,9 @@ function printSection(capabilities: UiCapabilities, title: string, subtitle?: st
     return;
   }
   const width = Math.max(44, Math.min(capabilities.width - 2, 106));
-  const rule = capabilities.supportsUnicode ? '─'.repeat(Math.max(10, width - visibleLength(title) - 6)) : '-'.repeat(Math.max(10, width - visibleLength(title) - 6));
+  const rule = capabilities.supportsUnicode
+    ? '─'.repeat(Math.max(10, width - visibleLength(title) - 6))
+    : '-'.repeat(Math.max(10, width - visibleLength(title) - 6));
 
   printBlankLine();
   process.stdout.write(`${chalk.cyanBright.bold(`${figures.line} ${title}`)} ${chalk.gray(rule)}\n`);
@@ -336,27 +331,33 @@ function printStats(capabilities: UiCapabilities, title: string, items: MetricIt
   printSection(capabilities, title);
   const columns = capabilities.mode === 'interactive-rich' && capabilities.width >= 96 ? 3 : 2;
   const width = Math.max(44, Math.min(capabilities.width - 2, 106));
-  const cardWidth = Math.max(18, Math.floor((width - ((columns - 1) * 3)) / columns));
+  const cardWidth = Math.max(18, Math.floor((width - (columns - 1) * 3) / columns));
   const rows: string[][] = [];
 
   for (let index = 0; index < items.length; index += columns) {
-    rows.push(items.slice(index, index + columns).map((item) => {
-      const palette = paletteForTone(item.tone ?? 'accent');
-      const value = palette.accent(chalk.bold(item.value));
-      const hint = item.hint ? chalk.gray(` ${item.hint}`) : '';
-      return `${value}${hint}\n${chalk.gray(item.label)}`;
-    }));
+    rows.push(
+      items.slice(index, index + columns).map((item) => {
+        const palette = paletteForTone(item.tone ?? 'accent');
+        const value = palette.accent(chalk.bold(item.value));
+        const hint = item.hint ? chalk.gray(` ${item.hint}`) : '';
+        return `${value}${hint}\n${chalk.gray(item.label)}`;
+      }),
+    );
   }
 
   for (const row of rows) {
-    const firstLine = row.map((entry) => {
-      const [value] = entry.split('\n');
-      return padLine(value || '', cardWidth);
-    }).join('   ');
-    const secondLine = row.map((entry) => {
-      const [, label] = entry.split('\n');
-      return padLine(label || '', cardWidth);
-    }).join('   ');
+    const firstLine = row
+      .map((entry) => {
+        const [value] = entry.split('\n');
+        return padLine(value || '', cardWidth);
+      })
+      .join('   ');
+    const secondLine = row
+      .map((entry) => {
+        const [, label] = entry.split('\n');
+        return padLine(label || '', cardWidth);
+      })
+      .join('   ');
     process.stdout.write(`  ${firstLine}\n`);
     process.stdout.write(`  ${secondLine}\n`);
   }
@@ -389,7 +390,9 @@ function printTimeline(capabilities: UiCapabilities, title: string, items: Timel
 
   for (const item of items) {
     const color = statusColor(item.state);
-    process.stdout.write(`  ${color(statusSymbol(item.state))} ${chalk.white(item.title)}${item.meta ? chalk.gray(`  ${item.meta}`) : ''}\n`);
+    process.stdout.write(
+      `  ${color(statusSymbol(item.state))} ${chalk.white(item.title)}${item.meta ? chalk.gray(`  ${item.meta}`) : ''}\n`,
+    );
     if (item.subtitle) {
       for (const line of wrapLine(item.subtitle, Math.max(36, capabilities.width - 12))) {
         process.stdout.write(`      ${chalk.gray(line)}\n`);
@@ -445,90 +448,70 @@ function completionCopy(commandName: string): Pick<CardOptions, 'title' | 'subti
       return {
         title: 'The contribution arc resolved with a clean finish',
         subtitle: 'The field, the repository, and the artifact trail now sit in one readable line of motion.',
-        lines: [
-          'Pick up the next move only if it still feels sharper than stopping here.',
-        ],
+        lines: ['Pick up the next move only if it still feels sharper than stopping here.'],
         tone: 'success',
       };
     case 'OpenMeta Init':
       return {
         title: 'The cockpit is calibrated and ready',
         subtitle: 'Identity, model, profile, and automation posture now move as one system.',
-        lines: [
-          'The next run can begin without re-explaining yourself to the machine.',
-        ],
+        lines: ['The next run can begin without re-explaining yourself to the machine.'],
         tone: 'success',
       };
     case 'OpenMeta Scout':
       return {
         title: 'The noise has been cut into a usable shortlist',
         subtitle: 'You now have a field worth choosing from, not just a pile worth scanning.',
-        lines: [
-          'Start where the signal is strongest, not where the list is longest.',
-        ],
+        lines: ['Start where the signal is strongest, not where the list is longest.'],
         tone: 'success',
       };
     case 'OpenMeta Config':
       return {
         title: 'The control surface is steady and legible',
         subtitle: 'Configuration output finished in a state you can inspect at a glance.',
-        lines: [
-          'What matters is now visible without spelunking through raw JSON.',
-        ],
+        lines: ['What matters is now visible without spelunking through raw JSON.'],
         tone: 'success',
       };
     case 'OpenMeta Automation':
       return {
         title: 'The unattended cadence is now in tune',
         subtitle: 'Scheduler state and local intent are no longer drifting apart.',
-        lines: [
-          'Leave the loop quiet, or let it keep moving in the background.',
-        ],
+        lines: ['Leave the loop quiet, or let it keep moving in the background.'],
         tone: 'success',
       };
     case 'OpenMeta Inbox':
       return {
         title: 'The shortlist is staged for a fast return',
         subtitle: 'The most promising drafted opportunities are now easy to revisit without friction.',
-        lines: [
-          'Come back when you want the next smart entry point, not another search session.',
-        ],
+        lines: ['Come back when you want the next smart entry point, not another search session.'],
         tone: 'success',
       };
     case 'OpenMeta PoW':
       return {
         title: 'The work trail is closed into a readable ledger',
         subtitle: 'The record above can now be reviewed like a narrative instead of a dump.',
-        lines: [
-          'Momentum is easier to trust when the trail stays legible.',
-        ],
+        lines: ['Momentum is easier to trust when the trail stays legible.'],
         tone: 'success',
       };
     case 'OpenMeta Doctor':
       return {
         title: 'The local preflight finished cleanly',
         subtitle: 'Runtime, configuration, storage paths, and automation policy are readable from one place.',
-        lines: [
-          'The agent has a stable surface to start from.',
-        ],
+        lines: ['The agent has a stable surface to start from.'],
         tone: 'success',
       };
     case 'OpenMeta Runs':
       return {
         title: 'The local run ledger is readable',
         subtitle: 'Recent command execution is now traceable without digging through raw state.',
-        lines: [
-          'The next debugging pass has a real timeline to stand on.',
-        ],
+        lines: ['The next debugging pass has a real timeline to stand on.'],
         tone: 'success',
       };
     default:
       return {
         title: 'Execution settled into a clean end state',
         subtitle: 'The terminal is back in a readable, stable posture.',
-        lines: [
-          'Nothing is fighting for attention anymore.',
-        ],
+        lines: ['Nothing is fighting for attention anymore.'],
         tone: 'success',
       };
   }
@@ -605,9 +588,7 @@ export const ui = {
       symbol: figures.warning,
       withGuide: false,
     });
-    clackLines([
-      chalk.gray('Nothing was written, nothing was published, and the terminal remains in a safe state.'),
-    ]);
+    clackLines([chalk.gray('Nothing was written, nothing was published, and the terminal remains in a safe state.')]);
   },
 
   commandFailed(_commandName: string, message: string): void {
@@ -618,17 +599,19 @@ export const ui = {
     p.log.error(message, {
       withGuide: false,
     });
-    clackLines([
-      chalk.gray('Inspect the blocking edge, fix it cleanly, then run again from a stable state.'),
-    ]);
+    clackLines([chalk.gray('Inspect the blocking edge, fix it cleanly, then run again from a stable state.')]);
   },
 
   emptyState(_commandName: string, title: string, subtitle: string): void {
-    printCard(capabilities, {
-      title,
-      subtitle,
-      tone: 'warning',
-    }, 'callout');
+    printCard(
+      capabilities,
+      {
+        title,
+        subtitle,
+        tone: 'warning',
+      },
+      'callout',
+    );
   },
 };
 
@@ -639,8 +622,8 @@ export type {
   RecordItem,
   StepItem,
   StepState,
-  TaskOptions,
   TaskController,
+  TaskOptions,
   TimelineItem,
   Tone,
 } from './types.js';

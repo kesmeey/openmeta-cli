@@ -1,12 +1,29 @@
 import { describe, expect, test } from 'bun:test';
-import { githubService, inboxService, issueRankingService, llmService, proofOfWorkService } from '../src/services/index.js';
-import { createInboxItem, createIssue, createMatchedIssue, createProofRecord, createRankedIssue } from './helpers/factories.js';
+import {
+  githubService,
+  inboxService,
+  issueRankingService,
+  llmService,
+  proofOfWorkService,
+} from '../src/services/index.js';
+import {
+  createInboxItem,
+  createIssue,
+  createMatchedIssue,
+  createProofRecord,
+  createRankedIssue,
+} from './helpers/factories.js';
 
 describe('IssueRankingService', () => {
   test('selects the first issue that meets the automation threshold', () => {
     const issues = [
       createRankedIssue({ opportunity: { ...createRankedIssue().opportunity, overallScore: 68 } }),
-      createRankedIssue({ repoFullName: 'acme/high', repoName: 'high', number: 77, opportunity: { ...createRankedIssue().opportunity, overallScore: 81 } }),
+      createRankedIssue({
+        repoFullName: 'acme/high',
+        repoName: 'high',
+        number: 77,
+        opportunity: { ...createRankedIssue().opportunity, overallScore: 81 },
+      }),
     ];
 
     const selected = issueRankingService.selectIssueForAutomation(issues, 70);
@@ -31,30 +48,33 @@ describe('IssueRankingService', () => {
   });
 
   test('pre-ranks issue discovery candidates against the saved profile', () => {
-    const ranked = issueRankingService.rankIssuesForProfile([
-      createIssue({
-        repoFullName: 'acme/python-tool',
-        repoName: 'python-tool',
-        number: 1,
-        title: 'Add pytest coverage for serializers',
-        body: 'Fresh issue with unrelated Python testing work.',
-        repoDescription: 'Python API utilities',
-        updatedAt: new Date().toISOString(),
-      }),
-      createIssue({
-        repoFullName: 'acme/react-ui',
-        repoName: 'react-ui',
-        number: 2,
-        title: 'Fix React keyboard focus in dropdown',
-        body: 'The issue is in `src/components/Dropdown.tsx`. Steps to reproduce: tab into the menu. Expected focus moves to the first item.',
-        repoDescription: 'Accessible TypeScript React components',
-        updatedAt: '2026-03-01T08:00:00.000Z',
-      }),
-    ], {
-      techStack: ['TypeScript', 'React'],
-      proficiency: 'intermediate',
-      focusAreas: ['web-dev'],
-    });
+    const ranked = issueRankingService.rankIssuesForProfile(
+      [
+        createIssue({
+          repoFullName: 'acme/python-tool',
+          repoName: 'python-tool',
+          number: 1,
+          title: 'Add pytest coverage for serializers',
+          body: 'Fresh issue with unrelated Python testing work.',
+          repoDescription: 'Python API utilities',
+          updatedAt: new Date().toISOString(),
+        }),
+        createIssue({
+          repoFullName: 'acme/react-ui',
+          repoName: 'react-ui',
+          number: 2,
+          title: 'Fix React keyboard focus in dropdown',
+          body: 'The issue is in `src/components/Dropdown.tsx`. Steps to reproduce: tab into the menu. Expected focus moves to the first item.',
+          repoDescription: 'Accessible TypeScript React components',
+          updatedAt: '2026-03-01T08:00:00.000Z',
+        }),
+      ],
+      {
+        techStack: ['TypeScript', 'React'],
+        proficiency: 'intermediate',
+        focusAreas: ['web-dev'],
+      },
+    );
 
     expect(ranked[0]?.repoFullName).toBe('acme/react-ui');
   });
@@ -62,13 +82,15 @@ describe('IssueRankingService', () => {
   test('scores all candidate batches instead of stopping after the first matching batch', async () => {
     const originalScoreIssues = llmService.scoreIssues;
     const batches: number[][] = [];
-    const issues = Array.from({ length: 25 }, (_, index) => createIssue({
-      id: index + 1,
-      number: index + 1,
-      repoFullName: `acme/repo-${index + 1}`,
-      repoName: `repo-${index + 1}`,
-      title: `React issue ${index + 1}`,
-    }));
+    const issues = Array.from({ length: 25 }, (_, index) =>
+      createIssue({
+        id: index + 1,
+        number: index + 1,
+        repoFullName: `acme/repo-${index + 1}`,
+        repoName: `repo-${index + 1}`,
+        title: `React issue ${index + 1}`,
+      }),
+    );
 
     try {
       llmService.scoreIssues = async (_profile, batch) => {
@@ -77,18 +99,23 @@ describe('IssueRankingService', () => {
           version: '1',
           kind: 'issue_match_list',
           status: 'success',
-          data: batch.map((issue) => createMatchedIssue({
-            ...issue,
-            matchScore: 72,
-          })),
+          data: batch.map((issue) =>
+            createMatchedIssue({
+              ...issue,
+              matchScore: 72,
+            }),
+          ),
         };
       };
 
-      const matches = await issueRankingService.scoreIssuesInBatches({
-        techStack: ['React'],
-        proficiency: 'intermediate',
-        focusAreas: ['web-dev'],
-      }, issues);
+      const matches = await issueRankingService.scoreIssuesInBatches(
+        {
+          techStack: ['React'],
+          proficiency: 'intermediate',
+          focusAreas: ['web-dev'],
+        },
+        issues,
+      );
 
       expect(batches).toHaveLength(2);
       expect(matches).toHaveLength(25);
@@ -98,22 +125,25 @@ describe('IssueRankingService', () => {
   });
 
   test('builds local heuristic issue matches without LLM scoring', () => {
-    const matches = issueRankingService.buildLocalIssueMatches([
-      createIssue({
-        repoFullName: 'acme/react-ui',
-        repoName: 'react-ui',
-        number: 12,
-        title: 'Fix React focus trap in menu',
-        body: 'The bug is in `src/Menu.tsx`. Steps to reproduce: tab through the menu. Expected focus stays inside.',
-        labels: ['good first issue', 'accessibility'],
-        repoDescription: 'TypeScript React component library',
-        repoStars: 420,
-      }),
-    ], {
-      techStack: ['TypeScript', 'React'],
-      proficiency: 'intermediate',
-      focusAreas: ['web-dev'],
-    });
+    const matches = issueRankingService.buildLocalIssueMatches(
+      [
+        createIssue({
+          repoFullName: 'acme/react-ui',
+          repoName: 'react-ui',
+          number: 12,
+          title: 'Fix React focus trap in menu',
+          body: 'The bug is in `src/Menu.tsx`. Steps to reproduce: tab through the menu. Expected focus stays inside.',
+          labels: ['good first issue', 'accessibility'],
+          repoDescription: 'TypeScript React component library',
+          repoStars: 420,
+        }),
+      ],
+      {
+        techStack: ['TypeScript', 'React'],
+        proficiency: 'intermediate',
+        focusAreas: ['web-dev'],
+      },
+    );
 
     expect(matches).toHaveLength(1);
     expect(matches[0]?.matchScore).toBeGreaterThan(60);
@@ -162,42 +192,45 @@ describe('IssueRankingService', () => {
         ],
       });
 
-      const ranked = await issueRankingService.loadRankedIssues({
-        userProfile: {
-          techStack: ['TypeScript', 'React'],
-          proficiency: 'intermediate',
-          focusAreas: ['web-dev'],
+      const ranked = await issueRankingService.loadRankedIssues(
+        {
+          userProfile: {
+            techStack: ['TypeScript', 'React'],
+            proficiency: 'intermediate',
+            focusAreas: ['web-dev'],
+          },
+          github: {
+            pat: 'ghp-test',
+            username: 'octocat',
+            targetRepoPath: '',
+          },
+          llm: {
+            provider: 'openai',
+            apiBaseUrl: 'https://api.openai.com/v1',
+            apiKey: '',
+            modelName: 'gpt-5.5',
+            reasoningEffort: 'none',
+          },
+          automation: {
+            enabled: false,
+            scheduleTime: '09:00',
+            timezone: 'UTC',
+            contentType: 'research_note',
+            scheduler: 'manual',
+            minMatchScore: 70,
+            skipIfAlreadyGeneratedToday: true,
+          },
+          scoring: {
+            weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.3, impact: 0.2, riskPenalty: 0.35 },
+            overallWeights: { technicalMatch: 0.45, opportunityScore: 0.55 },
+            preset: 'balanced',
+          },
+          commitTemplate: '{{content}}',
         },
-        github: {
-          pat: 'ghp-test',
-          username: 'octocat',
-          targetRepoPath: '',
+        {
+          localOnly: true,
         },
-        llm: {
-          provider: 'openai',
-          apiBaseUrl: 'https://api.openai.com/v1',
-          apiKey: '',
-          modelName: 'gpt-5.5',
-          reasoningEffort: 'none',
-        },
-        automation: {
-          enabled: false,
-          scheduleTime: '09:00',
-          timezone: 'UTC',
-          contentType: 'research_note',
-          scheduler: 'manual',
-          minMatchScore: 70,
-          skipIfAlreadyGeneratedToday: true,
-        },
-        scoring: {
-          weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.30, impact: 0.20, riskPenalty: 0.35 },
-          overallWeights: { technicalMatch: 0.45, opportunityScore: 0.55 },
-          preset: 'balanced',
-        },
-        commitTemplate: '{{content}}',
-      }, {
-        localOnly: true,
-      });
+      );
 
       expect(ranked.map((issue) => `${issue.repoFullName}#${issue.number}`)).toContain('acme/local#7');
       expect(ranked.map((issue) => `${issue.repoFullName}#${issue.number}`)).toContain('acme/proof#9');
@@ -229,55 +262,60 @@ describe('IssueRankingService', () => {
         version: '1',
         kind: 'issue_match_list',
         status: 'success',
-        data: issues.map((issue) => createMatchedIssue({
-          ...issue,
-          matchScore: 77,
-          analysis: {
-            coreDemand: issue.title,
-            techRequirements: ['TypeScript', 'OpenAI API'],
-            solutionSuggestion: 'Inspect the compatibility route and add a guard.',
-            estimatedWorkload: '1-2 hours',
-          },
-        })),
+        data: issues.map((issue) =>
+          createMatchedIssue({
+            ...issue,
+            matchScore: 77,
+            analysis: {
+              coreDemand: issue.title,
+              techRequirements: ['TypeScript', 'OpenAI API'],
+              solutionSuggestion: 'Inspect the compatibility route and add a guard.',
+              estimatedWorkload: '1-2 hours',
+            },
+          }),
+        ),
       });
 
-      const [ranked] = await issueRankingService.loadTargetIssue({
-        userProfile: {
-          techStack: ['TypeScript'],
-          proficiency: 'intermediate',
-          focusAreas: ['backend'],
+      const [ranked] = await issueRankingService.loadTargetIssue(
+        {
+          userProfile: {
+            techStack: ['TypeScript'],
+            proficiency: 'intermediate',
+            focusAreas: ['backend'],
+          },
+          github: {
+            pat: 'ghp-test',
+            username: 'octocat',
+            targetRepoPath: '',
+          },
+          llm: {
+            provider: 'openai',
+            apiBaseUrl: 'https://api.openai.com/v1',
+            apiKey: 'sk-test',
+            modelName: 'gpt-5.5',
+            reasoningEffort: 'none',
+          },
+          automation: {
+            enabled: false,
+            scheduleTime: '09:00',
+            timezone: 'UTC',
+            contentType: 'research_note',
+            scheduler: 'manual',
+            minMatchScore: 70,
+            skipIfAlreadyGeneratedToday: true,
+          },
+          scoring: {
+            weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.3, impact: 0.2, riskPenalty: 0.35 },
+            overallWeights: { technicalMatch: 0.45, opportunityScore: 0.55 },
+            preset: 'balanced',
+          },
+          commitTemplate: '{{content}}',
         },
-        github: {
-          pat: 'ghp-test',
-          username: 'octocat',
-          targetRepoPath: '',
+        {
+          repoFullName: 'Wei-Shaw/sub2api',
+          issueNumber: 3014,
         },
-        llm: {
-          provider: 'openai',
-          apiBaseUrl: 'https://api.openai.com/v1',
-          apiKey: 'sk-test',
-          modelName: 'gpt-5.5',
-          reasoningEffort: 'none',
-        },
-        automation: {
-          enabled: false,
-          scheduleTime: '09:00',
-          timezone: 'UTC',
-          contentType: 'research_note',
-          scheduler: 'manual',
-          minMatchScore: 70,
-          skipIfAlreadyGeneratedToday: true,
-        },
-      scoring: {
-        weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.30, impact: 0.20, riskPenalty: 0.35 },
-        overallWeights: { technicalMatch: 0.45, opportunityScore: 0.55 },
-        preset: 'balanced',
-      },
-        commitTemplate: '{{content}}',
-      }, {
-        repoFullName: 'Wei-Shaw/sub2api',
-        issueNumber: 3014,
-      });
+      );
 
       expect(observedFetches).toEqual([
         {
@@ -305,43 +343,46 @@ describe('IssueRankingService', () => {
         return [];
       };
 
-      await issueRankingService.loadRankedIssues({
-        userProfile: {
-          techStack: ['TypeScript'],
-          proficiency: 'intermediate',
-          focusAreas: ['web-dev'],
+      await issueRankingService.loadRankedIssues(
+        {
+          userProfile: {
+            techStack: ['TypeScript'],
+            proficiency: 'intermediate',
+            focusAreas: ['web-dev'],
+          },
+          github: {
+            pat: 'ghp-test',
+            username: 'octocat',
+            targetRepoPath: '',
+          },
+          llm: {
+            provider: 'openai',
+            apiBaseUrl: 'https://api.openai.com/v1',
+            apiKey: 'sk-test',
+            modelName: 'gpt-5.5',
+            reasoningEffort: 'none',
+          },
+          automation: {
+            enabled: false,
+            scheduleTime: '09:00',
+            timezone: 'UTC',
+            contentType: 'research_note',
+            scheduler: 'manual',
+            minMatchScore: 70,
+            skipIfAlreadyGeneratedToday: true,
+          },
+          scoring: {
+            weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.3, impact: 0.2, riskPenalty: 0.35 },
+            overallWeights: { technicalMatch: 0.45, opportunityScore: 0.55 },
+            preset: 'balanced',
+          },
+          commitTemplate: '{{content}}',
         },
-        github: {
-          pat: 'ghp-test',
-          username: 'octocat',
-          targetRepoPath: '',
+        {
+          repoFullName: 'vercel/next.js',
+          localOnly: true,
         },
-        llm: {
-          provider: 'openai',
-          apiBaseUrl: 'https://api.openai.com/v1',
-          apiKey: 'sk-test',
-          modelName: 'gpt-5.5',
-          reasoningEffort: 'none',
-        },
-        automation: {
-          enabled: false,
-          scheduleTime: '09:00',
-          timezone: 'UTC',
-          contentType: 'research_note',
-          scheduler: 'manual',
-          minMatchScore: 70,
-          skipIfAlreadyGeneratedToday: true,
-        },
-      scoring: {
-        weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.30, impact: 0.20, riskPenalty: 0.35 },
-        overallWeights: { technicalMatch: 0.45, opportunityScore: 0.55 },
-        preset: 'balanced',
-      },
-        commitTemplate: '{{content}}',
-      }, {
-        repoFullName: 'vercel/next.js',
-        localOnly: true,
-      });
+      );
 
       expect(observedOptions[0]).toMatchObject({
         repoFullName: 'vercel/next.js',

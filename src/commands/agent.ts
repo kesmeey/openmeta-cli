@@ -17,20 +17,34 @@ export function registerAgentCommand(program: Command): void {
     .option('--issue <issue>', 'Solve one GitHub issue number or issue URL')
     .option('--dry-run', 'Preview artifacts without writing to git')
     .addOption(new Option('--scheduler-run', 'Internal flag for scheduled automation').hideHelp())
-    .action((options: { headless?: boolean; force?: boolean; runChecks?: boolean; draftOnly?: boolean; localArtifactsOnly?: boolean; refresh?: boolean; repo?: string; repoPath?: string; issue?: string; dryRun?: boolean; schedulerRun?: boolean }) => runCommand(
-      'OpenMeta Agent',
-      () => agentOrchestrator.run({
-        headless: options.headless,
-        force: options.force,
-        runChecks: options.runChecks,
-        draftOnly: options.draftOnly,
-        localArtifactsOnly: options.localArtifactsOnly,
-        refresh: options.refresh,
-        repo: options.repo,
-        repoPath: options.repoPath,
-        issue: options.issue,
-        dryRun: options.dryRun,
-        schedulerRun: options.schedulerRun,
-      }),
-    ));
+    .action(
+      (options: {
+        headless?: boolean;
+        force?: boolean;
+        runChecks?: boolean;
+        draftOnly?: boolean;
+        localArtifactsOnly?: boolean;
+        refresh?: boolean;
+        repo?: string;
+        repoPath?: string;
+        issue?: string;
+        dryRun?: boolean;
+        schedulerRun?: boolean;
+      }) =>
+        runCommand('OpenMeta Agent', () =>
+          agentOrchestrator.run({
+            headless: options.headless,
+            force: options.force,
+            runChecks: options.runChecks,
+            draftOnly: options.draftOnly,
+            localArtifactsOnly: options.localArtifactsOnly,
+            refresh: options.refresh,
+            repo: options.repo,
+            repoPath: options.repoPath,
+            issue: options.issue,
+            dryRun: options.dryRun,
+            schedulerRun: options.schedulerRun,
+          }),
+        ),
+    );
 }

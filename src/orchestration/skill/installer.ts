@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import { getInstalledSkillFileName, renderInstallSkillContent } from './renderer.js';
 import type { SkillHost } from './catalog.js';
+import { getInstalledSkillFileName, renderInstallSkillContent } from './renderer.js';
 
 export interface SkillInstallResult {
   host: SkillHost;
@@ -28,7 +28,10 @@ function resolveDefaultInstallPath(host: SkillHost, homeDir = homedir()): string
   return null;
 }
 
-export async function installSkillBundle(host: SkillHost, options: SkillInstallOptions = {}): Promise<SkillInstallResult> {
+export async function installSkillBundle(
+  host: SkillHost,
+  options: SkillInstallOptions = {},
+): Promise<SkillInstallResult> {
   const installPath = resolveDefaultInstallPath(host, options.homeDir);
   if (!installPath) {
     return {

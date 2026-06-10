@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
 import { GitHubService } from '../src/services/github.js';
-import { createMatchedIssue } from './helpers/factories.js';
 import type { GitHubIssue } from '../src/types/index.js';
+import { createMatchedIssue } from './helpers/factories.js';
 
 interface GitHubServiceInternals {
   octokit: {
@@ -13,10 +13,16 @@ interface GitHubServiceInternals {
         get: (params: { owner: string; repo: string; issue_number: number }) => Promise<{ data: unknown }>;
       };
       repos: {
-        get: (params: { owner: string; repo: string }) => Promise<{ data: { description?: string | null; stargazers_count?: number | null } }>;
+        get: (params: {
+          owner: string;
+          repo: string;
+        }) => Promise<{ data: { description?: string | null; stargazers_count?: number | null } }>;
       };
       search: {
-        issuesAndPullRequests: (params?: { q?: string; page?: number }) => Promise<{ data: { total_count: number; items: unknown[] } }>;
+        issuesAndPullRequests: (params?: {
+          q?: string;
+          page?: number;
+        }) => Promise<{ data: { total_count: number; items: unknown[] } }>;
       };
     };
   } | null;
@@ -26,11 +32,13 @@ interface GitHubServiceInternals {
   parseRepositoryUrl(repositoryUrl: string): { owner: string; repo: string; fullName: string };
   extractLabelNames(item: { labels: Array<string | { name?: string | null }> }): string[];
   describeSearchFailure(error: unknown): { reason: string; rateLimited: boolean };
-  buildDiscoveryFailureMessage(failures: Array<{
-    labelGroup: readonly string[];
-    reason: string;
-    rateLimited: boolean;
-  }>): string;
+  buildDiscoveryFailureMessage(
+    failures: Array<{
+      labelGroup: readonly string[];
+      reason: string;
+      rateLimited: boolean;
+    }>,
+  ): string;
   paginateSearchWithRetry(searchQuery: string): Promise<Array<{ id: number; number: number }>>;
   delay(ms: number): Promise<void>;
   loadCachedIssues(repoFullName?: string): GitHubIssue[] | null;
@@ -121,17 +129,21 @@ describe('GitHubService internals', () => {
   test('filters action-blocking issue labels before scoring', () => {
     const service = new GitHubService() as unknown as GitHubServiceInternals;
 
-    expect(service.shouldIncludeIssue({
-      locked: false,
-      assignees: [],
-      labels: [{ name: 'needs info' }],
-    })).toBe(false);
+    expect(
+      service.shouldIncludeIssue({
+        locked: false,
+        assignees: [],
+        labels: [{ name: 'needs info' }],
+      }),
+    ).toBe(false);
 
-    expect(service.shouldIncludeIssue({
-      locked: false,
-      assignees: [],
-      labels: [{ name: 'type: question' }],
-    })).toBe(false);
+    expect(
+      service.shouldIncludeIssue({
+        locked: false,
+        assignees: [],
+        labels: [{ name: 'type: question' }],
+      }),
+    ).toBe(false);
   });
 
   test('parses repository URLs and rejects malformed URLs', () => {
@@ -150,11 +162,7 @@ describe('GitHubService internals', () => {
   test('extracts label names from both strings and GitHub label objects', () => {
     const service = new GitHubService() as unknown as GitHubServiceInternals;
     const labels = service.extractLabelNames({
-      labels: [
-        'good first issue',
-        { name: 'help wanted' },
-        { name: null },
-      ],
+      labels: ['good first issue', { name: 'help wanted' }, { name: null }],
     });
 
     expect(labels).toEqual(['good first issue', 'help wanted']);
@@ -266,9 +274,7 @@ describe('GitHubService internals', () => {
       },
     } as unknown as GitHubServiceInternals['octokit'];
 
-    await expect(service.fetchIssue('acme/demo', 44)).rejects.toThrow(
-      'cannot be handled automatically',
-    );
+    await expect(service.fetchIssue('acme/demo', 44)).rejects.toThrow('cannot be handled automatically');
   });
 
   test('classifies search failures by rate limit and validation errors', () => {
@@ -291,26 +297,30 @@ describe('GitHubService internals', () => {
   test('builds discovery failure messages for rate limiting and generic failures', () => {
     const service = new GitHubService() as unknown as GitHubServiceInternals;
 
-    expect(service.buildDiscoveryFailureMessage([
-      {
-        labelGroup: ['good first issue'],
-        reason: 'rate limited',
-        rateLimited: true,
-      },
-    ])).toContain('Search API is currently rate-limited');
+    expect(
+      service.buildDiscoveryFailureMessage([
+        {
+          labelGroup: ['good first issue'],
+          reason: 'rate limited',
+          rateLimited: true,
+        },
+      ]),
+    ).toContain('Search API is currently rate-limited');
 
-    expect(service.buildDiscoveryFailureMessage([
-      {
-        labelGroup: ['good first issue', 'good-first-issue'],
-        reason: 'query rejected',
-        rateLimited: false,
-      },
-      {
-        labelGroup: ['help wanted'],
-        reason: 'query rejected',
-        rateLimited: false,
-      },
-    ])).toContain('good first issue/good-first-issue, help wanted');
+    expect(
+      service.buildDiscoveryFailureMessage([
+        {
+          labelGroup: ['good first issue', 'good-first-issue'],
+          reason: 'query rejected',
+          rateLimited: false,
+        },
+        {
+          labelGroup: ['help wanted'],
+          reason: 'query rejected',
+          rateLimited: false,
+        },
+      ]),
+    ).toContain('good first issue/good-first-issue, help wanted');
   });
 
   test('persists and reloads fresh issue cache entries', () => {
@@ -329,10 +339,14 @@ describe('GitHubService internals', () => {
     const service = new GitHubService() as unknown as GitHubServiceInternals;
     const cachePath = service.getCachePath();
 
-    writeFileSync(cachePath, JSON.stringify({
-      fetchedAt: '2000-01-01T00:00:00.000Z',
-      issues: [createIssue()],
-    }), 'utf-8');
+    writeFileSync(
+      cachePath,
+      JSON.stringify({
+        fetchedAt: '2000-01-01T00:00:00.000Z',
+        issues: [createIssue()],
+      }),
+      'utf-8',
+    );
     expect(service.loadCachedIssues()).toBeNull();
 
     writeFileSync(cachePath, JSON.stringify({ fetchedAt: new Date().toISOString(), issues: 'invalid' }), 'utf-8');
@@ -556,12 +570,6 @@ describe('GitHubService internals', () => {
     const items = await internals.paginateSearchWithRetry('label:"good first issue"');
 
     expect(items.map((item) => item.id)).toEqual([1, 2, 3]);
-    expect(eventOrder).toEqual([
-      'request:1',
-      'delay:3000',
-      'request:2',
-      'delay:3000',
-      'request:3',
-    ]);
+    expect(eventOrder).toEqual(['request:1', 'delay:3000', 'request:2', 'delay:3000', 'request:3']);
   });
 });

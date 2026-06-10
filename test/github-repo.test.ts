@@ -1,9 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  parseGitHubIssueReference,
-  parseGitHubRepoFullName,
-  resolveGitHubIssueTarget,
-} from '../src/infra/index.js';
+import { parseGitHubIssueReference, parseGitHubRepoFullName, resolveGitHubIssueTarget } from '../src/infra/index.js';
 
 describe('parseGitHubRepoFullName', () => {
   test('accepts owner/name shorthand', () => {
@@ -61,10 +57,9 @@ describe('resolveGitHubIssueTarget', () => {
   });
 
   test('rejects repository mismatches between --repo and --issue URL', () => {
-    expect(() => resolveGitHubIssueTarget(
-      'https://github.com/Wei-Shaw/sub2api/issues/3014',
-      'vercel/next.js',
-    )).toThrow('does not match --repo');
+    expect(() => resolveGitHubIssueTarget('https://github.com/Wei-Shaw/sub2api/issues/3014', 'vercel/next.js')).toThrow(
+      'does not match --repo',
+    );
   });
 
   test('requires --repo for numeric issue references', () => {

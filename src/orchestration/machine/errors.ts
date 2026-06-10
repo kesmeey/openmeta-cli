@@ -2,7 +2,10 @@ import { getErrorMessage } from '../../infra/index.js';
 import { buildMachineErrorEnvelope } from './runtime.js';
 import type { MachineErrorEnvelope } from './types.js';
 
-export function mapMachineError(command: string, error: unknown): {
+export function mapMachineError(
+  command: string,
+  error: unknown,
+): {
   exitCode: number;
   payload: MachineErrorEnvelope;
 } {

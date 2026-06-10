@@ -92,10 +92,10 @@ export function createWorkspace(overrides: Partial<RepoWorkspaceContext> = {}): 
       { command: 'bun run lint', reason: 'Detected lint script', source: 'repo-script' },
     ],
     validationCommands: [],
-    validationWarnings: ['Skipped bun test during headless validation because it comes from repository-defined scripts.'],
-    testResults: [
-      { command: 'bun test', exitCode: 0, passed: true, output: '2 passed' },
+    validationWarnings: [
+      'Skipped bun test during headless validation because it comes from repository-defined scripts.',
     ],
+    testResults: [{ command: 'bun test', exitCode: 0, passed: true, output: '2 passed' }],
     ...overrides,
   };
 }
@@ -215,17 +215,9 @@ export function createRepositorySuggestion(
         reason: 'Primary contributor onboarding surface',
       },
     ],
-    proposedChanges: [
-      'Add a local installation section',
-      'Document the expected validation command',
-    ],
-    validationPlan: [
-      'Run bun run build',
-      'Review README commands for accuracy',
-    ],
-    risks: [
-      'Install steps may change if packaging changes later',
-    ],
+    proposedChanges: ['Add a local installation section', 'Document the expected validation command'],
+    validationPlan: ['Run bun run build', 'Review README commands for accuracy'],
+    risks: ['Install steps may change if packaging changes later'],
     estimatedWorkload: 'small',
     prPotentialScore: 84,
     ...overrides,

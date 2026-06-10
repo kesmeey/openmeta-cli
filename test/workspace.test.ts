@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
 import { simpleGit } from 'simple-git';
 import { workspaceService } from '../src/services/workspace.js';
 import { createMemory, createRankedIssue } from './helpers/factories.js';
@@ -85,15 +85,19 @@ describe('workspaceService.applyGeneratedChanges', () => {
     writeFileSync(join(workspacePath, 'src', 'known.ts'), 'export const known = 1;\n', 'utf-8');
     writeFileSync(join(workspacePath, 'src', 'surprise.ts'), 'export const surprise = 1;\n', 'utf-8');
 
-    const result = workspaceService.applyGeneratedChanges(workspacePath, [
+    const result = workspaceService.applyGeneratedChanges(
+      workspacePath,
+      [
+        {
+          path: 'src/surprise.ts',
+          reason: 'Unexpected edit',
+          content: 'export const surprise = 2;\n',
+        },
+      ],
       {
-        path: 'src/surprise.ts',
-        reason: 'Unexpected edit',
-        content: 'export const surprise = 2;\n',
+        allowedPaths: ['src/known.ts'],
       },
-    ], {
-      allowedPaths: ['src/known.ts'],
-    });
+    );
 
     expect(result.appliedFiles).toEqual([]);
     expect(result.reviewRequired).toBe(true);
@@ -134,19 +138,21 @@ describe('workspaceService.detectTestCommands', () => {
     await git.commit('chore: seed local repo');
 
     try {
-      const workspace = await (workspaceService as unknown as {
-        prepareRepositoryWorkspace(
-          repoFullName: string,
-          memory: ReturnType<typeof createMemory>,
-          runChecks: boolean,
-          executionMode?: 'interactive' | 'headless',
-          repoPath?: string,
-        ): Promise<{
-          workspacePath: string;
-          branchName?: string;
-          topLevelFiles: string[];
-        }>;
-      }).prepareRepositoryWorkspace(
+      const workspace = await (
+        workspaceService as unknown as {
+          prepareRepositoryWorkspace(
+            repoFullName: string,
+            memory: ReturnType<typeof createMemory>,
+            runChecks: boolean,
+            executionMode?: 'interactive' | 'headless',
+            repoPath?: string,
+          ): Promise<{
+            workspacePath: string;
+            branchName?: string;
+            topLevelFiles: string[];
+          }>;
+        }
+      ).prepareRepositoryWorkspace(
         'acme/demo',
         createMemory({ repoFullName: 'acme/demo' }),
         false,
@@ -180,11 +186,15 @@ describe('workspaceService.detectTestCommands', () => {
     await seedGit.addConfig('user.email', 'openmeta@example.com');
     mkdirSync(join(seedPath, 'src'), { recursive: true });
     writeFileSync(join(seedPath, 'README.md'), '# Demo\n\nMissing setup notes.\n', 'utf-8');
-    writeFileSync(join(seedPath, 'package.json'), JSON.stringify({
-      scripts: {
-        test: 'bun test',
-      },
-    }), 'utf-8');
+    writeFileSync(
+      join(seedPath, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          test: 'bun test',
+        },
+      }),
+      'utf-8',
+    );
     writeFileSync(join(seedPath, 'src', 'index.ts'), 'export const demo = true;\n', 'utf-8');
     await seedGit.add('.');
     await seedGit.commit('chore: seed repo');
@@ -339,17 +349,23 @@ describe('workspaceService.detectTestCommands', () => {
 
   test('prefers bun for package scripts when a bun lockfile is present', () => {
     const workspacePath = makeWorkspace();
-    writeFileSync(join(workspacePath, 'package.json'), JSON.stringify({
-      scripts: {
-        lint: 'eslint .',
-        build: 'vite build',
-      },
-    }), 'utf-8');
+    writeFileSync(
+      join(workspacePath, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          lint: 'eslint .',
+          build: 'vite build',
+        },
+      }),
+      'utf-8',
+    );
     writeFileSync(join(workspacePath, 'bun.lock'), '', 'utf-8');
 
-    const commands = (workspaceService as unknown as {
-      detectTestCommands(path: string): Array<{ command: string }>;
-    }).detectTestCommands(workspacePath);
+    const commands = (
+      workspaceService as unknown as {
+        detectTestCommands(path: string): Array<{ command: string }>;
+      }
+    ).detectTestCommands(workspacePath);
 
     expect(commands.map((command) => command.command)).toContain('bun run lint');
     expect(commands.map((command) => command.command)).toContain('bun run build');
@@ -361,12 +377,14 @@ describe('workspaceService.detectTestCommands', () => {
       { command: 'pytest', reason: 'Detected pyproject.toml', source: 'tool-default' as const },
     ];
 
-    const selected = (workspaceService as unknown as {
-      selectValidationCommands: (
-        commands: Array<{ command: string; reason: string; source: 'tool-default' | 'repo-script' }>,
-        mode: 'interactive' | 'headless',
-      ) => { commands: Array<{ command: string }>; warnings: string[] };
-    }).selectValidationCommands(commands, 'headless');
+    const selected = (
+      workspaceService as unknown as {
+        selectValidationCommands: (
+          commands: Array<{ command: string; reason: string; source: 'tool-default' | 'repo-script' }>,
+          mode: 'interactive' | 'headless',
+        ) => { commands: Array<{ command: string }>; warnings: string[] };
+      }
+    ).selectValidationCommands(commands, 'headless');
 
     expect(selected.commands.map((command) => command.command)).toEqual(['pytest']);
     expect(selected.warnings[0]).toContain('Skipped bun run test during headless validation');
@@ -399,12 +417,14 @@ describe('workspaceService.detectTestCommands', () => {
     await git.commit('chore: initial commit');
     await git.checkoutLocalBranch('openmeta/42-add-accessible-labels-to-icon-buttons');
 
-    const branchName = await (workspaceService as unknown as {
-      createWorkspaceBranchName: (
-        gitInstance: ReturnType<typeof simpleGit>,
-        issue: ReturnType<typeof createRankedIssue>,
-      ) => Promise<string>;
-    }).createWorkspaceBranchName(git, createRankedIssue());
+    const branchName = await (
+      workspaceService as unknown as {
+        createWorkspaceBranchName: (
+          gitInstance: ReturnType<typeof simpleGit>,
+          issue: ReturnType<typeof createRankedIssue>,
+        ) => Promise<string>;
+      }
+    ).createWorkspaceBranchName(git, createRankedIssue());
 
     expect(branchName).toMatch(/^openmeta\/42-add-accessible-labels-to-icon-buttons-\d+$/);
   });
@@ -412,92 +432,110 @@ describe('workspaceService.detectTestCommands', () => {
   test('prioritizes file paths explicitly referenced in the issue body', () => {
     const workspacePath = makeWorkspace();
     mkdirSync(join(workspacePath, 'src', 'components'), { recursive: true });
-    writeFileSync(join(workspacePath, 'src', 'components', 'Dropzone.tsx'), 'export const Dropzone = () => null;\n', 'utf-8');
+    writeFileSync(
+      join(workspacePath, 'src', 'components', 'Dropzone.tsx'),
+      'export const Dropzone = () => null;\n',
+      'utf-8',
+    );
     writeFileSync(join(workspacePath, 'src', 'misc.ts'), 'export const misc = true;\n', 'utf-8');
 
-    const rankedFiles = (workspaceService as unknown as {
-      rankCandidateFiles: (
-        issue: { title: string; body: string; analysis: { coreDemand: string; techRequirements: string[] } },
-        memory: { preferredPaths: string[] },
-        files: string[],
-      ) => string[];
-    }).rankCandidateFiles({
-      title: 'Fix accessibility in Dropzone',
-      body: 'The problem is in `src/components/Dropzone.tsx` and should be fixed there.',
-      analysis: {
-        coreDemand: 'Add accessibility attributes to the dropzone.',
-        techRequirements: ['react', 'typescript'],
+    const rankedFiles = (
+      workspaceService as unknown as {
+        rankCandidateFiles: (
+          issue: { title: string; body: string; analysis: { coreDemand: string; techRequirements: string[] } },
+          memory: { preferredPaths: string[] },
+          files: string[],
+        ) => string[];
+      }
+    ).rankCandidateFiles(
+      {
+        title: 'Fix accessibility in Dropzone',
+        body: 'The problem is in `src/components/Dropzone.tsx` and should be fixed there.',
+        analysis: {
+          coreDemand: 'Add accessibility attributes to the dropzone.',
+          techRequirements: ['react', 'typescript'],
+        },
       },
-    }, { preferredPaths: [] }, ['src/misc.ts', 'src/components/Dropzone.tsx']);
+      { preferredPaths: [] },
+      ['src/misc.ts', 'src/components/Dropzone.tsx'],
+    );
 
     expect(rankedFiles[0]).toBe('src/components/Dropzone.tsx');
   });
 
   test('prioritizes historically successful files from memory path signals', () => {
-    const rankedFiles = (workspaceService as unknown as {
-      rankCandidateFiles: (
-        issue: { title: string; body: string; analysis: { coreDemand: string; techRequirements: string[] } },
-        memory: {
-          preferredPaths: string[];
-          pathSignals: Array<{
-            path: string;
-            candidateCount: number;
-            changedCount: number;
-            successfulValidationCount: number;
-            publishedCount: number;
-          }>;
-          recentIssues: Array<{
-            changedFiles: string[];
-            status: 'selected' | 'draft_only' | 'review_required' | 'validated' | 'published' | 'pr_opened';
-          }>;
+    const rankedFiles = (
+      workspaceService as unknown as {
+        rankCandidateFiles: (
+          issue: { title: string; body: string; analysis: { coreDemand: string; techRequirements: string[] } },
+          memory: {
+            preferredPaths: string[];
+            pathSignals: Array<{
+              path: string;
+              candidateCount: number;
+              changedCount: number;
+              successfulValidationCount: number;
+              publishedCount: number;
+            }>;
+            recentIssues: Array<{
+              changedFiles: string[];
+              status: 'selected' | 'draft_only' | 'review_required' | 'validated' | 'published' | 'pr_opened';
+            }>;
+          },
+          files: string[],
+        ) => string[];
+      }
+    ).rankCandidateFiles(
+      {
+        title: 'Improve accessibility in icon interactions',
+        body: 'Audit the button flow for better labels and affordances.',
+        analysis: {
+          coreDemand: 'Tighten icon button accessibility behavior.',
+          techRequirements: ['react', 'typescript'],
         },
-        files: string[],
-      ) => string[];
-    }).rankCandidateFiles({
-      title: 'Improve accessibility in icon interactions',
-      body: 'Audit the button flow for better labels and affordances.',
-      analysis: {
-        coreDemand: 'Tighten icon button accessibility behavior.',
-        techRequirements: ['react', 'typescript'],
       },
-    }, {
-      preferredPaths: [],
-      pathSignals: [
-        {
-          path: 'src/components/IconButton.tsx',
-          candidateCount: 2,
-          changedCount: 2,
-          successfulValidationCount: 2,
-          publishedCount: 1,
-        },
-      ],
-      recentIssues: [
-        {
-          changedFiles: ['src/components/IconButton.tsx'],
-          status: 'published',
-        },
-      ],
-    }, ['src/utils/labels.ts', 'src/components/IconButton.tsx']);
+      {
+        preferredPaths: [],
+        pathSignals: [
+          {
+            path: 'src/components/IconButton.tsx',
+            candidateCount: 2,
+            changedCount: 2,
+            successfulValidationCount: 2,
+            publishedCount: 1,
+          },
+        ],
+        recentIssues: [
+          {
+            changedFiles: ['src/components/IconButton.tsx'],
+            status: 'published',
+          },
+        ],
+      },
+      ['src/utils/labels.ts', 'src/components/IconButton.tsx'],
+    );
 
     expect(rankedFiles[0]).toBe('src/components/IconButton.tsx');
   });
 
   test('prioritizes repository analysis paths with docs, config, source, tests, and memory signals', () => {
-    const rankedFiles = (workspaceService as unknown as {
-      rankRepositoryAnalysisFiles: (
-        memory: ReturnType<typeof createMemory>,
-        files: string[],
-      ) => string[];
-    }).rankRepositoryAnalysisFiles(createMemory({
-      preferredPaths: ['src/components/IconButton.tsx'],
-    }), [
-      'docs/internal/archive.txt',
-      'README.md',
-      'package.json',
-      'src/components/IconButton.tsx',
-      'test/icon-button.test.ts',
-      'assets/logo.png',
-    ]);
+    const rankedFiles = (
+      workspaceService as unknown as {
+        rankRepositoryAnalysisFiles: (memory: ReturnType<typeof createMemory>, files: string[]) => string[];
+      }
+    ).rankRepositoryAnalysisFiles(
+      createMemory({
+        preferredPaths: ['src/components/IconButton.tsx'],
+      }),
+      [
+        'docs/internal/archive.txt',
+        'README.md',
+        'package.json',
+        'src/components/IconButton.tsx',
+        'test/icon-button.test.ts',
+        'assets/logo.png',
+      ],
+    );
 
     expect(rankedFiles.slice(0, 4)).toEqual([
       'src/components/IconButton.tsx',

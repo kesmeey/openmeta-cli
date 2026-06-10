@@ -21,6 +21,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Biome CI
+        run: bunx biome ci --linter-enabled=false src test index.ts package.json tsconfig.json
+
       - name: Typecheck
         run: bunx tsc --noEmit
 

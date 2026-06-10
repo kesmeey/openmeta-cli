@@ -1,5 +1,5 @@
-import { runHistoryService } from '../services/index.js';
 import { ui } from '../infra/index.js';
+import { runHistoryService } from '../services/index.js';
 import type { AgentRunStatus } from '../types/index.js';
 
 export interface RunsListOptions {
@@ -35,10 +35,13 @@ export class RunsOrchestrator {
     const limit = Math.max(1, options.limit ?? 10);
     const state = runHistoryService.load();
     const records = state.records.slice(0, limit);
-    const totals = state.records.reduce<Record<AgentRunStatus, number>>((acc, record) => {
-      acc[record.status] += 1;
-      return acc;
-    }, { running: 0, success: 0, failed: 0, cancelled: 0 });
+    const totals = state.records.reduce<Record<AgentRunStatus, number>>(
+      (acc, record) => {
+        acc[record.status] += 1;
+        return acc;
+      },
+      { running: 0, success: 0, failed: 0, cancelled: 0 },
+    );
 
     return {
       records,
@@ -73,12 +76,11 @@ export class RunsOrchestrator {
 
     ui.hero({
       label: 'OpenMeta Runs',
-      title: records.length > 0 ? 'The agent now leaves footprints you can inspect' : 'No run history has been recorded yet',
-      subtitle: 'Recent command runs, durations, and failure reasons stay in a local ledger for debugging and follow-up.',
-      lines: [
-        `Run history path: ${ledgerPath}`,
-        `Showing latest ${records.length} run(s).`,
-      ],
+      title:
+        records.length > 0 ? 'The agent now leaves footprints you can inspect' : 'No run history has been recorded yet',
+      subtitle:
+        'Recent command runs, durations, and failure reasons stay in a local ledger for debugging and follow-up.',
+      lines: [`Run history path: ${ledgerPath}`, `Showing latest ${records.length} run(s).`],
       tone: records.some((record) => record.status === 'failed') ? 'warning' : 'accent',
     });
 
@@ -90,23 +92,24 @@ export class RunsOrchestrator {
     ]);
 
     if (records.length === 0) {
-      ui.emptyState('OpenMeta Runs', 'No runs yet', 'Run "openmeta scout", "openmeta agent", or "openmeta doctor" to populate the ledger.');
+      ui.emptyState(
+        'OpenMeta Runs',
+        'No runs yet',
+        'Run "openmeta scout", "openmeta agent", or "openmeta doctor" to populate the ledger.',
+      );
       return;
     }
 
-    ui.recordList('Recent runs', records.map((record) => ({
-      title: `${ui.badge(record.status, statusTone(record.status))} ${record.id}`,
-      subtitle: record.commandName,
-      meta: [
-        `duration ${formatDuration(record.durationMs)}`,
-        `started ${record.startedAt}`,
-      ],
-      lines: [
-        `Args: ${record.args.join(' ') || '(none)'}`,
-        ...(record.error ? [`Error: ${record.error}`] : []),
-      ],
-      tone: statusTone(record.status),
-    })));
+    ui.recordList(
+      'Recent runs',
+      records.map((record) => ({
+        title: `${ui.badge(record.status, statusTone(record.status))} ${record.id}`,
+        subtitle: record.commandName,
+        meta: [`duration ${formatDuration(record.durationMs)}`, `started ${record.startedAt}`],
+        lines: [`Args: ${record.args.join(' ') || '(none)'}`, ...(record.error ? [`Error: ${record.error}`] : [])],
+        tone: statusTone(record.status),
+      })),
+    );
   }
 
   async show(id: string, options: { json?: boolean } = {}): Promise<void> {

@@ -3,14 +3,30 @@ import { z } from 'zod';
 import {
   ImplementationDraftEnvelopeSchema,
   IssueMatchListEnvelopeSchema,
+  type PatchDraft,
   PatchDraftEnvelopeSchema,
+  type PullRequestDraft,
+  PullRequestDraftEnvelopeSchema,
+  type RepositoryImprovementSuggestion,
   RepositorySuggestionListEnvelopeSchema,
   type StructuredOutputResult,
-  type PatchDraft,
-  PullRequestDraftEnvelopeSchema,
-  type PullRequestDraft,
-  type RepositoryImprovementSuggestion,
 } from '../contracts/index.js';
+import { logger } from '../infra/logger.js';
+import {
+  CODE_CHANGE_PROMPT,
+  CODE_CHANGE_REPAIR_PROMPT,
+  DAILY_DIARY_GENERATE_PROMPT,
+  DAILY_REPORT_GENERATE_PROMPT,
+  fillPrompt,
+  ISSUE_MATCH_PROMPT,
+  ISSUE_MATCH_REPAIR_PROMPT,
+  PATCH_DRAFT_PROMPT,
+  PATCH_DRAFT_REPAIR_PROMPT,
+  PR_DRAFT_PROMPT,
+  REPOSITORY_ANALYSIS_PROMPT,
+  REPOSITORY_ANALYSIS_REPAIR_PROMPT,
+  VALIDATION_REPAIR_PROMPT,
+} from '../infra/prompt-templates.js';
 import type {
   GitHubIssue,
   ImplementationDraft,
@@ -24,7 +40,6 @@ import type {
   TestResult,
   UserProfile,
 } from '../types/index.js';
-import { logger } from '../infra/logger.js';
 import {
   LLM_VALIDATION_FALLBACK_HINTS,
   LLM_VALIDATION_PROMPT,
@@ -32,21 +47,6 @@ import {
   LLM_VALIDATION_STATUS_HINTS,
   LLM_VALIDATION_TIMEOUT_MS,
 } from './llm.constants.js';
-import {
-  CODE_CHANGE_PROMPT,
-  CODE_CHANGE_REPAIR_PROMPT,
-  fillPrompt,
-  ISSUE_MATCH_PROMPT,
-  ISSUE_MATCH_REPAIR_PROMPT,
-  DAILY_REPORT_GENERATE_PROMPT,
-  DAILY_DIARY_GENERATE_PROMPT,
-  PATCH_DRAFT_PROMPT,
-  PATCH_DRAFT_REPAIR_PROMPT,
-  PR_DRAFT_PROMPT,
-  REPOSITORY_ANALYSIS_PROMPT,
-  REPOSITORY_ANALYSIS_REPAIR_PROMPT,
-  VALIDATION_REPAIR_PROMPT,
-} from '../infra/prompt-templates.js';
 
 export class LLMService {
   private client: OpenAI | null = null;
@@ -91,15 +91,18 @@ export class LLMService {
       const timeout = setTimeout(() => controller.abort(), LLM_VALIDATION_TIMEOUT_MS);
 
       try {
-        const response = await this.client.chat.completions.create({
-          model: this.modelName,
-          messages: [{ role: 'user', content: LLM_VALIDATION_PROMPT }],
-          ...LLM_VALIDATION_REQUEST,
-          ...this.getStreamingRequestParams(),
-          ...this.getReasoningRequestParams(),
-        }, {
-          signal: controller.signal,
-        });
+        const response = await this.client.chat.completions.create(
+          {
+            model: this.modelName,
+            messages: [{ role: 'user', content: LLM_VALIDATION_PROMPT }],
+            ...LLM_VALIDATION_REQUEST,
+            ...this.getStreamingRequestParams(),
+            ...this.getReasoningRequestParams(),
+          },
+          {
+            signal: controller.signal,
+          },
+        );
 
         // 自定义兼容端点最容易把站点页面或其他 200 响应误判为可用，所以这里额外校验返回结构。
         if (this.provider === 'custom') {
@@ -136,14 +139,17 @@ export class LLMService {
       };
     }
 
-    const issueList = issues.map(i =>
-      `Issue Reference: ${this.getIssueReference(i)}
+    const issueList = issues
+      .map(
+        (i) =>
+          `Issue Reference: ${this.getIssueReference(i)}
 Title: ${i.title}
 Body: ${i.body.slice(0, 500)}
 Labels: ${i.labels.join(', ')}
 Repo Description: ${i.repoDescription}
-Repo Stars: ${i.repoStars}`
-    ).join('\n\n---\n\n');
+Repo Stars: ${i.repoStars}`,
+      )
+      .join('\n\n---\n\n');
 
     const prompt = fillPrompt(ISSUE_MATCH_PROMPT, {
       userProfile: JSON.stringify(userProfile, null, 2),
@@ -243,9 +249,10 @@ Repo Stars: ${i.repoStars}`
     workspace: RepoWorkspaceContext,
     patchDraft: PatchDraft,
   ): Promise<StructuredOutputResult<'implementation_draft', ImplementationDraft>> {
-    const editableFiles = workspace.snippets.length > 0
-      ? workspace.snippets.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`).join('\n\n')
-      : 'No editable files were detected.';
+    const editableFiles =
+      workspace.snippets.length > 0
+        ? workspace.snippets.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`).join('\n\n')
+        : 'No editable files were detected.';
 
     const prompt = fillPrompt(CODE_CHANGE_PROMPT, {
       issueContext: this.formatRankedIssue(issue),
@@ -290,20 +297,22 @@ Repo Stars: ${i.repoStars}`
     validationResults: TestResult[],
     currentFiles: RepoFileSnippet[],
   ): Promise<StructuredOutputResult<'implementation_draft', ImplementationDraft>> {
-    const validationFailures = validationResults.length > 0
-      ? validationResults
-        .filter((result) => !result.passed)
-        .map((result) => `${result.command} | exit=${result.exitCode ?? 'n/a'}\n${result.output}`.trim())
-        .join('\n\n---\n\n')
-      : 'No validation failures were provided.';
+    const validationFailures =
+      validationResults.length > 0
+        ? validationResults
+            .filter((result) => !result.passed)
+            .map((result) => `${result.command} | exit=${result.exitCode ?? 'n/a'}\n${result.output}`.trim())
+            .join('\n\n---\n\n')
+        : 'No validation failures were provided.';
 
     const prompt = fillPrompt(VALIDATION_REPAIR_PROMPT, {
       issueContext: this.formatRankedIssue(issue),
       patchDraft: JSON.stringify(patchDraft, null, 2),
       validationFailures,
-      currentFiles: currentFiles.length > 0
-        ? currentFiles.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`).join('\n\n')
-        : 'No current files were provided.',
+      currentFiles:
+        currentFiles.length > 0
+          ? currentFiles.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`).join('\n\n')
+          : 'No current files were provided.',
     });
 
     return this.generateStructuredOutput({
@@ -353,10 +362,12 @@ Repo Stars: ${i.repoStars}`
   }
 
   private isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
-    return typeof value === 'object' &&
+    return (
+      typeof value === 'object' &&
       value !== null &&
       Symbol.asyncIterator in value &&
-      typeof (value as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] === 'function';
+      typeof (value as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] === 'function'
+    );
   }
 
   private extractStreamChunkContent(chunk: unknown): string {
@@ -378,7 +389,12 @@ Repo Stars: ${i.repoStars}`
   }
 
   private extractNonStreamingContent(response: unknown): string {
-    if (typeof response !== 'object' || response === null || !('choices' in response) || !Array.isArray(response.choices)) {
+    if (
+      typeof response !== 'object' ||
+      response === null ||
+      !('choices' in response) ||
+      !Array.isArray(response.choices)
+    ) {
       return '';
     }
 
@@ -411,9 +427,12 @@ Repo Stars: ${i.repoStars}`
       }
 
       logger.debug('Structured output parsing failed, attempting repair', error);
-      const repairedContent = await this.chat(fillPrompt(input.repairPrompt, {
-        invalidResponse: content.slice(0, 12000),
-      }), { temperature: 0 });
+      const repairedContent = await this.chat(
+        fillPrompt(input.repairPrompt, {
+          invalidResponse: content.slice(0, 12000),
+        }),
+        { temperature: 0 },
+      );
 
       return input.parser(repairedContent);
     }
@@ -423,9 +442,7 @@ Repo Stars: ${i.repoStars}`
     content: string,
     originalIssues: GitHubIssue[],
   ): StructuredOutputResult<'issue_match_list', MatchedIssue[]> {
-    const issueByReference = new Map(
-      originalIssues.map((issue) => [this.getIssueReference(issue), issue]),
-    );
+    const issueByReference = new Map(originalIssues.map((issue) => [this.getIssueReference(issue), issue]));
 
     const parsed = this.parseStructuredJson(content, IssueMatchListEnvelopeSchema);
 
@@ -441,16 +458,18 @@ Repo Stars: ${i.repoStars}`
             return [];
           }
 
-          return [{
-            ...issue,
-            matchScore: match.score,
-            analysis: {
-              coreDemand: match.coreDemand,
-              techRequirements: match.techRequirements,
-              solutionSuggestion: '',
-              estimatedWorkload: match.estimatedWorkload,
+          return [
+            {
+              ...issue,
+              matchScore: match.score,
+              analysis: {
+                coreDemand: match.coreDemand,
+                techRequirements: match.techRequirements,
+                solutionSuggestion: '',
+                estimatedWorkload: match.estimatedWorkload,
+              },
             },
-          }];
+          ];
         }),
     };
   }
@@ -478,10 +497,12 @@ Repo Stars: ${i.repoStars}`
 
   private supportsReasoningEffort(): boolean {
     const normalizedModel = this.modelName.toLowerCase();
-    return normalizedModel.startsWith('gpt-5') ||
+    return (
+      normalizedModel.startsWith('gpt-5') ||
       normalizedModel.startsWith('o1') ||
       normalizedModel.startsWith('o3') ||
-      normalizedModel.startsWith('o4');
+      normalizedModel.startsWith('o4')
+    );
   }
 
   private parseImplementationDraft(
@@ -494,9 +515,7 @@ Repo Stars: ${i.repoStars}`
     return this.parseStructuredJson(content, PatchDraftEnvelopeSchema);
   }
 
-  private parsePullRequestDraft(
-    content: string,
-  ): StructuredOutputResult<'pull_request_draft', PullRequestDraft> {
+  private parsePullRequestDraft(content: string): StructuredOutputResult<'pull_request_draft', PullRequestDraft> {
     return this.parseStructuredJson(content, PullRequestDraftEnvelopeSchema);
   }
 
@@ -570,21 +589,33 @@ Repo Stars: ${i.repoStars}`
   }
 
   private formatRepoMemory(memory: RepoMemory): string {
-    const topPathSignals = memory.pathSignals.length > 0
-      ? memory.pathSignals
-        .slice(0, 5)
-        .map((signal) => `- ${signal.path} | candidate ${signal.candidateCount} | changed ${signal.changedCount} | validation ${signal.successfulValidationCount} | published ${signal.publishedCount}`)
-      : ['- none'];
-    const validationSignals = memory.validationSignals.length > 0
-      ? memory.validationSignals
-        .slice(0, 5)
-        .map((signal) => `- ${signal.command} | failures ${signal.failureCount} | last exit ${signal.lastExitCode ?? 'n/a'}${signal.sampleOutput ? ` | sample ${signal.sampleOutput}` : ''}`)
-      : ['- none'];
-    const recentOutcomes = memory.recentIssues.length > 0
-      ? memory.recentIssues
-        .slice(0, 5)
-        .map((issue) => `- ${issue.reference} | status ${issue.status} | changed ${issue.changedFiles.join(', ') || 'none'} | validation ${issue.validationSummary}`)
-      : ['- none'];
+    const topPathSignals =
+      memory.pathSignals.length > 0
+        ? memory.pathSignals
+            .slice(0, 5)
+            .map(
+              (signal) =>
+                `- ${signal.path} | candidate ${signal.candidateCount} | changed ${signal.changedCount} | validation ${signal.successfulValidationCount} | published ${signal.publishedCount}`,
+            )
+        : ['- none'];
+    const validationSignals =
+      memory.validationSignals.length > 0
+        ? memory.validationSignals
+            .slice(0, 5)
+            .map(
+              (signal) =>
+                `- ${signal.command} | failures ${signal.failureCount} | last exit ${signal.lastExitCode ?? 'n/a'}${signal.sampleOutput ? ` | sample ${signal.sampleOutput}` : ''}`,
+            )
+        : ['- none'];
+    const recentOutcomes =
+      memory.recentIssues.length > 0
+        ? memory.recentIssues
+            .slice(0, 5)
+            .map(
+              (issue) =>
+                `- ${issue.reference} | status ${issue.status} | changed ${issue.changedFiles.join(', ') || 'none'} | validation ${issue.validationSummary}`,
+            )
+        : ['- none'];
 
     return [
       `Last Selected Issue: ${memory.lastSelectedIssue || 'n/a'}`,
@@ -687,7 +718,8 @@ Repo Stars: ${i.repoStars}`
 
     // 这里只要求标准 chat.completions 结构里存在可用文本，尽早拦住错误的自定义 base URL。
     // 部分 reasoning 模型（如 DeepSeek v4）在思考模式下 content 为空，但 reasoning_content 有值，两者都视为有效回复。
-    const message = 'choices' in response &&
+    const message =
+      'choices' in response &&
       Array.isArray(response.choices) &&
       response.choices[0] &&
       typeof response.choices[0] === 'object' &&
@@ -695,11 +727,12 @@ Repo Stars: ${i.repoStars}`
       'message' in response.choices[0] &&
       typeof response.choices[0].message === 'object' &&
       response.choices[0].message !== null
-      ? response.choices[0].message as Record<string, unknown>
-      : undefined;
+        ? (response.choices[0].message as Record<string, unknown>)
+        : undefined;
 
     const hasContent = typeof message?.['content'] === 'string' && (message['content'] as string).trim().length > 0;
-    const hasReasoningContent = typeof message?.['reasoning_content'] === 'string' && (message['reasoning_content'] as string).trim().length > 0;
+    const hasReasoningContent =
+      typeof message?.['reasoning_content'] === 'string' && (message['reasoning_content'] as string).trim().length > 0;
 
     if (!hasContent && !hasReasoningContent) {
       throw new Error('Custom provider validation response did not include a usable assistant reply.');

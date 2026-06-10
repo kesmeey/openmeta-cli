@@ -9,7 +9,7 @@ import {
   getOpenMetaWorkspaceRoot,
   ui,
 } from '../infra/index.js';
-import { inspectBinaryOnPath, schedulerService, type BinaryResolution } from '../services/index.js';
+import { type BinaryResolution, inspectBinaryOnPath, schedulerService } from '../services/index.js';
 import type { AppConfig } from '../types/index.js';
 
 export type DoctorCheckStatus = 'pass' | 'warn' | 'fail';
@@ -39,11 +39,9 @@ export class DoctorOrchestrator {
     ui.hero({
       label: 'OpenMeta Doctor',
       title: report.ready ? 'The local agent surface looks ready' : 'The local agent surface needs attention',
-      subtitle: 'Doctor checks the local prerequisites OpenMeta needs before the full contribution loop can run with confidence.',
-      lines: [
-        `Config path: ${report.configPath}`,
-        `OpenMeta home: ${report.homePath}`,
-      ],
+      subtitle:
+        'Doctor checks the local prerequisites OpenMeta needs before the full contribution loop can run with confidence.',
+      lines: [`Config path: ${report.configPath}`, `OpenMeta home: ${report.homePath}`],
       tone: report.ready ? 'success' : 'warning',
     });
 
@@ -54,36 +52,64 @@ export class DoctorOrchestrator {
       { label: 'Ready', value: report.ready ? 'YES' : 'NO', tone: report.ready ? 'success' : 'warning' },
     ]);
 
-    ui.recordList('Preflight checks', report.checks.map((check) => ({
-      title: `${this.statusLabel(check.status)} ${check.label}`,
-      subtitle: check.summary,
-      meta: [check.id],
-      lines: [
-        ...(check.detail ? [check.detail] : []),
-        ...(check.remediation ? [`Next: ${check.remediation}`] : []),
-      ],
-      tone: this.toneForStatus(check.status),
-    })));
+    ui.recordList(
+      'Preflight checks',
+      report.checks.map((check) => ({
+        title: `${this.statusLabel(check.status)} ${check.label}`,
+        subtitle: check.summary,
+        meta: [check.id],
+        lines: [...(check.detail ? [check.detail] : []), ...(check.remediation ? [`Next: ${check.remediation}`] : [])],
+        tone: this.toneForStatus(check.status),
+      })),
+    );
 
     if (!report.ready) {
-      throw new Error(`OpenMeta doctor found ${report.totals.fail} critical issue(s). Fix them and rerun "openmeta doctor".`);
+      throw new Error(
+        `OpenMeta doctor found ${report.totals.fail} critical issue(s). Fix them and rerun "openmeta doctor".`,
+      );
     }
   }
 
   async inspect(config?: AppConfig): Promise<DoctorReport> {
-    const resolvedConfig = config ?? await configService.get();
+    const resolvedConfig = config ?? (await configService.get());
     const configPath = configService.getConfigPath();
     const homePath = getOpenMetaHomePath();
     const openmetaBinary = inspectBinaryOnPath('openmeta');
     const checks = [
       this.checkConfigFile(configPath),
-      this.checkDirectory('state-dir', 'State directory', dirname(configPath), 'Run "openmeta init" to create and save local configuration.'),
-      this.checkDirectory('openmeta-home', 'OpenMeta home', homePath, 'Run "openmeta agent" or create the directory manually with write permissions.'),
-      this.checkDirectory('workspace-root', 'Workspace root', getOpenMetaWorkspaceRoot(), 'Run "openmeta agent" after configuration is complete.'),
-      this.checkDirectory('artifact-root', 'Artifact root', getOpenMetaArtifactRoot(), 'Run "openmeta agent" after configuration is complete.'),
+      this.checkDirectory(
+        'state-dir',
+        'State directory',
+        dirname(configPath),
+        'Run "openmeta init" to create and save local configuration.',
+      ),
+      this.checkDirectory(
+        'openmeta-home',
+        'OpenMeta home',
+        homePath,
+        'Run "openmeta agent" or create the directory manually with write permissions.',
+      ),
+      this.checkDirectory(
+        'workspace-root',
+        'Workspace root',
+        getOpenMetaWorkspaceRoot(),
+        'Run "openmeta agent" after configuration is complete.',
+      ),
+      this.checkDirectory(
+        'artifact-root',
+        'Artifact root',
+        getOpenMetaArtifactRoot(),
+        'Run "openmeta agent" after configuration is complete.',
+      ),
       this.checkOpenMetaBinary(openmetaBinary),
       this.checkBunRuntime(),
-      this.checkCommand('runtime-git', 'Git runtime', 'git', ['--version'], 'Install Git and ensure it is available on PATH.'),
+      this.checkCommand(
+        'runtime-git',
+        'Git runtime',
+        'git',
+        ['--version'],
+        'Install Git and ensure it is available on PATH.',
+      ),
       this.checkGitHubConfig(resolvedConfig),
       this.checkLlmConfig(resolvedConfig),
       this.checkProfileConfig(resolvedConfig),
@@ -179,13 +205,7 @@ export class DoctorOrchestrator {
     }
   }
 
-  private checkCommand(
-    id: string,
-    label: string,
-    command: string,
-    args: string[],
-    remediation: string,
-  ): DoctorCheck {
+  private checkCommand(id: string, label: string, command: string, args: string[], remediation: string): DoctorCheck {
     const result = spawnSync(command, args, { encoding: 'utf-8' });
     if (result.error) {
       return {
@@ -259,14 +279,17 @@ export class DoctorOrchestrator {
       };
     }
 
-    return this.checkCommand('runtime-bun', 'Bun runtime', 'bun', ['--version'], 'Install Bun 1.0+ and ensure it is available on PATH.');
+    return this.checkCommand(
+      'runtime-bun',
+      'Bun runtime',
+      'bun',
+      ['--version'],
+      'Install Bun 1.0+ and ensure it is available on PATH.',
+    );
   }
 
   private checkGitHubConfig(config: AppConfig): DoctorCheck {
-    const missing = [
-      !config.github.username ? 'username' : '',
-      !config.github.pat ? 'token' : '',
-    ].filter(Boolean);
+    const missing = [!config.github.username ? 'username' : '', !config.github.pat ? 'token' : ''].filter(Boolean);
 
     if (missing.length > 0) {
       return {
@@ -437,10 +460,13 @@ export class DoctorOrchestrator {
   }
 
   private countStatuses(checks: DoctorCheck[]): Record<DoctorCheckStatus, number> {
-    return checks.reduce<Record<DoctorCheckStatus, number>>((totals, check) => {
-      totals[check.status] += 1;
-      return totals;
-    }, { pass: 0, warn: 0, fail: 0 });
+    return checks.reduce<Record<DoctorCheckStatus, number>>(
+      (totals, check) => {
+        totals[check.status] += 1;
+        return totals;
+      },
+      { pass: 0, warn: 0, fail: 0 },
+    );
   }
 
   private statusLabel(status: DoctorCheckStatus): string {

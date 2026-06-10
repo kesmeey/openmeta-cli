@@ -1,29 +1,20 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { spawnSync } from 'child_process';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { basename, dirname, join, relative, resolve, sep } from 'path';
-import { simpleGit, type SimpleGit } from 'simple-git';
+import { type SimpleGit, simpleGit } from 'simple-git';
 import { ensureDirectory, getOpenMetaWorkspaceRoot, logger } from '../infra/index.js';
 import type {
-  GeneratedFileChange,
   GeneratedChangeApplyResult,
+  GeneratedFileChange,
   RankedIssue,
-  RepoMemory,
   RepoFileSnippet,
+  RepoMemory,
   RepoWorkspaceContext,
   TestCommand,
   TestResult,
 } from '../types/index.js';
 
-const EXCLUDED_DIRS = new Set([
-  '.git',
-  'node_modules',
-  'dist',
-  'build',
-  '.next',
-  'coverage',
-  'target',
-  'vendor',
-]);
+const EXCLUDED_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'coverage', 'target', 'vendor']);
 
 const MAX_DISCOVERED_FILES = 250;
 const MAX_SNIPPET_CHARS = 8000;
@@ -122,7 +113,9 @@ export class WorkspaceService {
     options: { allowedPaths?: string[] } = {},
   ): GeneratedChangeApplyResult {
     const rootPath = resolve(workspacePath);
-    const allowedPaths = new Set((options.allowedPaths ?? []).map((path) => path.replace(/^\/+/, '').trim()).filter(Boolean));
+    const allowedPaths = new Set(
+      (options.allowedPaths ?? []).map((path) => path.replace(/^\/+/, '').trim()).filter(Boolean),
+    );
     const appliedFiles: string[] = [];
     const skippedFiles: GeneratedChangeApplyResult['skippedFiles'] = [];
 
@@ -153,12 +146,18 @@ export class WorkspaceService {
       }
 
       if (allowedPaths.size > 0 && !allowedPaths.has(relativePath)) {
-        skippedFiles.push({ path: relativePath, reason: 'Generated path was not part of the selected implementation context.' });
+        skippedFiles.push({
+          path: relativePath,
+          reason: 'Generated path was not part of the selected implementation context.',
+        });
         continue;
       }
 
       if (change.content.length > MAX_GENERATED_FILE_CHARS) {
-        skippedFiles.push({ path: relativePath, reason: `Generated content exceeds ${MAX_GENERATED_FILE_CHARS} characters.` });
+        skippedFiles.push({
+          path: relativePath,
+          reason: `Generated content exceeds ${MAX_GENERATED_FILE_CHARS} characters.`,
+        });
         continue;
       }
 
@@ -173,17 +172,19 @@ export class WorkspaceService {
       appliedFiles.push(relativePath);
     }
 
-    const unsafeSkipped = skippedFiles.filter((file) =>
-      file.reason.includes('outside the workspace') ||
-      file.reason.includes('not part of the selected implementation context') ||
-      file.reason.includes('exceeds')
+    const unsafeSkipped = skippedFiles.filter(
+      (file) =>
+        file.reason.includes('outside the workspace') ||
+        file.reason.includes('not part of the selected implementation context') ||
+        file.reason.includes('exceeds'),
     );
 
     return {
       appliedFiles,
       skippedFiles,
       reviewRequired: unsafeSkipped.length > 0,
-      reviewReason: unsafeSkipped.length > 0 ? unsafeSkipped.map((file) => `${file.path}: ${file.reason}`).join('; ') : undefined,
+      reviewReason:
+        unsafeSkipped.length > 0 ? unsafeSkipped.map((file) => `${file.path}: ${file.reason}`).join('; ') : undefined,
     };
   }
 
@@ -206,10 +207,12 @@ export class WorkspaceService {
         return [];
       }
 
-      return [{
-        path: relativePath,
-        content: this.readSnippet(targetPath),
-      }];
+      return [
+        {
+          path: relativePath,
+          content: this.readSnippet(targetPath),
+        },
+      ];
     });
   }
 
@@ -390,7 +393,9 @@ export class WorkspaceService {
 
   private isRecoverableManagedWorkspaceError(error: unknown): boolean {
     const message = error instanceof Error ? error.message : String(error);
-    return /\binvalid HEAD\b|\bbad object HEAD\b|\bambiguous argument 'HEAD'\b|\bNeeded a single revision\b|\bunable to read tree\b/i.test(message);
+    return /\binvalid HEAD\b|\bbad object HEAD\b|\bambiguous argument 'HEAD'\b|\bNeeded a single revision\b|\bunable to read tree\b/i.test(
+      message,
+    );
   }
 
   private getExecutionWorktreePath(repoFullName: string, branchName: string): string {
@@ -444,9 +449,13 @@ export class WorkspaceService {
       content: this.readSnippet(join(input.workspacePath, path)),
     }));
     const testCommands = this.detectTestCommands(input.workspacePath);
-    const { commands: validationCommands, warnings: validationWarnings } =
-      this.selectValidationCommands(testCommands, input.executionMode);
-    const testResults = input.runChecks ? this.runTestCommands(input.workspacePath, validationCommands.slice(0, 3)) : [];
+    const { commands: validationCommands, warnings: validationWarnings } = this.selectValidationCommands(
+      testCommands,
+      input.executionMode,
+    );
+    const testResults = input.runChecks
+      ? this.runTestCommands(input.workspacePath, validationCommands.slice(0, 3))
+      : [];
 
     return {
       workspacePath: input.workspacePath,
@@ -522,13 +531,17 @@ export class WorkspaceService {
       .split(/[^a-z0-9]+/)
       .filter((token) => token.length >= 3);
 
-    return [...files]
-      .sort((left, right) => this.scorePath(right, keywords, memory, referencedPaths) - this.scorePath(left, keywords, memory, referencedPaths));
+    return [...files].sort(
+      (left, right) =>
+        this.scorePath(right, keywords, memory, referencedPaths) -
+        this.scorePath(left, keywords, memory, referencedPaths),
+    );
   }
 
   private rankRepositoryAnalysisFiles(memory: RepoMemory, files: string[]): string[] {
-    return [...files]
-      .sort((left, right) => this.scoreRepositoryAnalysisPath(right, memory) - this.scoreRepositoryAnalysisPath(left, memory));
+    return [...files].sort(
+      (left, right) => this.scoreRepositoryAnalysisPath(right, memory) - this.scoreRepositoryAnalysisPath(left, memory),
+    );
   }
 
   private scoreRepositoryAnalysisPath(path: string, memory: RepoMemory): number {
@@ -653,12 +666,12 @@ export class WorkspaceService {
   }
 
   private extractReferencedPaths(content: string): string[] {
-    const matches = content.matchAll(/(?:^|[\s`'"])((?:[\w.-]+\/)+[\w.-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|kt|json|md|css|scss))/gm);
-    return [...new Set(
-      [...matches]
-        .map((match) => match[1]?.trim())
-        .filter((value): value is string => Boolean(value)),
-    )];
+    const matches = content.matchAll(
+      /(?:^|[\s`'"])((?:[\w.-]+\/)+[\w.-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|kt|json|md|css|scss))/gm,
+    );
+    return [
+      ...new Set([...matches].map((match) => match[1]?.trim()).filter((value): value is string => Boolean(value))),
+    ];
   }
 
   private detectTestCommands(workspacePath: string): TestCommand[] {
@@ -678,26 +691,30 @@ export class WorkspaceService {
         const scripts = packageJson.scripts ?? {};
         const scriptRunner = this.detectPackageScriptRunner(workspacePath, packageJson.packageManager);
 
-        if (scripts['test']) commands.push({
-          command: this.buildPackageScriptCommand(scriptRunner, 'test'),
-          reason: `Detected package.json test script (${scriptRunner})`,
-          source: 'repo-script',
-        });
-        if (scripts['lint']) commands.push({
-          command: this.buildPackageScriptCommand(scriptRunner, 'lint'),
-          reason: `Detected package.json lint script (${scriptRunner})`,
-          source: 'repo-script',
-        });
-        if (scripts['typecheck']) commands.push({
-          command: this.buildPackageScriptCommand(scriptRunner, 'typecheck'),
-          reason: `Detected package.json typecheck script (${scriptRunner})`,
-          source: 'repo-script',
-        });
-        if (scripts['build']) commands.push({
-          command: this.buildPackageScriptCommand(scriptRunner, 'build'),
-          reason: `Detected package.json build script (${scriptRunner})`,
-          source: 'repo-script',
-        });
+        if (scripts['test'])
+          commands.push({
+            command: this.buildPackageScriptCommand(scriptRunner, 'test'),
+            reason: `Detected package.json test script (${scriptRunner})`,
+            source: 'repo-script',
+          });
+        if (scripts['lint'])
+          commands.push({
+            command: this.buildPackageScriptCommand(scriptRunner, 'lint'),
+            reason: `Detected package.json lint script (${scriptRunner})`,
+            source: 'repo-script',
+          });
+        if (scripts['typecheck'])
+          commands.push({
+            command: this.buildPackageScriptCommand(scriptRunner, 'typecheck'),
+            reason: `Detected package.json typecheck script (${scriptRunner})`,
+            source: 'repo-script',
+          });
+        if (scripts['build'])
+          commands.push({
+            command: this.buildPackageScriptCommand(scriptRunner, 'build'),
+            reason: `Detected package.json build script (${scriptRunner})`,
+            source: 'repo-script',
+          });
       } catch (error) {
         logger.debug('Unable to parse package.json for test command detection', error);
       }
@@ -719,7 +736,9 @@ export class WorkspaceService {
       commands.push({ command: 'make test', reason: 'Detected Makefile', source: 'repo-script' });
     }
 
-    return commands.filter((item, index, list) => list.findIndex((candidate) => candidate.command === item.command) === index);
+    return commands.filter(
+      (item, index, list) => list.findIndex((candidate) => candidate.command === item.command) === index,
+    );
   }
 
   private selectValidationCommands(
@@ -736,7 +755,10 @@ export class WorkspaceService {
     const selected = commands.filter((command) => command.source === 'tool-default').slice(0, 3);
     const warnings = commands
       .filter((command) => command.source === 'repo-script')
-      .map((command) => `Skipped ${command.command} during headless validation because it comes from repository-defined scripts.`);
+      .map(
+        (command) =>
+          `Skipped ${command.command} during headless validation because it comes from repository-defined scripts.`,
+      );
 
     return {
       commands: selected,
@@ -794,16 +816,16 @@ export class WorkspaceService {
       const toolDefault = this.resolveToolDefaultCommand(item);
       const result = toolDefault
         ? spawnSync(toolDefault.command, toolDefault.args, {
-          cwd: workspacePath,
-          encoding: 'utf-8',
-          timeout: 120000,
-        })
+            cwd: workspacePath,
+            encoding: 'utf-8',
+            timeout: 120000,
+          })
         : spawnSync(item.command, {
-          cwd: workspacePath,
-          encoding: 'utf-8',
-          shell: true,
-          timeout: 120000,
-        });
+            cwd: workspacePath,
+            encoding: 'utf-8',
+            shell: true,
+            timeout: 120000,
+          });
 
       const output = `${result.stdout || ''}\n${result.stderr || ''}`.trim().slice(0, 2000);
       return {

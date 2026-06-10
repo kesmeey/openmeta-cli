@@ -12,18 +12,14 @@ import {
 } from '../orchestration/machine/index.js';
 
 export function registerMachineCommand(program: Command): void {
-  const machine = program
-    .command('machine')
-    .description('Stable JSON-first automation surface');
+  const machine = program.command('machine').description('Stable JSON-first automation surface');
 
   machine
     .command('doctor')
     .description('Inspect local prerequisites and return machine-readable diagnostics')
     .action(() => machineDoctorOrchestrator.execute());
 
-  const config = machine
-    .command('config')
-    .description('Machine-safe configuration access');
+  const config = machine.command('config').description('Machine-safe configuration access');
 
   config
     .command('get')
@@ -35,9 +31,7 @@ export function registerMachineCommand(program: Command): void {
     .description('Update a configuration key and return the masked resulting snapshot')
     .action((key: string, value: string) => machineConfigOrchestrator.set(key, value));
 
-  const provider = machine
-    .command('provider')
-    .description('Machine-safe provider profile management');
+  const provider = machine.command('provider').description('Machine-safe provider profile management');
 
   provider
     .command('add <name>')
@@ -48,16 +42,26 @@ export function registerMachineCommand(program: Command): void {
     .option('--provider <provider>', 'Provider preset name')
     .option('--reasoning-effort <effort>', 'Reasoning effort')
     .option('--stream <enabled>', 'Streaming mode as true or false')
-    .option('--header <key=value>', 'Extra provider header', (value: string, previous: string[] = []) => [...previous, value], [])
-    .action((name: string, options: {
-      provider?: string;
-      baseUrl?: string;
-      model?: string;
-      apiKey?: string;
-      reasoningEffort?: string;
-      stream?: string;
-      header?: string[];
-    }) => machineProviderOrchestrator.add(name, options));
+    .option(
+      '--header <key=value>',
+      'Extra provider header',
+      (value: string, previous: string[] = []) => [...previous, value],
+      [],
+    )
+    .action(
+      (
+        name: string,
+        options: {
+          provider?: string;
+          baseUrl?: string;
+          model?: string;
+          apiKey?: string;
+          reasoningEffort?: string;
+          stream?: string;
+          header?: string[];
+        },
+      ) => machineProviderOrchestrator.add(name, options),
+    );
 
   provider
     .command('use <name>')
@@ -87,7 +91,9 @@ export function registerMachineCommand(program: Command): void {
     .option('--refresh', 'Ignore cached GitHub issue discovery results')
     .option('--repo <repository>', 'Limit issue discovery to one repository')
     .option('--local', 'Use local heuristic scoring without calling the LLM provider')
-    .action((options: { limit?: string; refresh?: boolean; repo?: string; local?: boolean }) => machineScoutOrchestrator.execute(options));
+    .action((options: { limit?: string; refresh?: boolean; repo?: string; local?: boolean }) =>
+      machineScoutOrchestrator.execute(options),
+    );
 
   machine
     .command('analyze')
@@ -97,7 +103,10 @@ export function registerMachineCommand(program: Command): void {
     .option('--headless', 'Select the highest-scoring suggestion without prompting')
     .option('--run-checks', 'Execute detected baseline validation commands during workspace preparation')
     .option('--dry-run', 'Preview artifact paths without writing local analysis files')
-    .action((options: { repo?: string; repoPath?: string; headless?: boolean; runChecks?: boolean; dryRun?: boolean }) => machineAnalyzeOrchestrator.execute(options));
+    .action(
+      (options: { repo?: string; repoPath?: string; headless?: boolean; runChecks?: boolean; dryRun?: boolean }) =>
+        machineAnalyzeOrchestrator.execute(options),
+    );
 
   machine
     .command('agent')
@@ -111,15 +120,17 @@ export function registerMachineCommand(program: Command): void {
     .option('--repo-path <path>', 'Reuse a local repository path via an isolated worktree')
     .option('--issue <issue>', 'Solve one GitHub issue number or issue URL')
     .option('--dry-run', 'Preview artifacts without publishing them')
-    .action((options: {
-      headless?: boolean;
-      runChecks?: boolean;
-      draftOnly?: boolean;
-      localArtifactsOnly?: boolean;
-      refresh?: boolean;
-      repo?: string;
-      repoPath?: string;
-      issue?: string;
-      dryRun?: boolean;
-    }) => machineAgentFlowOrchestrator.execute(options));
+    .action(
+      (options: {
+        headless?: boolean;
+        runChecks?: boolean;
+        draftOnly?: boolean;
+        localArtifactsOnly?: boolean;
+        refresh?: boolean;
+        repo?: string;
+        repoPath?: string;
+        issue?: string;
+        dryRun?: boolean;
+      }) => machineAgentFlowOrchestrator.execute(options),
+    );
 }

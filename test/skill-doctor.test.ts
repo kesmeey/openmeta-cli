@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import * as runtimeDiagnosticsModule from '../src/services/runtime-diagnostics.js';
 import { doctorSkillBundle } from '../src/orchestration/skill/doctor.js';
+import * as runtimeDiagnosticsModule from '../src/services/runtime-diagnostics.js';
 
 describe('doctorSkillBundle', () => {
   afterEach(() => {
@@ -21,12 +21,14 @@ describe('doctorSkillBundle', () => {
     const result = await doctorSkillBundle('claude-code');
 
     expect(result.openmetaOnPath).toBe(true);
-    expect(result.openmetaBinary).toEqual(expect.objectContaining({
-      source: 'bun-link',
-      invokedPath: '/Users/demo/.bun/bin/openmeta',
-      resolvedPath: '/Users/demo/work/openmeta-cli/bin/openmeta.js',
-      version: '1.2.3',
-    }));
+    expect(result.openmetaBinary).toEqual(
+      expect.objectContaining({
+        source: 'bun-link',
+        invokedPath: '/Users/demo/.bun/bin/openmeta',
+        resolvedPath: '/Users/demo/work/openmeta-cli/bin/openmeta.js',
+        version: '1.2.3',
+      }),
+    );
     expect(result.nextActions).not.toContain('ensure_openmeta_on_path');
   });
 

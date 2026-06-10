@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { getSkillsRoot, type SkillHost, loadCapabilityCatalog, loadCoreSkill, loadHostTemplate } from './catalog.js';
+import { getSkillsRoot, loadCapabilityCatalog, loadCoreSkill, loadHostTemplate, type SkillHost } from './catalog.js';
 
 export interface RenderedSkillBundle {
   host: SkillHost;

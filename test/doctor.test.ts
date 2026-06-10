@@ -1,11 +1,10 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
 import { DoctorOrchestrator } from '../src/orchestration/doctor.js';
 import * as runtimeDiagnosticsModule from '../src/services/runtime-diagnostics.js';
 import type { AppConfig } from '../src/types/index.js';
-import { mock, spyOn } from 'bun:test';
 
 let tempRoot = '';
 
@@ -37,7 +36,7 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       skipIfAlreadyGeneratedToday: true,
     },
     scoring: {
-      weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.30, impact: 0.20, riskPenalty: 0.35 },
+      weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.3, impact: 0.2, riskPenalty: 0.35 },
       overallWeights: { technicalMatch: 0.45, opportunityScore: 0.55 },
       preset: 'balanced',
     },
@@ -106,30 +105,34 @@ describe('DoctorOrchestrator', () => {
 
     expect(report.ready).toBe(true);
     expect(report.totals.fail).toBe(0);
-    expect(report.openmetaBinary).toEqual(expect.objectContaining({
-      source: 'bun-link',
-      invokedPath: '/Users/demo/.bun/bin/openmeta',
-      resolvedPath: '/Users/demo/work/openmeta-cli/bin/openmeta.js',
-    }));
+    expect(report.openmetaBinary).toEqual(
+      expect.objectContaining({
+        source: 'bun-link',
+        invokedPath: '/Users/demo/.bun/bin/openmeta',
+        resolvedPath: '/Users/demo/work/openmeta-cli/bin/openmeta.js',
+      }),
+    );
     expect(report.checks.find((check) => check.id === 'runtime-openmeta')?.detail).toContain('Resolved path');
     expect(report.checks.find((check) => check.id === 'github-config')?.status).toBe('pass');
     expect(report.checks.find((check) => check.id === 'llm-config')?.status).toBe('pass');
   });
 
   test('marks missing credentials as critical failures', async () => {
-    const report = await new DoctorOrchestrator().inspect(createConfig({
-      github: {
-        pat: '',
-        username: '',
-        targetRepoPath: '',
-      },
-      llm: {
-        provider: 'openai',
-        apiBaseUrl: 'https://api.openai.com/v1',
-        apiKey: '',
-        modelName: 'gpt-4o-mini',
-      },
-    }));
+    const report = await new DoctorOrchestrator().inspect(
+      createConfig({
+        github: {
+          pat: '',
+          username: '',
+          targetRepoPath: '',
+        },
+        llm: {
+          provider: 'openai',
+          apiBaseUrl: 'https://api.openai.com/v1',
+          apiKey: '',
+          modelName: 'gpt-4o-mini',
+        },
+      }),
+    );
 
     expect(report.ready).toBe(false);
     expect(report.checks.find((check) => check.id === 'github-config')?.status).toBe('fail');
@@ -137,13 +140,15 @@ describe('DoctorOrchestrator', () => {
   });
 
   test('fails when a configured artifact repository path does not exist', async () => {
-    const report = await new DoctorOrchestrator().inspect(createConfig({
-      github: {
-        pat: 'ghp_test_token',
-        username: 'octocat',
-        targetRepoPath: join(tempRoot, 'missing-repo'),
-      },
-    }));
+    const report = await new DoctorOrchestrator().inspect(
+      createConfig({
+        github: {
+          pat: 'ghp_test_token',
+          username: 'octocat',
+          targetRepoPath: join(tempRoot, 'missing-repo'),
+        },
+      }),
+    );
 
     expect(report.ready).toBe(false);
     expect(report.checks.find((check) => check.id === 'target-repo')?.status).toBe('fail');

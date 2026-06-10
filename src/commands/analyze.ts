@@ -11,14 +11,16 @@ export function registerAnalyzeCommand(program: Command): void {
     .option('--headless', 'Select the highest-scoring suggestion without prompting')
     .option('--run-checks', 'Execute detected baseline validation commands during workspace preparation')
     .option('--dry-run', 'Preview artifact paths without writing local analysis files')
-    .action((options: { repo?: string; repoPath?: string; headless?: boolean; runChecks?: boolean; dryRun?: boolean }) => runCommand(
-      'OpenMeta Analyze',
-      () => analyzeOrchestrator.run({
-        repo: options.repo,
-        repoPath: options.repoPath,
-        headless: options.headless,
-        runChecks: options.runChecks,
-        dryRun: options.dryRun,
-      }),
-    ));
+    .action(
+      (options: { repo?: string; repoPath?: string; headless?: boolean; runChecks?: boolean; dryRun?: boolean }) =>
+        runCommand('OpenMeta Analyze', () =>
+          analyzeOrchestrator.run({
+            repo: options.repo,
+            repoPath: options.repoPath,
+            headless: options.headless,
+            runChecks: options.runChecks,
+            dryRun: options.dryRun,
+          }),
+        ),
+    );
 }

@@ -1,4 +1,4 @@
-import { agentOrchestrator, type AgentRunOptions } from './agent.js';
+import { type AgentRunOptions, agentOrchestrator } from './agent.js';
 
 export type DailyExecutionOptions = AgentRunOptions;
 

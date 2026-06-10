@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
 import { AgentOrchestrator } from '../src/orchestration/agent.js';
 import { RunsOrchestrator } from '../src/orchestration/runs.js';
 import { inboxService, proofOfWorkService, runHistoryService } from '../src/services/index.js';

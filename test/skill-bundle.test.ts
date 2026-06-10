@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
 import { execFileSync } from 'child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import packageJson from '../package.json';
 import { getSupportedSkillHosts, installSkillBundle, renderSkillBundle } from '../src/orchestration/skill/index.js';
 
@@ -58,11 +58,13 @@ describe('skill bundle rendering', () => {
       stdio: ['ignore', 'pipe', 'inherit'],
       encoding: 'utf-8',
     });
-    const packed = JSON.parse(execFileSync('npm', ['pack', '--json', '--pack-destination', packedRoot], {
-      cwd: process.cwd(),
-      stdio: ['ignore', 'pipe', 'inherit'],
-      encoding: 'utf-8',
-    })) as Array<{ filename: string }>;
+    const packed = JSON.parse(
+      execFileSync('npm', ['pack', '--json', '--pack-destination', packedRoot], {
+        cwd: process.cwd(),
+        stdio: ['ignore', 'pipe', 'inherit'],
+        encoding: 'utf-8',
+      }),
+    ) as Array<{ filename: string }>;
     execFileSync('tar', ['-xzf', join(packedRoot, packed[0]!.filename), '-C', packedRoot]);
     execFileSync(
       bunExecutable,

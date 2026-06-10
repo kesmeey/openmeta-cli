@@ -1,6 +1,13 @@
 import type { LLMReasoningEffort } from '../types/index.js';
 
-export const LLM_REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const satisfies readonly LLMReasoningEffort[];
+export const LLM_REASONING_EFFORTS = [
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+] as const satisfies readonly LLMReasoningEffort[];
 export const DEFAULT_LLM_REASONING_EFFORT: LLMReasoningEffort = 'none';
 
 export function parseLLMReasoningEffort(value: string): LLMReasoningEffort {

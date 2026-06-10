@@ -1,6 +1,6 @@
-import { simpleGit, type SimpleGit } from 'simple-git';
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
+import { type SimpleGit, simpleGit } from 'simple-git';
 import { getDailyNoteFileName } from '../infra/date.js';
 import { logger } from '../infra/logger.js';
 

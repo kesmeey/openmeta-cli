@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { LLMService } from '../src/services/llm.js';
 import type { StructuredOutputStatus } from '../src/contracts/index.js';
+import { LLMService } from '../src/services/llm.js';
 import type { ImplementationDraft, MatchedIssue } from '../src/types/index.js';
 import { createIssue, createMemory, createRankedIssue, createWorkspace } from './helpers/factories.js';
 
@@ -36,14 +36,14 @@ interface LLMServiceInternals {
   client: {
     chat: {
       completions: {
-          create: (payload: {
-            model: string;
-            messages: Array<{ role: string; content: string }>;
-            temperature: number;
-            reasoning_effort?: string;
-            stream?: boolean;
-            stream_options?: { include_usage?: boolean };
-          }) => unknown | Promise<unknown>;
+        create: (payload: {
+          model: string;
+          messages: Array<{ role: string; content: string }>;
+          temperature: number;
+          reasoning_effort?: string;
+          stream?: boolean;
+          stream_options?: { include_usage?: boolean };
+        }) => unknown | Promise<unknown>;
       };
     };
   } | null;
@@ -87,7 +87,10 @@ interface LLMServiceInternals {
       prPotentialScore: number;
     }>;
   };
-  parseLLMResponse(content: string, originalIssues: ReturnType<typeof createIssue>[]): {
+  parseLLMResponse(
+    content: string,
+    originalIssues: ReturnType<typeof createIssue>[],
+  ): {
     status: StructuredOutputStatus;
     data: MatchedIssue[];
   };
@@ -200,31 +203,33 @@ describe('LLMService repository suggestion parsing', () => {
           create: async (payload) => {
             payloads.push(payload);
             return {
-              choices: [{
-                message: {
-                  content: JSON.stringify({
-                    version: '1',
-                    kind: 'repository_suggestion_list',
-                    status: 'success',
-                    data: {
-                      suggestions: [
-                        {
-                          id: 'docs-install',
-                          title: 'Document local install',
-                          summary: 'Clarify setup docs.',
-                          rationale: 'README setup is incomplete.',
-                          targetFiles: [{ path: 'README.md', reason: 'Setup docs' }],
-                          proposedChanges: ['Add local install instructions'],
-                          validationPlan: ['Review README commands'],
-                          risks: [],
-                          estimatedWorkload: 'small',
-                          prPotentialScore: 82,
-                        },
-                      ],
-                    },
-                  }),
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      version: '1',
+                      kind: 'repository_suggestion_list',
+                      status: 'success',
+                      data: {
+                        suggestions: [
+                          {
+                            id: 'docs-install',
+                            title: 'Document local install',
+                            summary: 'Clarify setup docs.',
+                            rationale: 'README setup is incomplete.',
+                            targetFiles: [{ path: 'README.md', reason: 'Setup docs' }],
+                            proposedChanges: ['Add local install instructions'],
+                            validationPlan: ['Review README commands'],
+                            risks: [],
+                            estimatedWorkload: 'small',
+                            prPotentialScore: 82,
+                          },
+                        ],
+                      },
+                    }),
+                  },
                 },
-              }],
+              ],
             };
           },
         },
@@ -240,8 +245,12 @@ describe('LLMService repository suggestion parsing', () => {
           { path: 'README.md', content: '# Demo\n\nInstall instructions are missing.\n' },
           { path: 'src/index.ts', content: 'export const demo = true;\n' },
         ],
-        testCommands: [{ command: 'bun test', reason: 'Detected package.json test script (bun)', source: 'repo-script' }],
-        validationCommands: [{ command: 'bun test', reason: 'Detected package.json test script (bun)', source: 'repo-script' }],
+        testCommands: [
+          { command: 'bun test', reason: 'Detected package.json test script (bun)', source: 'repo-script' },
+        ],
+        validationCommands: [
+          { command: 'bun test', reason: 'Detected package.json test script (bun)', source: 'repo-script' },
+        ],
       }),
       createMemory(),
     );
@@ -287,7 +296,8 @@ describe('LLMService implementation draft parsing', () => {
 
   test('rejects fenced JSON responses that fail schema validation', () => {
     const service = new LLMService() as unknown as LLMServiceInternals;
-    expect(() => service.parseImplementationDraft(`
+    expect(() =>
+      service.parseImplementationDraft(`
       \`\`\`json
       {
         "version": "1",
@@ -310,7 +320,8 @@ describe('LLMService implementation draft parsing', () => {
         }
       }
       \`\`\`
-    `)).toThrow('LLM output failed schema validation.');
+    `),
+    ).toThrow('LLM output failed schema validation.');
   });
 
   test('parses fenced JSON responses with raw tsx content', () => {
@@ -684,7 +695,8 @@ describe('LLMService issue scoring response parsing', () => {
       createIssue({ repoFullName: 'acme/ignored', repoName: 'ignored', number: 11 }),
     ];
 
-    const parsed = service.parseLLMResponse(`
+    const parsed = service.parseLLMResponse(
+      `
       {
         "version": "1",
         "kind": "issue_match_list",
@@ -715,7 +727,9 @@ describe('LLMService issue scoring response parsing', () => {
           ]
         }
       }
-    `, issues);
+    `,
+      issues,
+    );
 
     expect(parsed.status).toBe('success');
     expect(parsed.data).toHaveLength(2);
@@ -802,33 +816,35 @@ describe('LLMService patch draft generation', () => {
             }
 
             return {
-              choices: [{
-                message: {
-                  content: JSON.stringify({
-                    version: '1',
-                    kind: 'patch_draft',
-                    status: 'success',
-                    data: {
-                      goal: 'Add accessible labels to icon-only buttons',
-                      targetFiles: [
-                        {
-                          path: 'src/components/IconButton.tsx',
-                          reason: 'Primary component logic',
-                        },
-                      ],
-                      proposedChanges: [
-                        {
-                          title: 'Update button API',
-                          details: 'Require an accessible label for icon-only rendering.',
-                          files: ['src/components/IconButton.tsx'],
-                        },
-                      ],
-                      risks: ['Consumer code may rely on current behavior'],
-                      validationNotes: ['Run bun test after the patch'],
-                    },
-                  }),
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      version: '1',
+                      kind: 'patch_draft',
+                      status: 'success',
+                      data: {
+                        goal: 'Add accessible labels to icon-only buttons',
+                        targetFiles: [
+                          {
+                            path: 'src/components/IconButton.tsx',
+                            reason: 'Primary component logic',
+                          },
+                        ],
+                        proposedChanges: [
+                          {
+                            title: 'Update button API',
+                            details: 'Require an accessible label for icon-only rendering.',
+                            files: ['src/components/IconButton.tsx'],
+                          },
+                        ],
+                        risks: ['Consumer code may rely on current behavior'],
+                        validationNotes: ['Run bun test after the patch'],
+                      },
+                    }),
+                  },
                 },
-              }],
+              ],
             };
           },
         },

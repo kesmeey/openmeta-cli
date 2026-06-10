@@ -1,20 +1,22 @@
-import { agentOrchestrator } from '../index.js';
 import { runInMachineContext } from '../../infra/index.js';
+import { agentOrchestrator } from '../index.js';
 import { mapMachineError } from './errors.js';
 import { buildMachineEnvelope, writeMachinePayload, writeMachinePlan } from './runtime.js';
 
 export class MachineAgentFlowOrchestrator {
-  async execute(options: {
-    headless?: boolean;
-    runChecks?: boolean;
-    draftOnly?: boolean;
-    localArtifactsOnly?: boolean;
-    refresh?: boolean;
-    repo?: string;
-    repoPath?: string;
-    issue?: string;
-    dryRun?: boolean;
-  } = {}): Promise<void> {
+  async execute(
+    options: {
+      headless?: boolean;
+      runChecks?: boolean;
+      draftOnly?: boolean;
+      localArtifactsOnly?: boolean;
+      refresh?: boolean;
+      repo?: string;
+      repoPath?: string;
+      issue?: string;
+      dryRun?: boolean;
+    } = {},
+  ): Promise<void> {
     try {
       writeMachinePlan('machine agent', [
         'Validate GitHub access',
@@ -25,17 +27,19 @@ export class MachineAgentFlowOrchestrator {
         'Optionally apply changes or open a draft PR depending on execution flags',
         'Return execution outcome with artifact paths and next actions',
       ]);
-      const result = await runInMachineContext(() => agentOrchestrator.runMachine({
-        headless: options.headless ?? true,
-        runChecks: options.runChecks,
-        draftOnly: options.draftOnly,
-        localArtifactsOnly: options.localArtifactsOnly,
-        refresh: options.refresh,
-        repo: options.repo,
-        repoPath: options.repoPath,
-        issue: options.issue,
-        dryRun: options.dryRun,
-      }));
+      const result = await runInMachineContext(() =>
+        agentOrchestrator.runMachine({
+          headless: options.headless ?? true,
+          runChecks: options.runChecks,
+          draftOnly: options.draftOnly,
+          localArtifactsOnly: options.localArtifactsOnly,
+          refresh: options.refresh,
+          repo: options.repo,
+          repoPath: options.repoPath,
+          issue: options.issue,
+          dryRun: options.dryRun,
+        }),
+      );
       writeMachinePayload(buildMachineEnvelope('machine agent', result));
     } catch (error) {
       const mapped = mapMachineError('machine agent', error);

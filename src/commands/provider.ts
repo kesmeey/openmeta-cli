@@ -3,9 +3,7 @@ import { providerOrchestrator } from '../orchestration/index.js';
 import { runCommand } from './run-command.js';
 
 export function registerProviderCommand(program: Command): void {
-  const provider = program
-    .command('provider')
-    .description('Manage reusable LLM provider profiles');
+  const provider = program.command('provider').description('Manage reusable LLM provider profiles');
 
   provider
     .command('list')
@@ -33,25 +31,34 @@ export function registerProviderCommand(program: Command): void {
     .requiredOption('--api-key <key>', 'LLM API key')
     .option('--reasoning-effort <effort>', 'Reasoning effort: none, minimal, low, medium, high, or xhigh')
     .option('--stream <enabled>', 'Use streaming chat completions: true or false')
-    .option('--header <key=value>', 'Extra API header; repeat for multiple headers', (value, previous: string[] = []) => [...previous, value], [])
-    .action((name: string, options: {
-      provider?: string;
-      baseUrl: string;
-      model: string;
-      apiKey: string;
-      reasoningEffort?: string;
-      stream?: string;
-      header: string[];
-    }) => runCommand('OpenMeta Provider', () => providerOrchestrator.add(name, options)));
+    .option(
+      '--header <key=value>',
+      'Extra API header; repeat for multiple headers',
+      (value, previous: string[] = []) => [...previous, value],
+      [],
+    )
+    .action(
+      (
+        name: string,
+        options: {
+          provider?: string;
+          baseUrl: string;
+          model: string;
+          apiKey: string;
+          reasoningEffort?: string;
+          stream?: string;
+          header: string[];
+        },
+      ) => runCommand('OpenMeta Provider', () => providerOrchestrator.add(name, options)),
+    );
 
   provider
     .command('use <name>')
     .description('Switch the active LLM provider to a saved profile')
     .option('--validate', 'Validate the selected provider after switching')
-    .action((name: string, options: { validate?: boolean }) => runCommand(
-      'OpenMeta Provider',
-      () => providerOrchestrator.use(name, options),
-    ));
+    .action((name: string, options: { validate?: boolean }) =>
+      runCommand('OpenMeta Provider', () => providerOrchestrator.use(name, options)),
+    );
 
   provider
     .command('remove <name>')

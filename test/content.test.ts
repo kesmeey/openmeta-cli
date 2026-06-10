@@ -82,10 +82,7 @@ describe('contentService', () => {
         defaultBranch: 'main',
         candidateFiles: ['README.md', 'src/infra/config.ts'],
       }),
-      [
-        selectedSuggestion,
-        createRepositorySuggestion(),
-      ],
+      [selectedSuggestion, createRepositorySuggestion()],
       selectedSuggestion,
     );
 
@@ -117,22 +114,26 @@ describe('contentService', () => {
   });
 
   test('renders markdown fallbacks for sparse patch and pull request drafts', () => {
-    const patchMarkdown = contentService.formatPatchDraftMarkdown(createPatchDraft({
-      targetFiles: [],
-      proposedChanges: [
-        {
-          title: 'Inspect generated output',
-          details: 'Review the patch manually before applying any changes.',
-          files: [],
-        },
-      ],
-      risks: [],
-      validationNotes: [],
-    }));
-    const prMarkdown = contentService.formatPullRequestDraftMarkdown(createPullRequestDraft({
-      validation: [],
-      risks: [],
-    }));
+    const patchMarkdown = contentService.formatPatchDraftMarkdown(
+      createPatchDraft({
+        targetFiles: [],
+        proposedChanges: [
+          {
+            title: 'Inspect generated output',
+            details: 'Review the patch manually before applying any changes.',
+            files: [],
+          },
+        ],
+        risks: [],
+        validationNotes: [],
+      }),
+    );
+    const prMarkdown = contentService.formatPullRequestDraftMarkdown(
+      createPullRequestDraft({
+        validation: [],
+        risks: [],
+      }),
+    );
 
     expect(contentService.getContentTypeLabel('research_note')).toBe('Research Notes');
     expect(contentService.getContentTypeLabel('development_diary')).toBe('Development Diary');

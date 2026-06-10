@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
 import { ConfigService, configService } from '../src/infra/config.js';
 import { ProviderOrchestrator } from '../src/orchestration/provider.js';
 import type { AppConfig } from '../src/types/index.js';
@@ -136,21 +136,25 @@ describe('ProviderOrchestrator', () => {
   test('rejects invalid header values when adding a provider profile', async () => {
     const orchestrator = new ProviderOrchestrator();
 
-    await expect(orchestrator.add('broken-header', {
-      provider: 'custom',
-      baseUrl: 'https://example.com/v1',
-      model: 'example-model',
-      apiKey: 'sk-secret',
-      header: [''],
-    })).resolves.toBeUndefined();
+    await expect(
+      orchestrator.add('broken-header', {
+        provider: 'custom',
+        baseUrl: 'https://example.com/v1',
+        model: 'example-model',
+        apiKey: 'sk-secret',
+        header: [''],
+      }),
+    ).resolves.toBeUndefined();
 
-    await expect(orchestrator.add('invalid-header', {
-      provider: 'custom',
-      baseUrl: 'https://example.com/v1',
-      model: 'example-model',
-      apiKey: 'sk-secret',
-      header: ['not-a-header'],
-    })).rejects.toThrow('must use key=value format');
+    await expect(
+      orchestrator.add('invalid-header', {
+        provider: 'custom',
+        baseUrl: 'https://example.com/v1',
+        model: 'example-model',
+        apiKey: 'sk-secret',
+        header: ['not-a-header'],
+      }),
+    ).rejects.toThrow('must use key=value format');
   });
 
   test('removes provider profiles without changing the active provider settings', async () => {

@@ -70,10 +70,7 @@ export class RunHistoryService {
       ...(error ? { error } : {}),
     };
 
-    this.write([
-      updated,
-      ...state.records.filter((record) => record.id !== id),
-    ].slice(0, 100));
+    this.write([updated, ...state.records.filter((record) => record.id !== id)].slice(0, 100));
     return updated;
   }
 

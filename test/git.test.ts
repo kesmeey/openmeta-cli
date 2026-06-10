@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
-import { join } from 'path';
 import { tmpdir } from 'os';
+import { join } from 'path';
 import { simpleGit } from 'simple-git';
 import { gitService } from '../src/services/git.js';
 
@@ -38,12 +38,14 @@ describe('gitService.writeAndPublish', () => {
     const initialized = await gitService.initialize(repoPath);
     expect(initialized).toBe(true);
 
-    const publishResult = await gitService.writeAndPublish([
-      { path: 'INBOX.md', content: '# Inbox\n' },
-    ], 'feat: publish inbox', {
-      branchName: 'openmeta-artifacts',
-      baseBranch: 'main',
-    });
+    const publishResult = await gitService.writeAndPublish(
+      [{ path: 'INBOX.md', content: '# Inbox\n' }],
+      'feat: publish inbox',
+      {
+        branchName: 'openmeta-artifacts',
+        baseBranch: 'main',
+      },
+    );
 
     expect(publishResult?.branch).toBe('openmeta-artifacts');
 
