@@ -48,51 +48,55 @@ describe('skill bundle rendering', () => {
     expect(openclawSkill).toContain('openmeta machine doctor');
   });
 
-  test('export works from the packed CLI with runtime-resolved skill assets', () => {
-    const packedRoot = mkdtempSync(join(tmpdir(), 'openmeta-pack-runtime-'));
-    const exportRoot = join(packedRoot, 'exported');
-    const bunExecutable = process.execPath;
+  test(
+    'export works from the packed CLI with runtime-resolved skill assets',
+    () => {
+      const packedRoot = mkdtempSync(join(tmpdir(), 'openmeta-pack-runtime-'));
+      const exportRoot = join(packedRoot, 'exported');
+      const bunExecutable = process.execPath;
 
-    execFileSync(bunExecutable, ['build', '--target=bun', '--outfile=bin/openmeta.js', './src/cli.ts'], {
-      cwd: process.cwd(),
-      stdio: ['ignore', 'pipe', 'inherit'],
-      encoding: 'utf-8',
-    });
-    const packed = JSON.parse(
-      execFileSync('npm', ['pack', '--json', '--pack-destination', packedRoot], {
+      execFileSync(bunExecutable, ['build', '--target=bun', '--outfile=bin/openmeta.js', './src/cli.ts'], {
         cwd: process.cwd(),
         stdio: ['ignore', 'pipe', 'inherit'],
         encoding: 'utf-8',
-      }),
-    ) as Array<{ filename: string }>;
-    execFileSync('tar', ['-xzf', join(packedRoot, packed[0]!.filename), '-C', packedRoot]);
-    execFileSync(
-      bunExecutable,
-      [
-        join(packedRoot, 'package', 'bin', 'openmeta.js'),
-        'skill',
-        'export',
-        '--host',
-        'claude-code',
-        '--output',
-        exportRoot,
-      ],
-      {
-        cwd: process.cwd(),
-        stdio: ['ignore', 'pipe', 'inherit'],
-        encoding: 'utf-8',
-      },
-    );
+      });
+      const packed = JSON.parse(
+        execFileSync('npm', ['pack', '--json', '--pack-destination', packedRoot], {
+          cwd: process.cwd(),
+          stdio: ['ignore', 'pipe', 'inherit'],
+          encoding: 'utf-8',
+        }),
+      ) as Array<{ filename: string }>;
+      execFileSync('tar', ['-xzf', join(packedRoot, packed[0]!.filename), '-C', packedRoot]);
+      execFileSync(
+        bunExecutable,
+        [
+          join(packedRoot, 'package', 'bin', 'openmeta.js'),
+          'skill',
+          'export',
+          '--host',
+          'claude-code',
+          '--output',
+          exportRoot,
+        ],
+        {
+          cwd: process.cwd(),
+          stdio: ['ignore', 'pipe', 'inherit'],
+          encoding: 'utf-8',
+        },
+      );
 
-    expect(existsSync(join(exportRoot, 'claude-code', 'SKILL.md'))).toBe(true);
-    const exportedSkill = readFileSync(join(exportRoot, 'claude-code', 'SKILL.md'), 'utf-8');
-    expect(exportedSkill).toStartWith('---\nname: openmeta\n');
-    expect(exportedSkill).toContain('Install target: `~/.claude/skills/openmeta`');
-    expect(exportedSkill).toContain('## What OpenMeta Can Do');
-    expect(exportedSkill).toContain('## Result Interpretation');
-    expect(exportedSkill).toContain('"inspectFields"');
-    expect(exportedSkill).toContain('openmeta machine doctor');
-  }, { timeout: 20000 });
+      expect(existsSync(join(exportRoot, 'claude-code', 'SKILL.md'))).toBe(true);
+      const exportedSkill = readFileSync(join(exportRoot, 'claude-code', 'SKILL.md'), 'utf-8');
+      expect(exportedSkill).toStartWith('---\nname: openmeta\n');
+      expect(exportedSkill).toContain('Install target: `~/.claude/skills/openmeta`');
+      expect(exportedSkill).toContain('## What OpenMeta Can Do');
+      expect(exportedSkill).toContain('## Result Interpretation');
+      expect(exportedSkill).toContain('"inspectFields"');
+      expect(exportedSkill).toContain('openmeta machine doctor');
+    },
+    { timeout: 20000 },
+  );
 
   test('installs claude-code bundle at the Claude Code skill discovery entrypoint', async () => {
     const homeRoot = join(tempRoot, 'home');

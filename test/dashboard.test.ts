@@ -2,7 +2,11 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { createDashboardDataStore, createDashboardServer, listenOnAvailablePort } from '../src/orchestration/dashboard.js';
+import {
+  createDashboardDataStore,
+  createDashboardServer,
+  listenOnAvailablePort,
+} from '../src/orchestration/dashboard.js';
 
 const tempRoots: string[] = [];
 const servers: Array<{ close: (callback?: (error?: Error) => void) => void }> = [];
@@ -94,7 +98,7 @@ describe('dashboard server', () => {
     });
 
     expect(response.status).toBe(200);
-    const payload = await response.json() as { meta: { counter: number; snapshotPath?: string } };
+    const payload = (await response.json()) as { meta: { counter: number; snapshotPath?: string } };
     expect(payload.meta.counter).toBe(1);
     expect(payload.meta.snapshotPath).toContain('dashboard-data.json');
     expect(payload.meta.snapshotPath && existsSync(payload.meta.snapshotPath)).toBe(true);
@@ -110,10 +114,14 @@ describe('dashboard server', () => {
     mkdirSync(snapshotDir, { recursive: true });
     writeFileSync(
       snapshotPath,
-      JSON.stringify({
-        meta: { mode: 'real', counter: 7 },
-        sync: { status: 'from-disk' },
-      }, null, 2),
+      JSON.stringify(
+        {
+          meta: { mode: 'real', counter: 7 },
+          sync: { status: 'from-disk' },
+        },
+        null,
+        2,
+      ),
       'utf-8',
     );
 
@@ -123,8 +131,14 @@ describe('dashboard server', () => {
         return { meta: { mode: 'real', counter }, sync: { status: 'adapter' } };
       },
     });
-    const initialPayload = await dataStore.getDashboardData() as { meta: { counter: number }; sync: { status: string } };
-    const refreshedPayload = await dataStore.refreshDashboardData() as { meta: { counter: number }; sync: { status: string } };
+    const initialPayload = (await dataStore.getDashboardData()) as {
+      meta: { counter: number };
+      sync: { status: string };
+    };
+    const refreshedPayload = (await dataStore.refreshDashboardData()) as {
+      meta: { counter: number };
+      sync: { status: string };
+    };
 
     expect(initialPayload.meta.counter).toBe(7);
     expect(initialPayload.sync.status).toBe('from-disk');
@@ -143,10 +157,10 @@ describe('dashboard server', () => {
       },
     });
 
-    const concurrentPayloads = await Promise.all([
+    const concurrentPayloads = (await Promise.all([
       dataStore.refreshDashboardData(),
       dataStore.refreshDashboardData(),
-    ]) as Array<{ meta: { counter: number } }>;
+    ])) as Array<{ meta: { counter: number } }>;
     const first = concurrentPayloads[0];
     const second = concurrentPayloads[1];
 
