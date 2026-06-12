@@ -225,6 +225,8 @@ export class AgentOrchestrator {
 
     await this.validateConfig(config);
 
+    issueRankingService.ensureEnvironment();
+
     if (headless && !schedulerRun && !dryRun && !localArtifactsOnly) {
       await this.confirmManualHeadlessRun(config);
     }
@@ -853,6 +855,9 @@ export class AgentOrchestrator {
     });
 
     await this.validateConfig(config);
+
+    // Kick off background environment detection early; do not block the main flow
+    issueRankingService.ensureEnvironment();
 
     if (headless && !schedulerRun && !localArtifactsOnly) {
       await this.confirmManualHeadlessRun(config);

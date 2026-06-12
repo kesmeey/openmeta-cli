@@ -1,5 +1,5 @@
-import { logger } from '../infra/index.js';
-import type { AppConfig, GitHubIssue, MatchedIssue, RankedIssue } from '../types/index.js';
+import { detectEnvironment, logger } from '../infra/index.js';
+import type { AppConfig, EnvironmentInfo, GitHubIssue, MatchedIssue, RankedIssue } from '../types/index.js';
 import { githubService } from './github.js';
 import { llmService } from './llm.js';
 import { opportunityService } from './opportunity.js';
@@ -35,6 +35,32 @@ const FOCUS_AREA_TERMS: Record<string, string[]> = {
 };
 
 export class IssueRankingService {
+  private cachedEnvironment: EnvironmentInfo | null = null;
+  private detectionPromise: Promise<EnvironmentInfo> | null = null;
+
+  ensureEnvironment(): Promise<EnvironmentInfo> {
+    if (this.cachedEnvironment) {
+      return Promise.resolve(this.cachedEnvironment);
+    }
+    if (!this.detectionPromise) {
+      this.detectionPromise = Promise.resolve().then(() => {
+        if (!this.cachedEnvironment) {
+          this.cachedEnvironment = detectEnvironment();
+        }
+        return this.cachedEnvironment;
+      });
+    }
+    return this.detectionPromise;
+  }
+
+  getEnvironmentCached(): EnvironmentInfo | null {
+    // Kick off background detection if not started; don't block the caller
+    if (!this.detectionPromise && !this.cachedEnvironment) {
+      this.ensureEnvironment();
+    }
+    return this.cachedEnvironment;
+  }
+
   async loadRankedIssues(
     config: AppConfig,
     options: {
