@@ -24,6 +24,14 @@ export interface DiskInfo {
   freeGB: number;
 }
 
+export interface HypervisorInfo {
+  isVM: boolean;
+  type: 'hyper-v' | 'virtualbox' | 'vmware' | 'kvm' | 'qemu' | 'parallels' | 'wsl' | 'docker-desktop' | 'none';
+  isContainer: boolean;
+  isCI: boolean;
+  ciName?: string;
+}
+
 export interface OSInfo {
   platform: NodeJS.Platform;
   arch: string;
@@ -31,6 +39,7 @@ export interface OSInfo {
   version: string;
   isWSL: boolean;
   wslDistros: string[];
+  hypervisor: HypervisorInfo;
 }
 
 export interface EnvironmentInfo {

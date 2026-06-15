@@ -1,6 +1,14 @@
 import { spawnSync } from 'child_process';
 import { arch, cpus, freemem, platform, totalmem } from 'os';
-import type { CPUInfo, DiskInfo, EnvironmentInfo, GPUInfo, OSInfo, ToolInfo } from '../types/environment.types.js';
+import type {
+  CPUInfo,
+  DiskInfo,
+  EnvironmentInfo,
+  GPUInfo,
+  HypervisorInfo,
+  OSInfo,
+  ToolInfo,
+} from '../types/environment.types.js';
 
 function runCmd(command: string, args: string[] = []): { stdout: string; stderr: string; status: number | null } {
   const result = spawnSync(command, args, { encoding: 'utf-8', shell: true, timeout: 15000 });
@@ -15,6 +23,7 @@ function detectOS(): OSInfo {
   const currentPlatform = platform();
   const isWSL = detectWSL();
   const wslDistros = isWSL ? detectWSLDistros() : [];
+  const hypervisor = detectHypervisor();
 
   let distro = currentPlatform;
   let version = '';
@@ -37,7 +46,177 @@ function detectOS(): OSInfo {
     }
   }
 
-  return { platform: currentPlatform, arch: arch(), distro, version, isWSL, wslDistros };
+  return { platform: currentPlatform, arch: arch(), distro, version, isWSL, wslDistros, hypervisor };
+}
+
+function detectHypervisor(): HypervisorInfo {
+  const { isCI, name: ciName } = detectCI();
+  const isContainer = detectContainer();
+
+  if (platform() === 'win32') {
+    return detectWindowsHypervisor(isCI, isContainer, ciName);
+  }
+
+  if (platform() === 'darwin') {
+    return detectMacHypervisor(isCI, isContainer, ciName);
+  }
+
+  return detectLinuxHypervisor(isCI, isContainer, ciName);
+}
+
+function detectCI(): { isCI: boolean; name?: string } {
+  const ciEnvs: Record<string, string> = {
+    GITHUB_ACTIONS: 'GitHub Actions',
+    GITLAB_CI: 'GitLab CI',
+    JENKINS_HOME: 'Jenkins',
+    CI: 'Generic CI',
+    TRAVIS: 'Travis CI',
+    CIRCLECI: 'CircleCI',
+    APPVEYOR: 'AppVeyor',
+    AZURE_DEV_OPS: 'Azure DevOps',
+    TEAMCITY_VERSION: 'TeamCity',
+  };
+
+  for (const [envVar, name] of Object.entries(ciEnvs)) {
+    if (process.env[envVar]) {
+      return { isCI: true, name };
+    }
+  }
+
+  return { isCI: false };
+}
+
+function detectContainer(): boolean {
+  if (platform() !== 'linux') return false;
+
+  // Docker container markers
+  if (runCmd('test -f /.dockerenv && echo yes').stdout === 'yes') return true;
+
+  const cgroup = runCmd('cat /proc/1/cgroup 2>/dev/null').stdout;
+  if (/\/docker\/|docker-|containerd|kubepods/.test(cgroup)) return true;
+
+  return false;
+}
+
+function detectWindowsHypervisor(
+  isCI: boolean,
+  isContainer: boolean,
+  ciName?: string,
+): HypervisorInfo {
+  const cs = runCmd(
+    'powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystem).Manufacturer"',
+  );
+  const manufacturer = cs.stdout.toLowerCase();
+
+  const model = runCmd(
+    'powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystem).Model"',
+  ).stdout.toLowerCase();
+
+  if (manufacturer.includes('microsoft') && model.includes('virtual')) {
+    return { isVM: true, type: 'hyper-v', isContainer, isCI, ciName };
+  }
+
+  if (manufacturer.includes('vmware')) {
+    return { isVM: true, type: 'vmware', isContainer, isCI, ciName };
+  }
+
+  if (manufacturer.includes('innotek') || manufacturer.includes('oracle') || model.includes('virtualbox')) {
+    return { isVM: true, type: 'virtualbox', isContainer, isCI, ciName };
+  }
+
+  if (manufacturer.includes('qemu') || model.includes('qemu') || model.includes('kvm')) {
+    return { isVM: true, type: 'qemu', isContainer, isCI, ciName };
+  }
+
+  if (manufacturer.includes('parallels')) {
+    return { isVM: true, type: 'parallels', isContainer, isCI, ciName };
+  }
+
+  const hyperv = runCmd(
+    'powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystem).HypervisorPresent"',
+  );
+  if (hyperv.stdout.trim() === 'True') {
+    if (
+      model.includes('virtual') ||
+      model !== cs.stdout.toLowerCase() ||
+      cs.stdout.toLowerCase().startsWith('microsoft')
+    ) {
+      return { isVM: true, type: 'hyper-v', isContainer, isCI, ciName };
+    }
+  }
+
+  return { isVM: false, type: 'none', isContainer, isCI, ciName };
+}
+
+function detectMacHypervisor(
+  isCI: boolean,
+  isContainer: boolean,
+  ciName?: string,
+): HypervisorInfo {
+  const ioreg = runCmd('ioreg -l 2>/dev/null | grep -e "Manufacturer" -e "Vendor Name"');
+  const ioregLower = ioreg.stdout.toLowerCase();
+
+  if (ioregLower.includes('vmware')) {
+    return { isVM: true, type: 'vmware', isContainer, isCI, ciName };
+  }
+
+  if (ioregLower.includes('parallels')) {
+    return { isVM: true, type: 'parallels', isContainer, isCI, ciName };
+  }
+
+  if (ioregLower.includes('qemu')) {
+    return { isVM: true, type: 'qemu', isContainer, isCI, ciName };
+  }
+
+  const model = runCmd('sysctl -n hw.model 2>/dev/null').stdout.toLowerCase();
+  if (model.includes('utm') || model.includes('qemu')) {
+    return { isVM: true, type: 'qemu', isContainer, isCI, ciName };
+  }
+
+  return { isVM: false, type: 'none', isContainer, isCI, ciName };
+}
+
+function detectLinuxHypervisor(
+  isCI: boolean,
+  isContainer: boolean,
+  ciName?: string,
+): HypervisorInfo {
+  const virt = runCmd('systemd-detect-virt 2>/dev/null').stdout.toLowerCase();
+
+  if (virt === 'kvm') return { isVM: true, type: 'kvm', isContainer, isCI, ciName };
+  if (virt === 'qemu') return { isVM: true, type: 'qemu', isContainer, isCI, ciName };
+  if (virt === 'vmware') return { isVM: true, type: 'vmware', isContainer, isCI, ciName };
+  if (virt === 'oracle') return { isVM: true, type: 'virtualbox', isContainer, isCI, ciName };
+  if (virt === 'microsoft') return { isVM: true, type: 'hyper-v', isContainer, isCI, ciName };
+  if (virt === 'parallels') return { isVM: true, type: 'parallels', isContainer, isCI, ciName };
+  if (virt === 'wsl') return { isVM: true, type: 'wsl', isContainer, isCI, ciName };
+
+  if (virt) {
+    return { isVM: true, type: 'qemu', isContainer, isCI, ciName };
+  }
+
+  const sysVendor = runCmd("cat /sys/class/dmi/id/sys_vendor 2>/dev/null").stdout.toLowerCase();
+  const productName = runCmd("cat /sys/class/dmi/id/product_name 2>/dev/null").stdout.toLowerCase();
+
+  if (sysVendor.includes('microsoft') || productName.includes('virtual')) {
+    return { isVM: true, type: 'hyper-v', isContainer, isCI, ciName };
+  }
+  if (sysVendor.includes('vmware')) {
+    return { isVM: true, type: 'vmware', isContainer, isCI, ciName };
+  }
+  if (sysVendor.includes('innotek') || sysVendor.includes('oracle') || productName.includes('virtualbox')) {
+    return { isVM: true, type: 'virtualbox', isContainer, isCI, ciName };
+  }
+  if (sysVendor.includes('qemu') || productName.includes('qemu') || productName.includes('kvm')) {
+    return { isVM: true, type: 'qemu', isContainer, isCI, ciName };
+  }
+
+  const cpuinfo = runCmd("grep -m1 'hypervisor' /proc/cpuinfo 2>/dev/null").stdout;
+  if (cpuinfo) {
+    return { isVM: true, type: 'qemu', isContainer, isCI, ciName };
+  }
+
+  return { isVM: false, type: 'none', isContainer, isCI, ciName };
 }
 
 function detectWSL(): boolean {
@@ -55,8 +234,9 @@ function detectWSLDistros(): string[] {
   if (!r.stdout) return [];
 
   return r.stdout
+    .replace(/\0/g, '')
     .split(/\r?\n/)
-    .map((line) => line.trim())
+    .map((line) => line.replace(/[^\x20-\x7E]/g, '').trim())
     .filter((line) => line.length > 0 && !line.startsWith('Windows Subsystem'));
 }
 
