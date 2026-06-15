@@ -152,7 +152,11 @@ export class ConfigOrchestrator {
         tone: config.github.username ? 'info' : 'warning',
       },
       { label: 'PAT', value: ui.maskSecret(config.github.pat), tone: config.github.pat ? 'info' : 'warning' },
-      { label: 'Artifact repo', value: config.github.targetRepoPath || 'Auto-managed private repository', tone: 'info' },
+      {
+        label: 'Artifact repo',
+        value: config.github.targetRepoPath || 'Auto-managed private repository',
+        tone: 'info',
+      },
     ]);
 
     ui.keyValues('Repository targeting', [

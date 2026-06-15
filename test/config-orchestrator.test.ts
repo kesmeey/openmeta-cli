@@ -133,9 +133,10 @@ describe('ConfigOrchestrator', () => {
     expect(heroSpy).toHaveBeenCalled();
     expect(statsSpy).toHaveBeenCalled();
     expect(cardSpy).toHaveBeenCalled();
-    expect(keyValuesSpy).toHaveBeenCalledWith('GitHub', expect.arrayContaining([
-      expect.objectContaining({ label: 'Artifact repo', value: '/tmp/private-artifacts' }),
-    ]));
+    expect(keyValuesSpy).toHaveBeenCalledWith(
+      'GitHub',
+      expect.arrayContaining([expect.objectContaining({ label: 'Artifact repo', value: '/tmp/private-artifacts' })]),
+    );
     expect(keyValuesSpy).toHaveBeenCalledWith('Repository targeting', [
       { label: 'Active preset', value: 'frontend', tone: 'success' },
       { label: 'Saved presets', value: '2', tone: 'info' },
