@@ -94,6 +94,20 @@ describe('InitOrchestrator LLM reasoning setup', () => {
         minMatchScore: 70,
         skipIfAlreadyGeneratedToday: true,
       },
+      scoring: {
+        weights: {
+          freshness: 0.25,
+          onboardingClarity: 0.25,
+          mergePotential: 0.3,
+          impact: 0.2,
+          riskPenalty: 0.35,
+        },
+        overallWeights: {
+          technicalMatch: 0.45,
+          opportunityScore: 0.55,
+        },
+        preset: 'balanced',
+      },
       commitTemplate: 'feat: {{title}}',
     });
     const saveSpy = spyOn(infra.configService, 'save').mockResolvedValue(undefined);
