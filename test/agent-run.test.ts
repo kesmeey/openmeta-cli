@@ -110,10 +110,6 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       pat: 'ghp_test_token',
       username: 'octocat',
     },
-    repositoryTargeting: {
-      activePreset: '',
-      presets: {},
-    },
     llm: {
       provider: 'custom',
       apiBaseUrl: 'https://example.com/v1',
@@ -139,7 +135,6 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     ...overrides,
     repositoryTargeting: {
       activePreset: '',
-      presets: {},
       ...overrides.repositoryTargeting,
       presets: {
         ...((overrides.repositoryTargeting?.presets as Record<string, { repos: string[] }> | undefined) ?? {}),
@@ -960,16 +955,10 @@ describe('AnalyzeOrchestrator run flow', () => {
       demoWorkspace,
       demoMemory,
     );
-    expect(analysisMarkdownSpy).toHaveBeenCalledWith(
-      'acme/demo',
-      demoWorkspace,
-      [demoSuggestion],
-      demoSuggestion,
-      [
-        { repoFullName: 'acme/demo', suggestions: [demoSuggestion] },
-        { repoFullName: 'acme/docs', suggestions: [docsSuggestion] },
-      ],
-    );
+    expect(analysisMarkdownSpy).toHaveBeenCalledWith('acme/demo', demoWorkspace, [demoSuggestion], demoSuggestion, [
+      { repoFullName: 'acme/demo', suggestions: [demoSuggestion] },
+      { repoFullName: 'acme/docs', suggestions: [docsSuggestion] },
+    ]);
     expect(writeArtifactsSpy).toHaveBeenCalledWith({
       artifacts,
       analysisMarkdown: '# Repository Analysis',

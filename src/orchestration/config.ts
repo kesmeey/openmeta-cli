@@ -8,7 +8,7 @@ import {
   SCORING_PRESETS,
   schedulerService,
 } from '../services/index.js';
-import type { AppConfig, OverallWeights, ScoringWeights } from '../types/index.js';
+import type { AppConfig, LLMProviderProfile, OverallWeights, ScoringWeights } from '../types/index.js';
 
 export class ConfigOrchestrator {
   async setMachineValue(
@@ -566,9 +566,7 @@ export class ConfigOrchestrator {
     });
   }
 
-  private redactProfileSecrets(
-    profiles: Record<string, { apiKey?: string; [key: string]: unknown }>,
-  ): Record<string, unknown> {
+  private redactProfileSecrets(profiles: Record<string, LLMProviderProfile>): Record<string, LLMProviderProfile> {
     return Object.fromEntries(
       Object.entries(profiles).map(([name, profile]) => [name, { ...profile, apiKey: '<REDACTED>' }]),
     );
@@ -576,13 +574,13 @@ export class ConfigOrchestrator {
 
   private restoreProfileSecrets(
     imported: Record<string, unknown>,
-    existing: Record<string, { apiKey?: string; [key: string]: unknown }>,
-  ): Record<string, unknown> {
+    existing: Record<string, LLMProviderProfile>,
+  ): Record<string, LLMProviderProfile> {
     return Object.fromEntries(
       Object.entries(imported).map(([name, profile]) => {
-        const p = profile as Record<string, unknown>;
+        const p = profile as LLMProviderProfile;
         const existingProfile = existing[name];
-        if (p['apiKey'] === '<REDACTED>' && existingProfile?.apiKey) {
+        if (p.apiKey === '<REDACTED>' && existingProfile?.apiKey) {
           return [name, { ...p, apiKey: existingProfile.apiKey }];
         }
         return [name, p];

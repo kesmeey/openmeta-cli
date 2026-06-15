@@ -75,6 +75,10 @@ function createConfig() {
       pat: 'ghp_test_token',
       username: 'octocat',
     },
+    repositoryTargeting: {
+      activePreset: '',
+      presets: {},
+    },
     llm: {
       provider: 'custom' as const,
       apiBaseUrl: 'https://example.com/v1',

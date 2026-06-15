@@ -164,6 +164,10 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       pat: 'ghp_test_token',
       username: 'octocat',
     },
+    repositoryTargeting: {
+      activePreset: '',
+      presets: {},
+    },
     llm: {
       provider: 'custom',
       apiBaseUrl: 'https://example.com/v1',
@@ -816,7 +820,7 @@ describe('AgentOrchestrator support behavior', () => {
     ).mockResolvedValue(undefined as never);
     spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([]);
 
-    await orchestrator.scout({ localOnly: true });
+    await orchestrator.scout({});
 
     expect(emptyStateSpy).toHaveBeenCalledWith(
       'OpenMeta Scout',
