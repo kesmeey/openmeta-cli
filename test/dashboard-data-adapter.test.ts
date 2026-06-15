@@ -185,4 +185,103 @@ describe('dashboard data adapter', () => {
     expect(data.archive[0]?.reuseLabel).toBe('context compounding');
     expect(data.archive[0]?.followThroughLabel).toBe('converted into PR');
   });
+
+  test('keeps artifact and proof derived issue numbers available to the dashboard surface', async () => {
+    const root = createTempRoot();
+    const configDir = join(root, '.config', 'openmeta');
+    const homeDir = join(root, '.openmeta');
+    const artifactDir = join(homeDir, 'artifacts', '2026-06-10', 'expo__expo__42885');
+
+    mkdirSync(configDir, { recursive: true });
+    mkdirSync(artifactDir, { recursive: true });
+
+    writeFileSync(
+      join(configDir, 'proof-of-work.json'),
+      JSON.stringify(
+        {
+          records: [
+            {
+              id: 'proof-42885',
+              repoFullName: 'expo/expo',
+              issueNumber: 42885,
+              issueTitle: 'Update deprecated ExoPlayer changelog URL to AndroidX Media',
+              overallScore: 83,
+              opportunityScore: 83,
+              artifactDir,
+              generatedAt: '2026-06-10T11:02:54.926Z',
+              published: false,
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    writeFileSync(join(configDir, 'runs.json'), JSON.stringify({ records: [] }, null, 2), 'utf-8');
+    writeFileSync(join(artifactDir, 'dossier.md'), '# Dossier', 'utf-8');
+    writeFileSync(join(artifactDir, 'patch-draft.md'), '# Patch', 'utf-8');
+    writeFileSync(join(artifactDir, 'pr-draft.md'), '# PR', 'utf-8');
+    writeFileSync(join(artifactDir, 'repo-memory.md'), '# Memory', 'utf-8');
+
+    process.env['OPENMETA_CONFIG_DIR'] = configDir;
+    process.env['OPENMETA_HOME'] = homeDir;
+
+    const { buildDashboardData } = await loadAdapter();
+    const data = buildDashboardData();
+
+    expect(data.attempts[0]?.repoFullName).toBe('expo/expo');
+    expect(data.attempts[0]?.issueNumber).toBe(42885);
+    expect(data.attempts[0]?.reference).toBe('expo/expo#42885');
+    expect(data.projects[0]?.representativeIssueNumber).toBe(42885);
+    expect(data.projects[0]?.representativeTitle).toBe('Update deprecated ExoPlayer changelog URL to AndroidX Media');
+    expect(data.projects[0]?.note).toContain('1 reopenable');
+  });
+
+  test('falls back to repo issue label when proof-backed attempts are missing a title', async () => {
+    const root = createTempRoot();
+    const configDir = join(root, '.config', 'openmeta');
+    const homeDir = join(root, '.openmeta');
+    const artifactDir = join(homeDir, 'artifacts', '2026-06-10', 'expo__expo__42885');
+
+    mkdirSync(configDir, { recursive: true });
+    mkdirSync(artifactDir, { recursive: true });
+
+    writeFileSync(
+      join(configDir, 'proof-of-work.json'),
+      JSON.stringify(
+        {
+          records: [
+            {
+              id: 'proof-42885',
+              repoFullName: 'expo/expo',
+              issueNumber: 42885,
+              overallScore: 83,
+              opportunityScore: 83,
+              artifactDir,
+              generatedAt: '2026-06-10T11:02:54.926Z',
+              published: false,
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+    writeFileSync(join(configDir, 'runs.json'), JSON.stringify({ records: [] }, null, 2), 'utf-8');
+    writeFileSync(join(artifactDir, 'dossier.md'), '# Dossier', 'utf-8');
+    writeFileSync(join(artifactDir, 'patch-draft.md'), '# Patch', 'utf-8');
+    writeFileSync(join(artifactDir, 'pr-draft.md'), '# PR', 'utf-8');
+    writeFileSync(join(artifactDir, 'repo-memory.md'), '# Memory', 'utf-8');
+
+    process.env['OPENMETA_CONFIG_DIR'] = configDir;
+    process.env['OPENMETA_HOME'] = homeDir;
+
+    const { buildDashboardData } = await loadAdapter();
+    const data = buildDashboardData();
+
+    expect(data.projects[0]?.representativeIssueNumber).toBe(42885);
+    expect(data.projects[0]?.representativeTitle).toBe('expo/expo#42885');
+  });
 });

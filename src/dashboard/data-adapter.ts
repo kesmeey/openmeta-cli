@@ -312,6 +312,7 @@ interface FocusItem {
 interface ProjectRow {
   repoFullName: string;
   decision: Decision;
+  representativeIssueNumber?: number;
   contributionCount: number;
   mergedCount: number;
   publishedCount: number;
@@ -1657,7 +1658,7 @@ function buildAttemptFromProof(
   memoryIssue: MemoryIssue | undefined,
 ): AttemptRecord {
   const title =
-    artifact?.title || memoryIssue?.title || record.issueTitle || `${record.repoFullName}#${record.issueNumber}`;
+    record.issueTitle || memoryIssue?.title || artifact?.title || `${record.repoFullName}#${record.issueNumber}`;
   const outcome = resolveAttemptOutcome({
     merged: record.merged === true,
     pullRequestUrl: record.pullRequestUrl,
@@ -1725,7 +1726,7 @@ function buildAttemptFromMemory(
     return null;
   }
 
-  const title = artifact?.title || issue.title || `${parsed.repoFullName}#${parsed.issueNumber}`;
+  const title = issue.title || artifact?.title || `${parsed.repoFullName}#${parsed.issueNumber}`;
   const outcome = resolveAttemptOutcome({
     merged: false,
     pullRequestUrl: issue.pullRequestUrl,
@@ -1785,7 +1786,7 @@ function buildAttemptFromMemory(
 function buildAttemptFromInbox(item: InboxItem, artifact: ArtifactSnapshot | null | undefined): AttemptRecord {
   const reference = parseRepoIssueReference(item.id);
   const issueNumber = reference?.issueNumber || Number(item.issueNumber || 0);
-  const title = artifact?.title || item.issueTitle || `${item.repoFullName}#${issueNumber}`;
+  const title = item.issueTitle || artifact?.title || `${item.repoFullName}#${issueNumber}`;
   const summary =
     artifact?.summary || item.summary || `${title} is staged in the contribution inbox and waiting for a deeper pass.`;
   const generatedAt = item.generatedAt || artifact?.generatedAt || new Date().toISOString();
@@ -2244,6 +2245,7 @@ function buildProjects(projectRows: ProjectStatsRow[]): ProjectRow[] {
   return projectRows.map((row) => ({
     repoFullName: row.repoFullName,
     decision: row.decision,
+    representativeIssueNumber: row.latest.issueNumber,
     contributionCount: row.contributionCount,
     mergedCount: row.mergedCount,
     publishedCount: row.publishedCount,
@@ -2260,7 +2262,7 @@ function buildProjects(projectRows: ProjectStatsRow[]): ProjectRow[] {
     lastMeaningfulLandingAt: row.lastMeaningfulLandingAt,
     lastOutcome: row.latest.outcome,
     lastActiveAt: formatDateOnly(row.latest.generatedAt),
-    representativeTitle: row.latest.title,
+    representativeTitle: row.latest.title || `${row.repoFullName}#${row.latest.issueNumber}`,
     score: row.signal.score,
     detailLink: row.latest.detailLink,
     reopenableAttemptCount: row.reopenableAttemptCount,
@@ -2495,6 +2497,7 @@ function buildDashboardData(): DashboardData {
   const normalizedAttempts: DashboardAttempt[] = attempts.map((item) => ({
     ...item,
     reference: item.reference || `${item.repoFullName}#${item.issueNumber}`,
+    issueNumber: item.issueNumber,
     decision: decisionByRepo.get(item.repoFullName) || 'watch',
     outcome: item.outcome || resolveAttemptOutcome(item),
     sourceLabel: item.sourceLabel || formatAttemptSourceLabel(item.source),

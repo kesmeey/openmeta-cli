@@ -2204,7 +2204,7 @@ tbody tr:last-child td {
         <td data-label="Project">
           <div class="project-cell">
             <div class="repo-title">${item.repoFullName}</div>
-            <div class="repo-sub">${item.representativeTitle}</div>
+            <div class="repo-sub">${item.representativeTitle || item.repoFullName}</div>
             <div class="repo-sub">${item.note}</div>
             <div class="repo-sub">${formatWorkType(item.dominantWorkType)} | ${(item.topAreas || []).join(", ") || "no area hints yet"}</div>
             <div class="repo-sub">${item.returnSessions ?? 0} return sessions | ${item.consecutiveActiveWindows ?? 0} consecutive windows | span ${item.activeWindowSpanDays ?? 0}d</div>
