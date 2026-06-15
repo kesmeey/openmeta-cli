@@ -110,10 +110,6 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       pat: 'ghp_test_token',
       username: 'octocat',
     },
-    repositoryTargeting: {
-      activePreset: '',
-      presets: {},
-    },
     llm: {
       provider: 'custom',
       apiBaseUrl: 'https://example.com/v1',
