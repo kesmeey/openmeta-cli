@@ -139,7 +139,6 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     ...overrides,
     repositoryTargeting: {
       activePreset: '',
-      presets: {},
       ...overrides.repositoryTargeting,
       presets: {
         ...((overrides.repositoryTargeting?.presets as Record<string, { repos: string[] }> | undefined) ?? {}),

@@ -7,7 +7,6 @@ import {
   getLocalDateStamp,
   getOpenMetaArtifactRoot,
   logger,
-  parseGitHubRepoFullName,
   selectPrompt,
   ui,
 } from '../infra/index.js';
@@ -431,29 +430,6 @@ export class AnalyzeOrchestrator {
     }
 
     return selected;
-  }
-
-  private selectTopSuggestion(suggestions: RepositoryImprovementSuggestion[]): RepositoryImprovementSuggestion {
-    const [selected] = [...suggestions].sort((left, right) => right.prPotentialScore - left.prPotentialScore);
-    if (!selected) {
-      throw new Error('No repository suggestions are available to select.');
-    }
-
-    return selected;
-  }
-
-  private async promptForSuggestion(
-    suggestions: RepositoryImprovementSuggestion[],
-  ): Promise<RepositoryImprovementSuggestion> {
-    return selectPrompt<RepositoryImprovementSuggestion>({
-      message: 'Select a repository suggestion to draft:',
-      pageSize: Math.min(10, suggestions.length),
-      choices: suggestions.slice(0, 5).map((suggestion) => ({
-        name: suggestion.title,
-        description: `score ${suggestion.prPotentialScore} | ${suggestion.summary.slice(0, 72)}`,
-        value: suggestion,
-      })),
-    });
   }
 
   private async promptForCandidate(candidates: PresetAnalyzeCandidate[]): Promise<PresetAnalyzeCandidate> {
