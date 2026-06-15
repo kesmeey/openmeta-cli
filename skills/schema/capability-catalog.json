@@ -44,7 +44,7 @@
     {
       "name": "openmeta machine scout",
       "requiredArgs": [],
-      "optionalArgs": ["--limit", "--refresh", "--repo", "--local"],
+      "optionalArgs": ["--limit", "--refresh", "--repo"],
       "outcome": "machine_scout_result",
       "purpose": "Return ranked contribution opportunities in a stable JSON shape.",
       "inspectFields": ["opportunities", "mode", "nextActions"]

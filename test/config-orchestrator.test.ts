@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { ConfigService, configService } from '../src/infra/config.js';
+import * as infra from '../src/infra/index.js';
 import { ConfigOrchestrator } from '../src/orchestration/config.js';
 import type { AppConfig } from '../src/types/index.js';
 
@@ -21,6 +22,7 @@ describe('ConfigOrchestrator', () => {
   });
 
   afterEach(() => {
+    mock.restore();
     clearSharedConfigCache();
     delete process.env['OPENMETA_CONFIG_DIR'];
     delete process.env['OPENMETA_HOME'];
@@ -93,5 +95,51 @@ describe('ConfigOrchestrator', () => {
     expect(result.appliedValue).toBe('***cret');
     expect(result.snapshot.llm.apiKey).toBe('***cret');
     expect(result.scheduler.status).toBe('unchanged');
+  });
+
+  test('renders repository preset summary and artifact repository terminology in config view', async () => {
+    const orchestrator = new ConfigOrchestrator();
+    const heroSpy = spyOn(infra.ui, 'hero').mockImplementation(() => {});
+    const keyValuesSpy = spyOn(infra.ui, 'keyValues').mockImplementation(() => {});
+    const statsSpy = spyOn(infra.ui, 'stats').mockImplementation(() => {});
+    const cardSpy = spyOn(infra.ui, 'card').mockImplementation(() => {});
+
+    await configService.save({
+      ...(await configService.get()),
+      github: {
+        pat: 'ghp_secret',
+        username: 'octocat',
+        targetRepoPath: '/tmp/private-artifacts',
+      },
+      repositoryTargeting: {
+        activePreset: 'frontend',
+        presets: {
+          frontend: {
+            repos: ['vercel/next.js', 'facebook/react'],
+          },
+          tools: {
+            repos: ['oven-sh/bun'],
+          },
+        },
+      },
+      llm: {
+        ...(await configService.get()).llm,
+        apiKey: 'sk-secret',
+      },
+    });
+
+    await orchestrator.view();
+
+    expect(heroSpy).toHaveBeenCalled();
+    expect(statsSpy).toHaveBeenCalled();
+    expect(cardSpy).toHaveBeenCalled();
+    expect(keyValuesSpy).toHaveBeenCalledWith('GitHub', expect.arrayContaining([
+      expect.objectContaining({ label: 'Artifact repo', value: '/tmp/private-artifacts' }),
+    ]));
+    expect(keyValuesSpy).toHaveBeenCalledWith('Repository targeting', [
+      { label: 'Active preset', value: 'frontend', tone: 'success' },
+      { label: 'Saved presets', value: '2', tone: 'info' },
+      { label: 'Active repos', value: 'vercel/next.js, facebook/react', tone: 'info' },
+    ]);
   });
 });

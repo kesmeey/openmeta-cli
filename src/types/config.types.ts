@@ -15,6 +15,15 @@ export interface GitHubConfig {
   targetRepoPath?: string;
 }
 
+export interface RepositoryPreset {
+  repos: string[];
+}
+
+export interface RepositoryTargetingConfig {
+  activePreset: string;
+  presets: Record<string, RepositoryPreset>;
+}
+
 export type LLMProvider = 'openai' | 'minimax' | 'moonshot' | 'zhipu' | 'gemini' | 'claude' | 'custom';
 export type LLMReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -80,6 +89,7 @@ export interface ScoringConfig {
 export interface AppConfig {
   userProfile: UserProfile;
   github: GitHubConfig;
+  repositoryTargeting: RepositoryTargetingConfig;
   llm: LLMConfig;
   automation: AutomationConfig;
   scoring: ScoringConfig;

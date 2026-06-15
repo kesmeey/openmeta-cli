@@ -38,7 +38,7 @@ function createIsolatedDir(): string {
 }
 
 function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
-  return {
+  const base: AppConfig = {
     userProfile: {
       techStack: [],
       proficiency: 'beginner',
@@ -48,6 +48,10 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       pat: 'ghp_test',
       username: 'nianjiu',
       targetRepoPath: '',
+    },
+    repositoryTargeting: {
+      activePreset: '',
+      presets: {},
     },
     llm: {
       provider: 'openai',
@@ -70,7 +74,31 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       preset: 'balanced',
     },
     commitTemplate: 'feat(daily): {{title}}\n\n{{content}}',
+  };
+
+  return {
+    ...base,
     ...overrides,
+    github: {
+      ...base.github,
+      ...overrides.github,
+    },
+    repositoryTargeting: {
+      ...base.repositoryTargeting,
+      ...overrides.repositoryTargeting,
+      presets: {
+        ...base.repositoryTargeting.presets,
+        ...overrides.repositoryTargeting?.presets,
+      },
+    },
+    llm: {
+      ...base.llm,
+      ...overrides.llm,
+    },
+    automation: {
+      ...base.automation,
+      ...overrides.automation,
+    },
   };
 }
 

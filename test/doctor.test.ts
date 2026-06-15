@@ -26,6 +26,10 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       apiKey: 'sk-test-key',
       modelName: 'gpt-4o-mini',
     },
+    repositoryTargeting: {
+      activePreset: '',
+      presets: {},
+    },
     automation: {
       enabled: false,
       scheduleTime: '09:00',
@@ -152,5 +156,33 @@ describe('DoctorOrchestrator', () => {
 
     expect(report.ready).toBe(false);
     expect(report.checks.find((check) => check.id === 'target-repo')?.status).toBe('fail');
+  });
+
+  test('warns when presets exist without an active preset and fails on invalid active preset references', async () => {
+    const doctor = new DoctorOrchestrator();
+
+    const warned = await doctor.inspect(createConfig({
+      repositoryTargeting: {
+        activePreset: '',
+        presets: {
+          frontend: {
+            repos: ['vercel/next.js'],
+          },
+        },
+      },
+    }));
+    expect(warned.checks.find((check) => check.id === 'repository-targeting')?.status).toBe('warn');
+
+    const failed = await doctor.inspect(createConfig({
+      repositoryTargeting: {
+        activePreset: 'missing',
+        presets: {
+          frontend: {
+            repos: ['vercel/next.js'],
+          },
+        },
+      },
+    }));
+    expect(failed.checks.find((check) => check.id === 'repository-targeting')?.status).toBe('fail');
   });
 });

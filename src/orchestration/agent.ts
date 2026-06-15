@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 import { type SimpleGit, simpleGit } from 'simple-git';
-import type { PatchDraft, PullRequestDraft } from '../contracts/index.js';
+import type { PatchDraft, PullRequestDraft, RepositoryImprovementSuggestion } from '../contracts/index.js';
 import {
   configService,
   ensureDirectory,
@@ -27,6 +27,7 @@ import {
   llmService,
   memoryService,
   proofOfWorkService,
+  repositoryTargetingService,
   workspaceService,
 } from '../services/index.js';
 import type {
@@ -34,6 +35,7 @@ import type {
   ContributionAgentResult,
   RankedIssue,
   RepoFileSnippet,
+  RepoMemory,
   RepoWorkspaceContext,
   TestResult,
 } from '../types/index.js';
@@ -47,6 +49,8 @@ export interface AgentRunOptions {
   localArtifactsOnly?: boolean;
   refresh?: boolean;
   repo?: string;
+  preset?: string;
+  allRepos?: boolean;
   repoPath?: string;
   issue?: string;
   dryRun?: boolean;
@@ -56,7 +60,8 @@ export interface ScoutRunOptions {
   limit?: number;
   refresh?: boolean;
   repo?: string;
-  localOnly?: boolean;
+  preset?: string;
+  allRepos?: boolean;
 }
 
 export interface MachineScoutResult {
@@ -65,7 +70,6 @@ export interface MachineScoutResult {
     limit: number;
     refresh: boolean;
     repo?: string;
-    localOnly: boolean;
   };
   emptyExplanation?: {
     title: string;
@@ -124,6 +128,13 @@ interface ConcretePatchResult {
   reviewRequired: boolean;
 }
 
+interface PresetAnalyzeCandidate {
+  repoFullName: string;
+  workspace: RepoWorkspaceContext;
+  memory: RepoMemory;
+  suggestion: RepositoryImprovementSuggestion;
+}
+
 type AgentStageId = 'scout' | 'select' | 'prepare' | 'draft' | 'validate' | 'pr' | 'publish';
 const ARTIFACT_PUBLISH_BRANCH = 'openmeta-artifacts';
 
@@ -170,7 +181,7 @@ export class AgentOrchestrator {
 
   private buildScoutEmptyExplanation(
     config: AppConfig,
-    options: { repoFullName?: string; localOnly: boolean; refresh: boolean },
+    options: { repoFullName?: string; refresh: boolean },
   ): { title: string; detail: string; suggestions: string[] } {
     const scopeLine = options.repoFullName
       ? `This run was limited to ${options.repoFullName}.`
@@ -184,11 +195,9 @@ export class AgentOrchestrator {
         options.repoFullName
           ? 'Try a different repository or remove the repo filter.'
           : 'Broaden your tech stack or focus areas in the saved profile.',
-        options.localOnly
-          ? 'Run scout without --local after the LLM provider is healthy to widen scoring coverage.'
-          : options.refresh
-            ? 'Try again later after new issues appear.'
-            : 'Rerun with --refresh to ignore the local issue cache.',
+        options.refresh
+          ? 'Try again later after new issues appear.'
+          : 'Rerun with --refresh to ignore the local issue cache.',
       ],
     };
   }
@@ -205,8 +214,14 @@ export class AgentOrchestrator {
     const dryRun = Boolean(options.dryRun);
     const repoPath = options.repoPath?.trim() || undefined;
     const issueTarget = options.issue ? resolveGitHubIssueTarget(options.issue, options.repo) : undefined;
-    const repoFullName =
-      issueTarget?.repoFullName ?? (options.repo ? parseGitHubRepoFullName(options.repo) : undefined);
+    const scope = issueTarget
+      ? undefined
+      : repositoryTargetingService.resolveScope(config, {
+          repo: options.repo,
+          preset: options.preset,
+          allRepos: options.allRepos,
+        });
+    const repoFullName = issueTarget?.repoFullName ?? scope?.repo;
 
     await this.validateConfig(config);
 
@@ -247,11 +262,16 @@ export class AgentOrchestrator {
             },
           },
           async (task) =>
-            issueRankingService.loadRankedIssues(config, {
-              refresh,
-              repoFullName,
-              onStatus: (message) => task.setMessage(message),
-            }),
+            scope?.mode === 'preset'
+              ? this.loadPresetRankedIssues(config, scope.repos, {
+                  refresh,
+                  onStatus: (message) => task.setMessage(message),
+                })
+              : issueRankingService.loadRankedIssues(config, {
+                  refresh,
+                  repoFullName,
+                  onStatus: (message) => task.setMessage(message),
+                }),
         );
 
     if (rankedIssues.length === 0) {
@@ -262,13 +282,260 @@ export class AgentOrchestrator {
       );
     }
 
+    const presetIssueFlowAllowed = !issueTarget &&
+      scope?.mode === 'preset' &&
+      (rankedIssues[0]?.opportunity.overallScore || 0) >= config.automation.minMatchScore;
+    const presetQualifiedIssue = presetIssueFlowAllowed
+      ? issueRankingService.selectIssueForAutomation(rankedIssues, config.automation.minMatchScore)
+      : undefined;
     const selectedIssue = issueTarget
       ? rankedIssues[0]
-      : headless
-        ? issueRankingService.selectIssueForAutomation(rankedIssues, config.automation.minMatchScore)
-        : await this.promptForIssue(issueRankingService.diversifyScoutIssues(rankedIssues, 5));
+      : scope?.mode === 'preset'
+        ? presetQualifiedIssue
+        : headless
+          ? issueRankingService.selectIssueForAutomation(rankedIssues, config.automation.minMatchScore)
+          : await this.promptForIssue(issueRankingService.diversifyScoutIssues(rankedIssues, 5));
 
     if (!selectedIssue) {
+      if (!issueTarget && scope?.mode === 'preset') {
+        const selectedCandidate = await this.selectPresetAnalysisCandidate(scope.repos, {
+          headless,
+          runChecks,
+        });
+        const syntheticIssue = this.buildSyntheticIssueFromSuggestion(
+          selectedCandidate.repoFullName,
+          selectedCandidate.suggestion,
+        );
+        const memory = selectedCandidate.memory;
+        const patchDraftResult = await ui.task(
+          {
+            title: 'Generating patch strategy',
+            doneMessage: 'Patch strategy generated',
+            failedMessage: 'Patch strategy generation failed',
+            tone: 'info',
+            step: { index: 5, total: totalSteps },
+            heartbeat: {
+              message: 'Still drafting patch strategy',
+            },
+          },
+          async () => llmService.generatePatchDraft(syntheticIssue, selectedCandidate.workspace, memory),
+        );
+        const patchDraft = patchDraftResult.data;
+        const implementationWorkspace = this.buildImplementationWorkspace(selectedCandidate.workspace, patchDraft);
+        const implementation =
+          patchDraftResult.status === 'success'
+            ? await this.generateConcretePatch(
+                syntheticIssue,
+                implementationWorkspace,
+                patchDraft,
+                runChecks,
+                draftOnly,
+              )
+            : {
+                changedFiles: [],
+                validationResults: implementationWorkspace.testResults,
+                reviewRequired: true,
+              };
+        const workspaceForArtifacts: RepoWorkspaceContext = {
+          ...implementationWorkspace,
+          testResults: implementation.validationResults,
+        };
+        const prDraftResult = await ui.task(
+          {
+            title: 'Generating PR narrative',
+            doneMessage: 'PR narrative generated',
+            failedMessage: 'PR narrative generation failed',
+            tone: 'info',
+            step: { index: 6, total: totalSteps },
+            heartbeat: {
+              message: 'Still drafting PR narrative',
+            },
+          },
+          async () => llmService.generatePrDraft(syntheticIssue, patchDraft, workspaceForArtifacts),
+        );
+        const prDraft = prDraftResult.data;
+        const patchDraftMarkdown = contentService.formatPatchDraftMarkdown(patchDraft);
+        const prDraftMarkdown = contentService.formatPullRequestDraftMarkdown(prDraft);
+        const contributionPullRequest = await ui.task(
+          {
+            title: 'Evaluating draft PR creation',
+            doneMessage: 'Draft PR evaluation complete',
+            failedMessage: 'Draft PR evaluation failed',
+            tone: 'info',
+            step: { index: 7, total: totalSteps },
+          },
+          async () =>
+            this.submitContributionPullRequestIfPossible({
+              config,
+              allowRealPr: patchDraftResult.status === 'success' && prDraftResult.status === 'success',
+              headless,
+              issue: syntheticIssue,
+              prDraft,
+              workspace: workspaceForArtifacts,
+              changedFiles: implementation.changedFiles,
+              validationResults: implementation.validationResults,
+            }),
+        );
+        const artifacts = this.prepareLocalArtifactPaths(syntheticIssue);
+        const reviewRequired =
+          patchDraftResult.status !== 'success' || implementation.reviewRequired || prDraftResult.status !== 'success';
+        const skipReasons = [
+          ...(draftOnly ? ['draft_only'] : []),
+          ...(localArtifactsOnly ? ['publish_skipped_local_artifacts_only'] : []),
+          ...(patchDraftResult.status !== 'success' ? ['patch_draft_requires_review'] : []),
+          ...(implementation.reviewRequired ? ['implementation_requires_review'] : []),
+          ...(prDraftResult.status !== 'success' ? ['pr_draft_requires_review'] : []),
+          ...(contributionPullRequest.url
+            ? []
+            : implementation.changedFiles.length > 0
+              ? ['pr_not_created']
+              : ['no_changes_applied']),
+        ];
+
+        if (!dryRun) {
+          const inboxItem = {
+            id: `${syntheticIssue.repoFullName}#${syntheticIssue.number}`,
+            repoFullName: syntheticIssue.repoFullName,
+            issueNumber: syntheticIssue.number,
+            issueTitle: syntheticIssue.title,
+            summary: syntheticIssue.opportunity.summary,
+            overallScore: syntheticIssue.opportunity.overallScore,
+            opportunityScore: syntheticIssue.opportunity.score,
+            status: 'ready' as const,
+            artifactDir: artifacts.artifactDir,
+            generatedAt: new Date().toISOString(),
+          };
+          const inboxItems = inboxService.saveItem(inboxItem);
+          const proofRecord = {
+            id: `${syntheticIssue.repoFullName}#${syntheticIssue.number}@${Date.now()}`,
+            repoFullName: syntheticIssue.repoFullName,
+            issueNumber: syntheticIssue.number,
+            issueTitle: syntheticIssue.title,
+            overallScore: syntheticIssue.opportunity.overallScore,
+            opportunityScore: syntheticIssue.opportunity.score,
+            branchName: workspaceForArtifacts.branchName,
+            artifactDir: artifacts.artifactDir,
+            generatedAt: new Date().toISOString(),
+            published: false,
+            pullRequestUrl: contributionPullRequest.url,
+            pullRequestNumber: contributionPullRequest.number,
+          };
+          const dossier = contentService.formatContributionDossier(
+            syntheticIssue,
+            workspaceForArtifacts,
+            memory,
+            patchDraft,
+            prDraft,
+          );
+          const proofMarkdown = proofOfWorkService.renderMarkdown(
+            [proofRecord, ...proofOfWorkService.load().records].slice(0, 100),
+          );
+
+          this.writeLocalArtifacts({
+            artifacts,
+            dossier,
+            patchDraftMarkdown,
+            prDraftMarkdown,
+            memoryMarkdown: memoryService.renderMarkdown(memory),
+            inboxMarkdown: inboxService.renderMarkdown(inboxItems),
+            proofMarkdown,
+          });
+
+          const publishResult = localArtifactsOnly
+            ? { published: false }
+            : await ui.task(
+                {
+                  title: dryRun ? 'Previewing artifact publication' : 'Publishing contribution artifacts',
+                  doneMessage: dryRun ? 'Artifact publication preview complete' : 'Contribution artifacts published',
+                  failedMessage: dryRun
+                    ? 'Artifact publication preview failed'
+                    : 'Contribution artifact publication failed',
+                  tone: 'info',
+                  step: { index: 8, total: totalSteps },
+                },
+                async () =>
+                  this.publishArtifactsIfNeeded({
+                    config,
+                    headless,
+                    dryRun: options.dryRun,
+                    issue: syntheticIssue,
+                    patchDraftMarkdown,
+                    prDraftMarkdown,
+                    dossier,
+                    memoryMarkdown: memoryService.renderMarkdown(memory),
+                    inboxMarkdown: inboxService.renderMarkdown(inboxItems),
+                    proofMarkdown,
+                    changedFiles: implementation.changedFiles,
+                    validationResults: implementation.validationResults,
+                    pullRequestUrl: contributionPullRequest.url,
+                  }),
+              );
+
+          const finalProofRecord = {
+            ...proofRecord,
+            published: publishResult.published,
+          };
+          const finalMemory = memoryService.recordOutcome({
+            issue: syntheticIssue,
+            workspace: workspaceForArtifacts,
+            changedFiles: implementation.changedFiles,
+            validationResults: implementation.validationResults,
+            published: publishResult.published,
+            pullRequestUrl: contributionPullRequest.url,
+            reviewRequired,
+          });
+          proofOfWorkService.record(finalProofRecord);
+          const finalProofMarkdown = proofOfWorkService.renderMarkdown(proofOfWorkService.load().records);
+          this.writeLocalArtifacts({
+            artifacts,
+            dossier,
+            patchDraftMarkdown,
+            prDraftMarkdown,
+            memoryMarkdown: memoryService.renderMarkdown(finalMemory),
+            inboxMarkdown: inboxService.renderMarkdown(inboxItems),
+            proofMarkdown: finalProofMarkdown,
+          });
+        }
+
+        return {
+          issue: syntheticIssue,
+          workspace: workspaceForArtifacts,
+          patchDraft,
+          prDraft,
+          artifacts,
+          changedFiles: implementation.changedFiles,
+          validationResults: implementation.validationResults,
+          reviewRequired,
+          published: false,
+          prCreated: Boolean(contributionPullRequest.url),
+          repoMutated: implementation.changedFiles.length > 0,
+          artifactsWritten: !dryRun,
+          executionOutcome: this.resolveMachineExecutionOutcome({
+            draftOnly,
+            localArtifactsOnly,
+            changedFiles: implementation.changedFiles,
+            prCreated: Boolean(contributionPullRequest.url),
+            reviewRequired,
+          }),
+          executionPolicy: {
+            headless,
+            draftOnly,
+            localArtifactsOnly,
+            runChecks,
+            dryRun,
+            refresh,
+          },
+          skipReasons: [...new Set(skipReasons)],
+          nextActions: dryRun
+            ? ['inspect_artifact_paths']
+            : contributionPullRequest.url
+              ? ['review_pull_request']
+              : ['inspect_artifact_paths'],
+          pullRequestUrl: contributionPullRequest.url,
+          pullRequestNumber: contributionPullRequest.number,
+        };
+      }
+
       throw new Error(
         issueTarget
           ? 'OpenMeta could not select the specified target issue after scoring.'
@@ -536,8 +803,14 @@ export class AgentOrchestrator {
     const refresh = Boolean(options.refresh);
     const repoPath = options.repoPath?.trim() || undefined;
     const issueTarget = options.issue ? resolveGitHubIssueTarget(options.issue, options.repo) : undefined;
-    const repoFullName =
-      issueTarget?.repoFullName ?? (options.repo ? parseGitHubRepoFullName(options.repo) : undefined);
+    const scope = issueTarget
+      ? undefined
+      : repositoryTargetingService.resolveScope(config, {
+          repo: options.repo,
+          preset: options.preset,
+          allRepos: options.allRepos,
+        });
+    const repoFullName = issueTarget?.repoFullName ?? scope?.repo;
     const completedStages = new Set<AgentStageId>();
 
     ui.hero({
@@ -565,7 +838,9 @@ export class AgentOrchestrator {
             : 'Issue discovery may reuse the short local search cache.',
         issueTarget
           ? 'Issue discovery and interactive selection are skipped for this run.'
-          : repoFullName
+          : scope?.mode === 'preset'
+            ? `Issue discovery is limited to preset ${scope.presetName} (${scope.repos.length} repositories).`
+            : repoFullName
             ? `Issue discovery is limited to ${repoFullName}.`
             : 'Issue discovery will scan the broader GitHub issue stream.',
         repoPath
@@ -603,11 +878,16 @@ export class AgentOrchestrator {
       async (task) =>
         issueTarget
           ? issueRankingService.loadTargetIssue(config, issueTarget)
-          : issueRankingService.loadRankedIssues(config, {
-              refresh,
-              repoFullName,
-              onStatus: (message) => task.setMessage(message),
-            }),
+          : scope?.mode === 'preset'
+            ? this.loadPresetRankedIssues(config, scope.repos, {
+                refresh,
+                onStatus: (message) => task.setMessage(message),
+              })
+            : issueRankingService.loadRankedIssues(config, {
+                refresh,
+                repoFullName,
+                onStatus: (message) => task.setMessage(message),
+              }),
     );
     if (rankedIssues.length === 0) {
       ui.emptyState(
@@ -632,13 +912,39 @@ export class AgentOrchestrator {
       const displayIssues = issueRankingService.diversifyScoutIssues(rankedIssues, 5);
       this.renderOpportunityList('Top ranked opportunities', displayIssues);
     }
+    const presetIssueFlowAllowed = !issueTarget &&
+      scope?.mode === 'preset' &&
+      (rankedIssues[0]?.opportunity.overallScore || 0) >= config.automation.minMatchScore;
+    const presetQualifiedIssue = presetIssueFlowAllowed
+      ? issueRankingService.selectIssueForAutomation(rankedIssues, config.automation.minMatchScore)
+      : undefined;
     const selectedIssue = issueTarget
       ? rankedIssues[0]
-      : headless
-        ? issueRankingService.selectIssueForAutomation(rankedIssues, config.automation.minMatchScore)
-        : await this.promptForIssue(issueRankingService.diversifyScoutIssues(rankedIssues, 5));
+      : scope?.mode === 'preset'
+        ? presetQualifiedIssue
+          ? headless
+            ? presetQualifiedIssue
+            : await this.promptForIssue(issueRankingService.diversifyScoutIssues(rankedIssues, 5))
+          : undefined
+        : headless
+          ? issueRankingService.selectIssueForAutomation(rankedIssues, config.automation.minMatchScore)
+          : await this.promptForIssue(issueRankingService.diversifyScoutIssues(rankedIssues, 5));
 
     if (!selectedIssue) {
+      if (!issueTarget && scope?.mode === 'preset') {
+        await this.runPresetAnalysisFallback({
+          config,
+          repos: scope.repos,
+          headless,
+          runChecks,
+          draftOnly,
+          refresh,
+          options,
+          completedStages,
+        });
+        return;
+      }
+
       ui.emptyState(
         'OpenMeta Agent',
         issueTarget ? 'Target issue could not be selected' : 'No issue met the automation threshold',
@@ -897,32 +1203,36 @@ export class AgentOrchestrator {
   async scout(options: ScoutRunOptions | number = {}): Promise<void> {
     const limit = typeof options === 'number' ? options : (options.limit ?? 10);
     const refresh = typeof options === 'number' ? false : Boolean(options.refresh);
-    const repoFullName =
+    const explicitRepo =
       typeof options === 'number' || !options.repo ? undefined : parseGitHubRepoFullName(options.repo);
-    const localOnly = typeof options === 'number' ? false : Boolean(options.localOnly);
     const config = await configService.get();
-    await this.validateConfig(config, { requireGithub: !localOnly, requireLlm: !localOnly });
-    if (!localOnly || repoFullName) {
-      await this.initializeClients(config, { validateGithub: true, validateLlm: !localOnly });
-    }
+    const scope =
+      typeof options === 'number'
+        ? repositoryTargetingService.resolveScope(config)
+        : repositoryTargetingService.resolveScope(config, {
+            repo: options.repo,
+            preset: options.preset,
+            allRepos: options.allRepos,
+          });
+    const repoFullName = explicitRepo ?? scope.repo;
+    await this.validateConfig(config);
+    await this.initializeClients(config, { validateGithub: true, validateLlm: true });
 
     ui.hero({
       label: 'OpenMeta Scout',
-      title: localOnly ? 'Read the field while the model stays offline' : 'Read the field before you spend your focus',
-      subtitle: localOnly
-        ? 'OpenMeta will use local profile heuristics to keep scouting useful even when the LLM provider is unavailable.'
-        : 'OpenMeta turns a noisy issue stream into a shortlist shaped by technical fit, timing, and real opening momentum.',
+      title: 'Read the field before you spend your focus',
+      subtitle: 'OpenMeta turns a noisy issue stream into a shortlist shaped by technical fit, timing, and real opening momentum.',
       lines: [
         `Saved threshold reference: ${config.automation.minMatchScore}/100.`,
         refresh
           ? 'This scout run will ignore the local GitHub issue cache.'
           : 'This scout run may reuse the short local GitHub issue cache.',
-        repoFullName
-          ? `Issue discovery is limited to ${repoFullName}.`
-          : 'Issue discovery will scan the broader GitHub issue stream.',
-        localOnly
-          ? 'LLM validation and model scoring are skipped for this run.'
-          : 'LLM scoring will refine the local candidate shortlist.',
+        scope.mode === 'preset'
+          ? `Issue discovery is limited to preset ${scope.presetName} (${scope.repos.length} repositories).`
+          : repoFullName
+            ? `Issue discovery is limited to ${repoFullName}.`
+            : 'Issue discovery will scan the broader GitHub issue stream.',
+        'LLM scoring will refine the local candidate shortlist.',
       ],
     });
 
@@ -933,16 +1243,23 @@ export class AgentOrchestrator {
         failedMessage: 'Contribution opportunity scoring failed',
         tone: 'info',
       },
-      async (task) =>
-        issueRankingService.loadRankedIssues(config, {
+      async (task) => {
+        if (scope.mode === 'preset') {
+          return this.loadPresetRankedIssues(config, scope.repos, {
+            refresh,
+            onStatus: (message) => task.setMessage(message),
+          });
+        }
+
+        return issueRankingService.loadRankedIssues(config, {
           refresh,
           repoFullName,
-          localOnly,
           onStatus: (message) => task.setMessage(message),
-        }),
+        });
+      },
     );
     if (rankedIssues.length === 0) {
-      const emptyExplanation = this.buildScoutEmptyExplanation(config, { repoFullName, localOnly, refresh });
+      const emptyExplanation = this.buildScoutEmptyExplanation(config, { repoFullName, refresh });
       ui.emptyState(
         'OpenMeta Scout',
         emptyExplanation.title,
@@ -964,21 +1281,23 @@ export class AgentOrchestrator {
     const totalSteps = 3;
     const limit = options.limit ?? 10;
     const refresh = Boolean(options.refresh);
-    const repoFullName = options.repo ? parseGitHubRepoFullName(options.repo) : undefined;
-    const localOnly = Boolean(options.localOnly);
     const config = await configService.get();
+    const scope = repositoryTargetingService.resolveScope(config, {
+      repo: options.repo,
+      preset: options.preset,
+      allRepos: options.allRepos,
+    });
+    const repoFullName = scope.mode === 'single' ? scope.repo : undefined;
 
-    await this.validateConfig(config, { requireGithub: !localOnly, requireLlm: !localOnly });
-    if (!localOnly || repoFullName) {
-      await this.initializeClients(config, {
-        validateGithub: true,
-        validateLlm: !localOnly,
-        taskSteps: {
-          github: { index: 1, total: totalSteps },
-          ...(localOnly ? {} : { llm: { index: 2, total: totalSteps } }),
-        },
-      });
-    }
+    await this.validateConfig(config);
+    await this.initializeClients(config, {
+      validateGithub: true,
+      validateLlm: true,
+      taskSteps: {
+        github: { index: 1, total: totalSteps },
+        llm: { index: 2, total: totalSteps },
+      },
+    });
 
     const rankedIssues = await ui.task(
       {
@@ -986,22 +1305,29 @@ export class AgentOrchestrator {
         doneMessage: 'Contribution opportunities scored',
         failedMessage: 'Contribution opportunity scoring failed',
         tone: 'info',
-        step: { index: localOnly ? 2 : 3, total: totalSteps },
+        step: { index: 3, total: totalSteps },
         heartbeat: {
           message: 'Still scoring contribution opportunities',
         },
       },
-      async (task) =>
-        issueRankingService.loadRankedIssues(config, {
+      async (task) => {
+        if (scope.mode === 'preset') {
+          return this.loadPresetRankedIssues(config, scope.repos, {
+            refresh,
+            onStatus: (message) => task.setMessage(message),
+          });
+        }
+
+        return issueRankingService.loadRankedIssues(config, {
           refresh,
           repoFullName,
-          localOnly,
           onStatus: (message) => task.setMessage(message),
-        }),
+        });
+      },
     );
     const emptyExplanation =
       rankedIssues.length === 0
-        ? this.buildScoutEmptyExplanation(config, { repoFullName, localOnly, refresh })
+        ? this.buildScoutEmptyExplanation(config, { repoFullName, refresh })
         : undefined;
 
     return {
@@ -1010,7 +1336,6 @@ export class AgentOrchestrator {
         limit,
         refresh,
         repo: repoFullName,
-        localOnly,
       },
       ...(emptyExplanation ? { emptyExplanation } : {}),
       nextActions: rankedIssues.length === 0 ? ['broaden_profile_filters'] : ['inspect_ranked_opportunities'],
@@ -1512,6 +1837,418 @@ export class AgentOrchestrator {
         tone: 'warning',
       });
     }
+  }
+
+  private async loadPresetRankedIssues(
+    config: AppConfig,
+    repos: string[],
+    options: {
+      refresh?: boolean;
+      onStatus?: (message: string) => void;
+    } = {},
+  ): Promise<RankedIssue[]> {
+    const issueMap = new Map<string, RankedIssue>();
+
+    for (const repoFullName of repos) {
+      options.onStatus?.(`Scouting ${repoFullName}`);
+      const issues = await issueRankingService.loadRankedIssues(config, {
+        refresh: options.refresh,
+        repoFullName,
+      });
+
+      for (const issue of issues) {
+        const key = `${issue.repoFullName}#${issue.number}`;
+        const existing = issueMap.get(key);
+        if (!existing || issue.opportunity.overallScore > existing.opportunity.overallScore) {
+          issueMap.set(key, issue);
+        }
+      }
+    }
+
+    return [...issueMap.values()].sort(
+      (left, right) =>
+        right.opportunity.overallScore - left.opportunity.overallScore ||
+        right.matchScore - left.matchScore ||
+        right.updatedAt.localeCompare(left.updatedAt),
+    );
+  }
+
+  private async runPresetAnalysisFallback(input: {
+    config: AppConfig;
+    repos: string[];
+    headless: boolean;
+    runChecks: boolean;
+    draftOnly: boolean;
+    refresh: boolean;
+    options: AgentRunOptions;
+    completedStages: Set<AgentStageId>;
+  }): Promise<void> {
+    ui.callout({
+      label: 'OpenMeta Agent',
+      title: 'Preset issue scout did not clear the automation threshold',
+      subtitle: 'OpenMeta will switch from issue-first scouting to repository analysis across the active preset.',
+      lines: [
+        `Repositories: ${input.repos.join(', ')}`,
+        `Threshold: ${input.config.automation.minMatchScore}/100`,
+      ],
+      tone: 'info',
+    });
+
+    const selectedCandidate = await this.selectPresetAnalysisCandidate(input.repos, {
+      headless: input.headless,
+      runChecks: input.runChecks,
+    });
+    const selectedIssue = this.buildSyntheticIssueFromSuggestion(
+      selectedCandidate.repoFullName,
+      selectedCandidate.suggestion,
+    );
+    const memory = selectedCandidate.memory;
+    const completedStages = input.completedStages;
+    completedStages.add('select');
+    this.showSelectedOpportunity(selectedIssue, input.headless);
+
+    this.renderAgentStage('prepare', completedStages, `Cloning and inspecting ${selectedIssue.repoFullName}.`);
+    completedStages.add('prepare');
+    this.showWorkspaceSummary(selectedCandidate.workspace, memory);
+
+    this.renderAgentStage('draft', completedStages, 'Drafting patch strategy and turning it into concrete file changes.');
+    const patchDraftResult = await ui.task(
+      {
+        title: 'Generating patch strategy',
+        doneMessage: 'Patch strategy generated',
+        failedMessage: 'Patch strategy generation failed',
+        tone: 'info',
+      },
+      async () => llmService.generatePatchDraft(selectedIssue, selectedCandidate.workspace, memory),
+    );
+    const patchDraft = patchDraftResult.data;
+    if (patchDraftResult.status !== 'success') {
+      this.showStructuredReviewNotice({
+        title: 'Patch strategy requires review',
+        subtitle:
+          'OpenMeta marked the generated patch plan as review-required, so this run will preserve artifacts but skip concrete code edits.',
+        lines: [`Goal: ${patchDraft.goal}`],
+      });
+    }
+    const implementationWorkspace = this.buildImplementationWorkspace(selectedCandidate.workspace, patchDraft);
+    const implementation =
+      patchDraftResult.status === 'success'
+        ? await this.generateConcretePatch(
+            selectedIssue,
+            implementationWorkspace,
+            patchDraft,
+            input.runChecks,
+            input.draftOnly,
+          )
+        : {
+            changedFiles: [],
+            validationResults: implementationWorkspace.testResults,
+            reviewRequired: true,
+          };
+    completedStages.add('draft');
+    const workspaceForArtifacts: RepoWorkspaceContext = {
+      ...implementationWorkspace,
+      testResults: implementation.validationResults,
+    };
+
+    this.renderAgentStage('validate', completedStages, 'Reviewing validation outcomes before opening or publishing anything.');
+    this.showValidationSummary(workspaceForArtifacts, implementation.changedFiles);
+    completedStages.add('validate');
+
+    this.renderAgentStage('pr', completedStages, 'Drafting PR narrative and deciding whether to open a real draft PR.');
+    const prDraftResult = await ui.task(
+      {
+        title: 'Generating PR narrative',
+        doneMessage: 'PR narrative generated',
+        failedMessage: 'PR narrative generation failed',
+        tone: 'info',
+      },
+      async () => llmService.generatePrDraft(selectedIssue, patchDraft, workspaceForArtifacts),
+    );
+    const prDraft = prDraftResult.data;
+    if (prDraftResult.status !== 'success') {
+      this.showStructuredReviewNotice({
+        title: 'PR narrative requires review',
+        subtitle:
+          'OpenMeta marked the generated PR draft as review-required, so this run will stay in draft-only mode and skip opening a real PR.',
+        lines: [`Title: ${prDraft.title}`],
+      });
+    }
+    const patchDraftMarkdown = contentService.formatPatchDraftMarkdown(patchDraft);
+    const prDraftMarkdown = contentService.formatPullRequestDraftMarkdown(prDraft);
+
+    const contributionPullRequest = await this.submitContributionPullRequestIfPossible({
+      config: input.config,
+      allowRealPr: patchDraftResult.status === 'success' && prDraftResult.status === 'success',
+      headless: input.headless,
+      issue: selectedIssue,
+      prDraft,
+      workspace: workspaceForArtifacts,
+      changedFiles: implementation.changedFiles,
+      validationResults: implementation.validationResults,
+    });
+    completedStages.add('pr');
+
+    const artifacts = this.prepareLocalArtifactPaths(selectedIssue);
+
+    const inboxItem = {
+      id: `${selectedIssue.repoFullName}#${selectedIssue.number}`,
+      repoFullName: selectedIssue.repoFullName,
+      issueNumber: selectedIssue.number,
+      issueTitle: selectedIssue.title,
+      summary: selectedIssue.opportunity.summary,
+      overallScore: selectedIssue.opportunity.overallScore,
+      opportunityScore: selectedIssue.opportunity.score,
+      status: 'ready' as const,
+      artifactDir: artifacts.artifactDir,
+      generatedAt: new Date().toISOString(),
+    };
+    const inboxItems = inboxService.saveItem(inboxItem);
+
+    const proofRecord = {
+      id: `${selectedIssue.repoFullName}#${selectedIssue.number}@${Date.now()}`,
+      repoFullName: selectedIssue.repoFullName,
+      issueNumber: selectedIssue.number,
+      issueTitle: selectedIssue.title,
+      overallScore: selectedIssue.opportunity.overallScore,
+      opportunityScore: selectedIssue.opportunity.score,
+      branchName: workspaceForArtifacts.branchName,
+      artifactDir: artifacts.artifactDir,
+      generatedAt: new Date().toISOString(),
+      published: false,
+      pullRequestUrl: contributionPullRequest.url,
+      pullRequestNumber: contributionPullRequest.number,
+    };
+
+    const dossier = contentService.formatContributionDossier(selectedIssue, workspaceForArtifacts, memory, patchDraft, prDraft);
+    const proofMarkdown = proofOfWorkService.renderMarkdown([
+      proofRecord,
+      ...proofOfWorkService.load().records,
+    ].slice(0, 100));
+
+    this.renderAgentStage('publish', completedStages, 'Saving dossier assets, updating long-term memory, and deciding whether to publish them.');
+    this.showArtifactPreview({
+      issue: selectedIssue,
+      artifactRelativeDir: join('contributions', getLocalDateStamp(), `${selectedIssue.repoFullName.replace(/\//g, '__')}__${selectedIssue.number}`),
+      draftTitle: prDraft.title,
+      changedFiles: implementation.changedFiles,
+      validationResults: implementation.validationResults,
+      pullRequestUrl: contributionPullRequest.url,
+    });
+
+    await ui.task(
+      {
+        title: 'Writing local artifacts',
+        doneMessage: 'Local artifacts written',
+        failedMessage: 'Local artifact write failed',
+        tone: 'info',
+      },
+      async () => {
+        this.writeLocalArtifacts({
+          artifacts,
+          dossier,
+          patchDraftMarkdown,
+          prDraftMarkdown,
+          memoryMarkdown: memoryService.renderMarkdown(memory),
+          inboxMarkdown: inboxService.renderMarkdown(inboxItems),
+          proofMarkdown,
+        });
+      },
+    );
+
+    const publishResult = Boolean(input.options.localArtifactsOnly)
+      ? { published: false }
+      : await this.publishArtifactsIfNeeded({
+          config: input.config,
+          headless: input.headless,
+          dryRun: input.options.dryRun,
+          issue: selectedIssue,
+          patchDraftMarkdown,
+          prDraftMarkdown,
+          dossier,
+          memoryMarkdown: memoryService.renderMarkdown(memory),
+          inboxMarkdown: inboxService.renderMarkdown(inboxItems),
+          proofMarkdown,
+          changedFiles: implementation.changedFiles,
+          validationResults: implementation.validationResults,
+          pullRequestUrl: contributionPullRequest.url,
+        });
+
+    const reviewRequired =
+      patchDraftResult.status !== 'success' || implementation.reviewRequired || prDraftResult.status !== 'success';
+    const finalProofRecord = {
+      ...proofRecord,
+      published: publishResult.published,
+    };
+    const finalMemory = memoryService.recordOutcome({
+      issue: selectedIssue,
+      workspace: workspaceForArtifacts,
+      changedFiles: implementation.changedFiles,
+      validationResults: implementation.validationResults,
+      published: publishResult.published,
+      pullRequestUrl: contributionPullRequest.url,
+      reviewRequired,
+    });
+    proofOfWorkService.record(finalProofRecord);
+    const finalProofMarkdown = proofOfWorkService.renderMarkdown(proofOfWorkService.load().records);
+    this.writeLocalArtifacts({
+      artifacts,
+      dossier,
+      patchDraftMarkdown,
+      prDraftMarkdown,
+      memoryMarkdown: memoryService.renderMarkdown(finalMemory),
+      inboxMarkdown: inboxService.renderMarkdown(inboxItems),
+      proofMarkdown: finalProofMarkdown,
+    });
+    completedStages.add('publish');
+
+    this.showResult({
+      issue: selectedIssue,
+      workspace: workspaceForArtifacts,
+      memory: finalMemory,
+      patchDraft,
+      prDraft,
+      dossier,
+      artifacts,
+      inboxItem,
+      proofRecord: finalProofRecord,
+      changedFiles: implementation.changedFiles,
+      pullRequestUrl: contributionPullRequest.url,
+    });
+  }
+
+  private async selectPresetAnalysisCandidate(
+    repos: string[],
+    options: {
+      headless: boolean;
+      runChecks: boolean;
+    },
+  ): Promise<PresetAnalyzeCandidate> {
+    const candidates: PresetAnalyzeCandidate[] = [];
+
+    for (const repoFullName of repos) {
+      const memory = memoryService.load(repoFullName);
+      const workspace = await ui.task(
+        {
+          title: `Preparing repository workspace for ${repoFullName}`,
+          doneMessage: 'Repository workspace prepared',
+          failedMessage: 'Repository workspace preparation failed',
+          tone: 'info',
+        },
+        async () =>
+          workspaceService.prepareRepositoryWorkspace(
+            repoFullName,
+            memory,
+            options.runChecks,
+            options.headless ? 'headless' : 'interactive',
+          ),
+      );
+
+      const suggestionsResult = await ui.task(
+        {
+          title: `Analyzing repository contribution paths for ${repoFullName}`,
+          doneMessage: 'Repository suggestions generated',
+          failedMessage: 'Repository analysis failed',
+          tone: 'info',
+        },
+        async () => llmService.analyzeRepository(repoFullName, workspace, memory),
+      );
+
+      candidates.push(
+        ...suggestionsResult.data.map((suggestion) => ({
+          repoFullName,
+          workspace,
+          memory,
+          suggestion,
+        })),
+      );
+    }
+
+    if (candidates.length === 0) {
+      throw new Error('No repository suggestions were generated from the active preset.');
+    }
+
+    ui.recordList(
+      'Preset repository analysis candidates',
+      candidates.slice(0, 5).map((candidate) => ({
+        title: `${candidate.repoFullName} - ${candidate.suggestion.title}`,
+        subtitle: candidate.suggestion.summary,
+        meta: [
+          `score ${candidate.suggestion.prPotentialScore}`,
+          `workload ${candidate.suggestion.estimatedWorkload}`,
+        ],
+        lines: [`Files: ${candidate.suggestion.targetFiles.map((file) => file.path).join(', ')}`],
+        tone: candidate.suggestion.prPotentialScore >= 80 ? 'success' : 'info',
+      })),
+    );
+
+    return this.selectTopPresetAnalysisCandidate(candidates);
+  }
+
+  private selectTopPresetAnalysisCandidate(candidates: PresetAnalyzeCandidate[]): PresetAnalyzeCandidate {
+    const [selected] = [...candidates].sort(
+      (left, right) => right.suggestion.prPotentialScore - left.suggestion.prPotentialScore,
+    );
+    if (!selected) {
+      throw new Error('No repository suggestions are available to select.');
+    }
+
+    return selected;
+  }
+
+  private buildSyntheticIssueFromSuggestion(
+    repoFullName: string,
+    suggestion: RepositoryImprovementSuggestion,
+  ): RankedIssue {
+    const now = new Date().toISOString();
+    const repoName = repoFullName.split('/').at(-1) || repoFullName;
+
+    return {
+      id: 0,
+      number: 0,
+      title: suggestion.title,
+      body: [
+        suggestion.summary,
+        '',
+        suggestion.rationale,
+        '',
+        'Target files:',
+        ...suggestion.targetFiles.map((file) => `- ${file.path}: ${file.reason}`),
+        '',
+        'Proposed changes:',
+        ...suggestion.proposedChanges.map((change) => `- ${change}`),
+        '',
+        'Validation plan:',
+        ...suggestion.validationPlan.map((step) => `- ${step}`),
+      ].join('\n'),
+      htmlUrl: `https://github.com/${repoFullName}`,
+      repoName,
+      repoFullName,
+      repoDescription: 'Repository analysis suggestion generated by OpenMeta.',
+      repoStars: 0,
+      labels: ['openmeta-analysis'],
+      createdAt: now,
+      updatedAt: now,
+      matchScore: suggestion.prPotentialScore,
+      analysis: {
+        coreDemand: suggestion.summary,
+        techRequirements: suggestion.targetFiles.map((file) => file.path),
+        solutionSuggestion: suggestion.proposedChanges.join(' '),
+        estimatedWorkload: suggestion.estimatedWorkload,
+      },
+      opportunity: {
+        score: suggestion.prPotentialScore,
+        overallScore: suggestion.prPotentialScore,
+        summary: suggestion.rationale,
+        breakdown: {
+          technicalFit: suggestion.prPotentialScore,
+          freshness: 70,
+          onboardingClarity: 70,
+          mergePotential: suggestion.prPotentialScore,
+          impact: suggestion.prPotentialScore,
+        },
+      },
+    };
   }
 
   private prepareLocalArtifactPaths(issue: RankedIssue) {

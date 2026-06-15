@@ -3,6 +3,7 @@ import {
   getPreset,
   normalizeOverallWeights,
   normalizeWeights,
+  repositoryTargetingService,
   SCORING_PRESETS,
   schedulerService,
 } from '../services/index.js';
@@ -43,6 +44,7 @@ export class ConfigOrchestrator {
   async getMachineSnapshot(): Promise<{
     userProfile: AppConfig['userProfile'];
     github: { username: string; pat: string; targetRepoPath?: string };
+    repositoryTargeting: AppConfig['repositoryTargeting'];
     llm: {
       provider: AppConfig['llm']['provider'];
       apiBaseUrl: string;
@@ -67,6 +69,7 @@ export class ConfigOrchestrator {
         pat: ui.maskSecret(config.github.pat),
         targetRepoPath: config.github.targetRepoPath,
       },
+      repositoryTargeting: config.repositoryTargeting,
       llm: {
         provider: config.llm.provider,
         apiBaseUrl: config.llm.apiBaseUrl,
@@ -149,7 +152,25 @@ export class ConfigOrchestrator {
         tone: config.github.username ? 'info' : 'warning',
       },
       { label: 'PAT', value: ui.maskSecret(config.github.pat), tone: config.github.pat ? 'info' : 'warning' },
-      { label: 'Target repo', value: config.github.targetRepoPath || 'Auto-managed private repository', tone: 'info' },
+      { label: 'Artifact repo', value: config.github.targetRepoPath || 'Auto-managed private repository', tone: 'info' },
+    ]);
+
+    ui.keyValues('Repository targeting', [
+      {
+        label: 'Active preset',
+        value: config.repositoryTargeting.activePreset || '(none)',
+        tone: config.repositoryTargeting.activePreset ? 'success' : 'muted',
+      },
+      {
+        label: 'Saved presets',
+        value: String(Object.keys(config.repositoryTargeting.presets || {}).length),
+        tone: Object.keys(config.repositoryTargeting.presets || {}).length > 0 ? 'info' : 'muted',
+      },
+      {
+        label: 'Active repos',
+        value: repositoryTargetingService.getActiveRepos(config).join(', ') || '(none)',
+        tone: repositoryTargetingService.getActiveRepos(config).length > 0 ? 'info' : 'muted',
+      },
     ]);
 
     ui.keyValues('LLM', [

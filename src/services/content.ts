@@ -136,6 +136,10 @@ export class ContentService {
     workspace: RepoWorkspaceContext,
     suggestions: RepositoryImprovementSuggestion[],
     selectedSuggestion?: RepositoryImprovementSuggestion,
+    groups?: Array<{
+      repoFullName: string;
+      suggestions: RepositoryImprovementSuggestion[];
+    }>,
   ): string {
     const lines = [
       `# Repository Analysis - ${repoFullName}`,
@@ -159,6 +163,39 @@ export class ContentService {
 
     if (selectedSuggestion) {
       lines.push('## Selected Suggestion', '', ...this.formatRepositorySuggestionMarkdown(selectedSuggestion), '');
+    }
+
+    if (groups && groups.length > 0) {
+      lines.push(
+        '## Repository Groups',
+        '',
+        ...groups.flatMap((group) => {
+          const groupLines = [
+            `### ${group.repoFullName}`,
+            '',
+          ];
+
+          if (selectedSuggestion && group.repoFullName === repoFullName) {
+            groupLines.push('Selected across all preset repositories', '');
+          }
+
+          if (group.suggestions.length === 0) {
+            groupLines.push('- No repository suggestions were generated.', '');
+            return groupLines;
+          }
+
+          groupLines.push(...group.suggestions.flatMap((suggestion) => ([
+            `#### ${suggestion.title}`,
+            '',
+            `ID: ${suggestion.id}`,
+            `PR Potential: ${suggestion.prPotentialScore}/100`,
+            `Target Files: ${suggestion.targetFiles.map((file) => file.path).join(', ') || 'n/a'}`,
+            '',
+          ])));
+
+          return groupLines;
+        }),
+      );
     }
 
     lines.push(

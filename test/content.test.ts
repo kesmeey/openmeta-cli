@@ -97,6 +97,60 @@ describe('contentService', () => {
     expect(markdown).toContain('### Document local install');
   });
 
+  test('formats grouped repository analysis markdown for preset-scoped multi-repo suggestions', () => {
+    const markdown = contentService.formatRepositoryAnalysisMarkdown(
+      'acme/demo',
+      createWorkspace({
+        workspacePath: '/tmp/openmeta-demo',
+        defaultBranch: 'main',
+        candidateFiles: ['README.md', 'src/config.ts'],
+      }),
+      [
+        createRepositorySuggestion({
+          id: 'demo-high',
+          title: 'Add runtime config guard',
+          prPotentialScore: 96,
+          targetFiles: [{ path: 'src/config.ts', reason: 'Guard invalid config' }],
+        }),
+      ],
+      createRepositorySuggestion({
+        id: 'demo-high',
+        title: 'Add runtime config guard',
+        prPotentialScore: 96,
+        targetFiles: [{ path: 'src/config.ts', reason: 'Guard invalid config' }],
+      }),
+      [
+        {
+          repoFullName: 'acme/demo',
+          suggestions: [
+            createRepositorySuggestion({
+              id: 'demo-high',
+              title: 'Add runtime config guard',
+              prPotentialScore: 96,
+              targetFiles: [{ path: 'src/config.ts', reason: 'Guard invalid config' }],
+            }),
+          ],
+        },
+        {
+          repoFullName: 'acme/docs',
+          suggestions: [
+            createRepositorySuggestion({
+              id: 'docs-setup',
+              title: 'Clarify setup docs',
+              prPotentialScore: 78,
+              targetFiles: [{ path: 'docs/setup.md', reason: 'Onboarding docs' }],
+            }),
+          ],
+        },
+      ],
+    );
+
+    expect(markdown).toContain('## Repository Groups');
+    expect(markdown).toContain('### acme/demo');
+    expect(markdown).toContain('### acme/docs');
+    expect(markdown).toContain('Selected across all preset repositories');
+  });
+
   test('formats inbox and proof-of-work markdown summaries', () => {
     const inboxMarkdown = contentService.formatInboxMarkdown([createInboxItem()]);
     const proofMarkdown = contentService.formatProofOfWorkMarkdown([createProofRecord()]);

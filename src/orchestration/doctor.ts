@@ -9,7 +9,12 @@ import {
   getOpenMetaWorkspaceRoot,
   ui,
 } from '../infra/index.js';
-import { type BinaryResolution, inspectBinaryOnPath, schedulerService } from '../services/index.js';
+import {
+  type BinaryResolution,
+  inspectBinaryOnPath,
+  repositoryTargetingService,
+  schedulerService,
+} from '../services/index.js';
 import type { AppConfig } from '../types/index.js';
 
 export type DoctorCheckStatus = 'pass' | 'warn' | 'fail';
@@ -114,6 +119,7 @@ export class DoctorOrchestrator {
       this.checkLlmConfig(resolvedConfig),
       this.checkProfileConfig(resolvedConfig),
       await this.checkTargetRepository(resolvedConfig),
+      this.checkRepositoryTargeting(resolvedConfig),
       this.checkSchedulerConfig(resolvedConfig),
     ];
     const totals = this.countStatuses(checks);
@@ -414,6 +420,19 @@ export class DoctorOrchestrator {
         remediation: 'Check the repository path and git permissions.',
       };
     }
+  }
+
+  private checkRepositoryTargeting(config: AppConfig): DoctorCheck {
+    const result = repositoryTargetingService.validateConfig(config);
+
+    return {
+      id: 'repository-targeting',
+      label: 'Repository targeting',
+      status: result.status,
+      summary: result.summary,
+      detail: result.detail,
+      remediation: result.remediation,
+    };
   }
 
   private checkSchedulerConfig(config: AppConfig): DoctorCheck {

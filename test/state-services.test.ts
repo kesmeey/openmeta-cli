@@ -54,6 +54,8 @@ describe('stateful services', () => {
 
     expect(loaded.github.pat).toBe('ghp_test_token');
     expect(loaded.llm.apiKey).toBe('sk-test-key');
+    expect(loaded.repositoryTargeting.activePreset).toBe('');
+    expect(loaded.repositoryTargeting.presets).toEqual({});
   });
 
   test('config service resets to defaults and keeps a backup of the previous file', async () => {
@@ -98,6 +100,8 @@ describe('stateful services', () => {
     expect(loaded.llm.modelName).toBe('gpt-4o-mini');
     expect(loaded.automation.enabled).toBe(false);
     expect(loaded.automation.scheduleTime).toBe('09:00');
+    expect(loaded.repositoryTargeting.activePreset).toBe('');
+    expect(loaded.repositoryTargeting.presets).toEqual({});
   });
 
   test('memory service persists repo memory snapshots', () => {
@@ -230,7 +234,7 @@ describe('stateful services', () => {
   test('run history service records command lifecycle and error details', () => {
     const run = runHistoryService.start({
       commandName: 'OpenMeta Scout',
-      args: ['scout', '--local'],
+      args: ['scout', '--refresh'],
     });
     const finished = runHistoryService.finish(run.id, 'failed', 'LLM validation failed');
     const state = runHistoryService.load();
@@ -239,7 +243,7 @@ describe('stateful services', () => {
     expect(finished?.durationMs).toBeGreaterThanOrEqual(0);
     expect(finished?.error).toBe('LLM validation failed');
     expect(state.records[0]?.id).toBe(run.id);
-    expect(runHistoryService.find(run.id)?.args).toEqual(['scout', '--local']);
+    expect(runHistoryService.find(run.id)?.args).toEqual(['scout', '--refresh']);
   });
 
   test('run history service returns undefined for unknown runs', () => {

@@ -8,6 +8,7 @@ import {
   ui,
 } from '../infra/index.js';
 import {
+  repositoryTargetingService,
   findLLMProviderPreset,
   githubService,
   LLM_PROVIDER_PRESETS,
@@ -49,7 +50,7 @@ const FOCUS_AREA_CHOICES = [
   { name: 'Open Source', value: 'open-source' },
 ];
 
-type SetupStepId = 'github' | 'llm' | 'profile' | 'targetRepo' | 'automation';
+type SetupStepId = 'github' | 'llm' | 'profile' | 'repositoryPresets' | 'targetRepo' | 'automation';
 
 const SETUP_STEPS: Array<{ id: SetupStepId; label: string }> = [
   {
@@ -65,8 +66,12 @@ const SETUP_STEPS: Array<{ id: SetupStepId; label: string }> = [
     label: 'Matching profile',
   },
   {
+    id: 'repositoryPresets',
+    label: 'Repository presets',
+  },
+  {
     id: 'targetRepo',
-    label: 'Target repository',
+    label: 'Artifact repository',
   },
   {
     id: 'automation',
@@ -93,6 +98,7 @@ export class InitOrchestrator {
 
     type ConfigPatch = {
       github?: Partial<AppConfig['github']>;
+      repositoryTargeting?: Partial<AppConfig['repositoryTargeting']>;
       llm?: Partial<AppConfig['llm']>;
       userProfile?: Partial<AppConfig['userProfile']>;
       automation?: Partial<AppConfig['automation']>;
@@ -102,6 +108,7 @@ export class InitOrchestrator {
       workingConfig = {
         ...workingConfig,
         github: { ...workingConfig.github, ...patch.github },
+        repositoryTargeting: { ...workingConfig.repositoryTargeting, ...patch.repositoryTargeting },
         llm: { ...workingConfig.llm, ...patch.llm },
         userProfile: { ...workingConfig.userProfile, ...patch.userProfile },
         automation: { ...workingConfig.automation, ...patch.automation },
@@ -397,19 +404,146 @@ export class InitOrchestrator {
       },
     );
 
-    // ── Step 4: Target repo ───────────────────────────────────────────────────
+    // ── Step 4: Repository presets ────────────────────────────────────────────
+
+    let repositoryTargeting = config.repositoryTargeting;
+
+    await stepOrSkip(
+      'repositoryPresets',
+      Object.keys(repositoryTargeting.presets || {}).length > 0 &&
+        Boolean(repositoryTargeting.activePreset) &&
+        Boolean(repositoryTargeting.presets?.[repositoryTargeting.activePreset]),
+      'Repository presets are already configured.',
+      () => {
+        ui.keyValues('Repository presets', [
+          { label: 'Active preset', value: repositoryTargeting.activePreset, tone: 'success' },
+          { label: 'Saved presets', value: String(Object.keys(repositoryTargeting.presets || {}).length), tone: 'info' },
+          {
+            label: 'Active repos',
+            value: repositoryTargetingService.getActiveRepos({ ...workingConfig, repositoryTargeting }).join(', '),
+            tone: 'info',
+          },
+        ]);
+      },
+      'Save a reusable repository target set so later scout, analyze, and agent runs can start from known contribution terrain.',
+      async () => {
+        const { createPreset } = await prompt<{ createPreset: boolean }>([
+          {
+            type: 'confirm',
+            name: 'createPreset',
+            message: 'Create a reusable repository preset now?',
+            default: true,
+          },
+        ]);
+
+        if (!createPreset) {
+          completedSteps.add('repositoryPresets');
+          ui.keyValues('Repository presets', [
+            { label: 'Active preset', value: '(none)', tone: 'muted' },
+            { label: 'Saved presets', value: '0', tone: 'muted' },
+            { label: 'Active repos', value: '(none)', tone: 'muted' },
+          ]);
+          return true;
+        }
+
+        const { presetName } = await prompt<{ presetName: string }>([
+          {
+            type: 'input',
+            name: 'presetName',
+            message: 'Preset name:',
+            default: 'default',
+            filter: (input: string) => input.trim(),
+            validate: (input: string) => {
+              try {
+                repositoryTargetingService.normalizePresetName(input);
+                return true;
+              } catch (error) {
+                return error instanceof Error ? error.message : 'Invalid preset name.';
+              }
+            },
+          },
+        ]);
+
+        const { presetRepos } = await prompt<{ presetRepos: string }>([
+          {
+            type: 'input',
+            name: 'presetRepos',
+            message: 'Repositories (comma-separated owner/name or GitHub URLs):',
+            filter: (input: string) => input.trim(),
+            validate: (input: string) => {
+              try {
+                repositoryTargetingService.normalizeRepos(
+                  input
+                    .split(',')
+                    .map((item) => item.trim())
+                    .filter(Boolean),
+                );
+                return true;
+              } catch (error) {
+                return error instanceof Error ? error.message : 'Invalid repository list.';
+              }
+            },
+          },
+        ]);
+
+        const { activatePreset } = await prompt<{ activatePreset: boolean }>([
+          {
+            type: 'confirm',
+            name: 'activatePreset',
+            message: 'Use this repository preset as the default target set?',
+            default: true,
+          },
+        ]);
+
+        const normalizedName = repositoryTargetingService.normalizePresetName(presetName);
+        const repos = repositoryTargetingService.normalizeRepos(
+          presetRepos
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+        );
+
+        repositoryTargeting = {
+          activePreset: activatePreset ? normalizedName : '',
+          presets: {
+            ...(repositoryTargeting.presets || {}),
+            [normalizedName]: { repos },
+          },
+        };
+
+        completedSteps.add('repositoryPresets');
+        await commit({ repositoryTargeting });
+        ui.keyValues('Repository presets', [
+          {
+            label: 'Active preset',
+            value: repositoryTargeting.activePreset || '(none)',
+            tone: repositoryTargeting.activePreset ? 'success' : 'muted',
+          },
+          { label: 'Saved presets', value: String(Object.keys(repositoryTargeting.presets || {}).length), tone: 'info' },
+          {
+            label: 'Active repos',
+            value:
+              repositoryTargetingService.getActiveRepos({ ...workingConfig, repositoryTargeting }).join(', ') || '(none)',
+            tone: 'info',
+          },
+        ]);
+        return true;
+      },
+    );
+
+    // ── Step 5: Artifact repo ────────────────────────────────────────────────
 
     this.renderStep(
       'targetRepo',
       completedSteps,
-      'Leave this blank if you want OpenMeta to manage a dedicated private repo for you.',
+      'Leave this blank if you want OpenMeta to manage a dedicated private artifact repo for you.',
     );
 
-    const { targetRepoPath } = await prompt<{ targetRepoPath: string }>([
+    const { artifactRepoPath } = await prompt<{ artifactRepoPath: string }>([
       {
         type: 'input',
-        name: 'targetRepoPath',
-        message: 'Enter the path to your private repository (optional):',
+        name: 'artifactRepoPath',
+        message: 'Enter the path to your private artifact repository (optional):',
         default: config.github.targetRepoPath || '',
         filter: (input: string) => input.trim(),
         validate: async (input: string) => {
@@ -423,16 +557,16 @@ export class InitOrchestrator {
     ]);
 
     completedSteps.add('targetRepo');
-    await commit({ github: { targetRepoPath: targetRepoPath || undefined } });
-    ui.keyValues('Target repository policy', [
+    await commit({ github: { targetRepoPath: artifactRepoPath || undefined } });
+    ui.keyValues('Artifact repository policy', [
       {
         label: 'Publish destination',
-        value: targetRepoPath || 'Auto-managed private repository',
-        tone: targetRepoPath ? 'info' : 'accent',
+        value: artifactRepoPath || 'Auto-managed private repository',
+        tone: artifactRepoPath ? 'info' : 'accent',
       },
     ]);
 
-    // ── Step 5: Automation ────────────────────────────────────────────────────
+    // ── Step 6: Automation ────────────────────────────────────────────────────
 
     this.renderStep(
       'automation',
@@ -532,7 +666,12 @@ export class InitOrchestrator {
       { label: 'Model', value: modelValue, hint: selectedProvider?.name, tone: 'success' },
       { label: 'Reasoning', value: reasoningEffort, tone: 'info' },
       { label: 'Streaming', value: stream ? 'YES' : 'NO', tone: stream ? 'info' : 'muted' },
-      { label: 'Repo policy', value: targetRepoPath ? 'CUSTOM' : 'MANAGED', tone: 'accent' },
+      {
+        label: 'Repository preset',
+        value: repositoryTargeting.activePreset || '(none)',
+        tone: repositoryTargeting.activePreset ? 'info' : 'muted',
+      },
+      { label: 'Repo policy', value: artifactRepoPath ? 'CUSTOM' : 'MANAGED', tone: 'accent' },
       {
         label: 'Automation',
         value: automationEnabled ? 'ENABLED' : 'MANUAL',
@@ -543,7 +682,12 @@ export class InitOrchestrator {
       { label: 'Tech stack', value: techStack.join(', '), tone: 'info' },
       { label: 'Proficiency', value: proficiency, tone: 'info' },
       { label: 'Focus areas', value: focusAreas.join(', '), tone: 'info' },
-      { label: 'Target repo', value: targetRepoPath || 'Auto-managed private repository', tone: 'info' },
+      {
+        label: 'Repository preset',
+        value: repositoryTargeting.activePreset || '(none)',
+        tone: 'info',
+      },
+      { label: 'Artifact repo', value: artifactRepoPath || 'Auto-managed private repository', tone: 'info' },
       {
         label: 'Automation',
         value: this.formatAutomationSummary(workingConfig, schedulerResult),

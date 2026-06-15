@@ -1,18 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  githubService,
-  inboxService,
-  issueRankingService,
-  llmService,
-  proofOfWorkService,
-} from '../src/services/index.js';
-import {
-  createInboxItem,
-  createIssue,
-  createMatchedIssue,
-  createProofRecord,
-  createRankedIssue,
-} from './helpers/factories.js';
+import { githubService, issueRankingService, llmService } from '../src/services/index.js';
+import { createIssue, createMatchedIssue, createRankedIssue } from './helpers/factories.js';
 
 describe('IssueRankingService', () => {
   test('selects the first issue that meets the automation threshold', () => {
@@ -150,95 +138,7 @@ describe('IssueRankingService', () => {
     expect(matches[0]?.analysis.techRequirements).toContain('TypeScript');
     expect(matches[0]?.analysis.techRequirements).toContain('React');
     expect(matches[0]?.analysis.estimatedWorkload).toBe('1-3 hours');
-    expect(matches[0]?.analysis.solutionSuggestion).toContain('Local scout mode');
-  });
-
-  test('local scout uses retained local state without GitHub issue discovery', async () => {
-    const originalFetchTrendingIssues = githubService.fetchTrendingIssues;
-    const originalInboxLoad = inboxService.load;
-    const originalProofLoad = proofOfWorkService.load;
-
-    try {
-      githubService.fetchTrendingIssues = async () => {
-        throw new Error('GitHub discovery should not run for local scout');
-      };
-      inboxService.load = () => ({
-        items: [
-          createInboxItem({
-            id: 'acme/local#7',
-            repoFullName: 'acme/local',
-            issueNumber: 7,
-            issueTitle: 'Fix React keyboard flow',
-            overallScore: 91,
-            opportunityScore: 87,
-            summary: 'Retained local opportunity',
-            artifactDir: '/tmp/openmeta/acme-local-7',
-            generatedAt: '2026-06-08T00:00:00.000Z',
-          }),
-        ],
-      });
-      proofOfWorkService.load = () => ({
-        records: [
-          createProofRecord({
-            id: 'acme/proof#9@1',
-            repoFullName: 'acme/proof',
-            issueNumber: 9,
-            issueTitle: 'Add TypeScript coverage',
-            overallScore: 73,
-            opportunityScore: 70,
-            artifactDir: '/tmp/openmeta/acme-proof-9',
-            generatedAt: '2026-06-07T00:00:00.000Z',
-          }),
-        ],
-      });
-
-      const ranked = await issueRankingService.loadRankedIssues(
-        {
-          userProfile: {
-            techStack: ['TypeScript', 'React'],
-            proficiency: 'intermediate',
-            focusAreas: ['web-dev'],
-          },
-          github: {
-            pat: 'ghp-test',
-            username: 'octocat',
-            targetRepoPath: '',
-          },
-          llm: {
-            provider: 'openai',
-            apiBaseUrl: 'https://api.openai.com/v1',
-            apiKey: '',
-            modelName: 'gpt-5.5',
-            reasoningEffort: 'none',
-          },
-          automation: {
-            enabled: false,
-            scheduleTime: '09:00',
-            timezone: 'UTC',
-            contentType: 'research_note',
-            scheduler: 'manual',
-            minMatchScore: 70,
-            skipIfAlreadyGeneratedToday: true,
-          },
-          scoring: {
-            weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.3, impact: 0.2, riskPenalty: 0.35 },
-            overallWeights: { technicalMatch: 0.45, opportunityScore: 0.55 },
-            preset: 'balanced',
-          },
-          commitTemplate: '{{content}}',
-        },
-        {
-          localOnly: true,
-        },
-      );
-
-      expect(ranked.map((issue) => `${issue.repoFullName}#${issue.number}`)).toContain('acme/local#7');
-      expect(ranked.map((issue) => `${issue.repoFullName}#${issue.number}`)).toContain('acme/proof#9');
-    } finally {
-      githubService.fetchTrendingIssues = originalFetchTrendingIssues;
-      inboxService.load = originalInboxLoad;
-      proofOfWorkService.load = originalProofLoad;
-    }
+    expect(matches[0]?.analysis.solutionSuggestion).toContain('OpenMeta can shortlist this issue heuristically');
   });
 
   test('builds a ranked target issue without batch discovery', async () => {
@@ -287,6 +187,10 @@ describe('IssueRankingService', () => {
             pat: 'ghp-test',
             username: 'octocat',
             targetRepoPath: '',
+          },
+          repositoryTargeting: {
+            activePreset: '',
+            presets: {},
           },
           llm: {
             provider: 'openai',
@@ -355,6 +259,10 @@ describe('IssueRankingService', () => {
             username: 'octocat',
             targetRepoPath: '',
           },
+          repositoryTargeting: {
+            activePreset: '',
+            presets: {},
+          },
           llm: {
             provider: 'openai',
             apiBaseUrl: 'https://api.openai.com/v1',
@@ -380,7 +288,6 @@ describe('IssueRankingService', () => {
         },
         {
           repoFullName: 'vercel/next.js',
-          localOnly: true,
         },
       );
 

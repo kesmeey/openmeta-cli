@@ -11,11 +11,19 @@ import {
   selectPrompt,
   ui,
 } from '../infra/index.js';
-import { contentService, githubService, llmService, memoryService, workspaceService } from '../services/index.js';
-import type { AppConfig, RankedIssue, RepoWorkspaceContext } from '../types/index.js';
+import {
+  contentService,
+  githubService,
+  llmService,
+  memoryService,
+  repositoryTargetingService,
+  workspaceService,
+} from '../services/index.js';
+import type { AppConfig, RankedIssue, RepoMemory, RepoWorkspaceContext } from '../types/index.js';
 
 export interface AnalyzeRunOptions {
   repo?: string;
+  preset?: string;
   repoPath?: string;
   headless?: boolean;
   runChecks?: boolean;
@@ -39,6 +47,20 @@ interface AnalyzeResult {
   artifacts: AnalyzeArtifacts;
 }
 
+interface PresetAnalyzeGroup {
+  repoFullName: string;
+  workspace: RepoWorkspaceContext;
+  memory: RepoMemory;
+  suggestions: RepositoryImprovementSuggestion[];
+}
+
+interface PresetAnalyzeCandidate {
+  repoFullName: string;
+  workspace: RepoWorkspaceContext;
+  memory: RepoMemory;
+  suggestion: RepositoryImprovementSuggestion;
+}
+
 export class AnalyzeOrchestrator {
   async runMachine(options: AnalyzeRunOptions = {}): Promise<
     AnalyzeResult & {
@@ -49,12 +71,17 @@ export class AnalyzeOrchestrator {
       };
     }
   > {
-    if (!options.repo) {
+    const config = await configService.get();
+    const scope = repositoryTargetingService.resolveScope(config, {
+      repo: options.repo,
+      preset: options.preset,
+      allowGlobal: false,
+    });
+
+    if (scope.mode === 'none') {
       throw new Error('Repository analysis requires --repo, for example: openmeta analyze --repo owner/name.');
     }
 
-    const repoFullName = parseGitHubRepoFullName(options.repo);
-    const config = await configService.get();
     const headless = Boolean(options.headless);
     const runChecks = Boolean(options.runChecks);
     const dryRun = Boolean(options.dryRun);
@@ -65,45 +92,36 @@ export class AnalyzeOrchestrator {
     this.showLocalRepositoryHint(repoPath);
 
     const totalSteps = 7;
-    const memory = memoryService.load(repoFullName);
-    const workspace = await ui.task(
-      {
-        title: 'Preparing repository workspace',
-        doneMessage: 'Repository workspace prepared',
-        failedMessage: 'Repository workspace preparation failed',
-        tone: 'info',
-        step: { index: 3, total: totalSteps },
-        heartbeat: {
-          message: 'Still preparing repository workspace',
-        },
-      },
-      async () =>
-        workspaceService.prepareRepositoryWorkspace(
-          repoFullName,
-          memory,
+    const groups = scope.mode === 'single'
+      ? [
+          await this.collectSingleAnalysisGroup(scope.repo!, {
+            headless,
+            runChecks,
+            repoPath,
+            totalSteps,
+          }),
+        ]
+      : await this.collectAnalysisGroups(scope.repos, {
+          headless,
           runChecks,
-          headless ? 'headless' : 'interactive',
-          repoPath,
-        ),
+          totalSteps,
+        });
+    const candidates = groups.flatMap((group) =>
+      group.suggestions.map((suggestion) => ({
+        repoFullName: group.repoFullName,
+        workspace: group.workspace,
+        memory: group.memory,
+        suggestion,
+      }) satisfies PresetAnalyzeCandidate),
     );
-
-    const suggestionsResult = await ui.task(
-      {
-        title: 'Inspecting repository for grounded contribution ideas',
-        doneMessage: 'Repository suggestions generated',
-        failedMessage: 'Repository suggestion analysis failed',
-        tone: 'info',
-        step: { index: 4, total: totalSteps },
-        heartbeat: {
-          message: 'Still inspecting repository context',
-        },
-      },
-      async () => llmService.analyzeRepository(repoFullName, workspace, memory),
-    );
-    const suggestions = suggestionsResult.data;
-    const selectedSuggestion = headless
-      ? this.selectTopSuggestion(suggestions)
-      : await this.promptForSuggestion(suggestions);
+    const selectedCandidate = headless
+      ? this.selectTopCandidate(candidates)
+      : await this.promptForCandidate(candidates);
+    const repoFullName = selectedCandidate.repoFullName;
+    const workspace = selectedCandidate.workspace;
+    const memory = selectedCandidate.memory;
+    const selectedSuggestion = selectedCandidate.suggestion;
+    const suggestions = groups.find((group) => group.repoFullName === repoFullName)?.suggestions || [selectedSuggestion];
     const syntheticIssue = this.buildSyntheticIssue(repoFullName, selectedSuggestion);
 
     await ui.task(
@@ -152,6 +170,12 @@ export class AnalyzeOrchestrator {
       workspace,
       suggestions,
       selectedSuggestion,
+      scope.mode === 'preset'
+        ? groups.map((group) => ({
+            repoFullName: group.repoFullName,
+            suggestions: group.suggestions,
+          }))
+        : undefined,
     );
     const patchDraftMarkdown = contentService.formatPatchDraftMarkdown(patchDraft);
     const prDraftMarkdown = contentService.formatPullRequestDraftMarkdown(prDraft);
@@ -184,6 +208,17 @@ export class AnalyzeOrchestrator {
   async run(options: AnalyzeRunOptions = {}): Promise<void> {
     const result = await this.runMachine(options);
     const { repoFullName, mode, workspace, suggestions, selectedSuggestion, patchDraft, prDraft, artifacts } = result;
+    const config = await configService.get();
+    const scope = repositoryTargetingService.resolveScope(config, {
+      repo: options.repo,
+      preset: options.preset,
+      allowGlobal: false,
+    });
+    const scopeLabel = scope.mode === 'single'
+      ? scope.repo!
+      : scope.presetName
+        ? `preset ${scope.presetName}`
+        : `${scope.repos.length} repositories`;
 
     ui.hero({
       label: 'OpenMeta Analyze',
@@ -191,7 +226,7 @@ export class AnalyzeOrchestrator {
       subtitle:
         'OpenMeta will inspect the repository, ask the model for grounded improvement ideas, and draft PR-ready artifacts for the strongest suggestion.',
       lines: [
-        `Repository: ${repoFullName}`,
+        `Scope: ${scopeLabel}`,
         mode.runChecks
           ? 'Detected validation commands may run during workspace preparation.'
           : 'This analysis will skip baseline validation commands.',
@@ -201,7 +236,17 @@ export class AnalyzeOrchestrator {
       ],
     });
 
-    this.showWorkspaceSummary(workspace);
+    if (scope.mode === 'single') {
+      this.showWorkspaceSummary(workspace);
+    } else {
+      const candidates = suggestions.length;
+      ui.stats('Preset analysis scope', [
+        { label: 'Repositories', value: String(scope.repos.length), tone: 'success' },
+        { label: 'Candidates', value: String(candidates), tone: 'info' },
+        { label: 'Top score', value: String(selectedSuggestion.prPotentialScore), tone: 'accent' },
+        { label: 'Preset', value: scope.presetName || 'custom', tone: 'info' },
+      ]);
+    }
     if (suggestions.length === 0) {
       ui.emptyState(
         'OpenMeta Analyze',
@@ -370,6 +415,17 @@ export class AnalyzeOrchestrator {
     );
   }
 
+  private selectTopCandidate(candidates: PresetAnalyzeCandidate[]): PresetAnalyzeCandidate {
+    const [selected] = [...candidates].sort(
+      (left, right) => right.suggestion.prPotentialScore - left.suggestion.prPotentialScore,
+    );
+    if (!selected) {
+      throw new Error('No repository suggestions are available to select.');
+    }
+
+    return selected;
+  }
+
   private selectTopSuggestion(suggestions: RepositoryImprovementSuggestion[]): RepositoryImprovementSuggestion {
     const [selected] = [...suggestions].sort((left, right) => right.prPotentialScore - left.prPotentialScore);
     if (!selected) {
@@ -391,6 +447,126 @@ export class AnalyzeOrchestrator {
         value: suggestion,
       })),
     });
+  }
+
+  private async promptForCandidate(candidates: PresetAnalyzeCandidate[]): Promise<PresetAnalyzeCandidate> {
+    if (candidates.length === 1) {
+      return candidates[0]!;
+    }
+
+    return selectPrompt<PresetAnalyzeCandidate>({
+      message: 'Select a repository suggestion to draft:',
+      pageSize: Math.min(10, candidates.length),
+      choices: candidates.slice(0, 10).map((candidate) => ({
+        name: `${candidate.repoFullName} - ${candidate.suggestion.title}`,
+        description: `score ${candidate.suggestion.prPotentialScore} | ${candidate.suggestion.summary.slice(0, 72)}`,
+        value: candidate,
+      })),
+    });
+  }
+
+  private async collectSingleAnalysisGroup(
+    repoFullName: string,
+    options: {
+      headless: boolean;
+      runChecks: boolean;
+      repoPath?: string;
+      totalSteps: number;
+    },
+  ): Promise<PresetAnalyzeGroup> {
+    const memory = memoryService.load(repoFullName);
+    const workspace = await ui.task(
+      {
+        title: 'Preparing repository workspace',
+        doneMessage: 'Repository workspace prepared',
+        failedMessage: 'Repository workspace preparation failed',
+        tone: 'info',
+        step: { index: 3, total: options.totalSteps },
+        heartbeat: {
+          message: 'Still preparing repository workspace',
+        },
+      },
+      async () =>
+        workspaceService.prepareRepositoryWorkspace(
+          repoFullName,
+          memory,
+          options.runChecks,
+          options.headless ? 'headless' : 'interactive',
+          options.repoPath,
+        ),
+    );
+
+    const suggestionsResult = await ui.task(
+      {
+        title: 'Inspecting repository for grounded contribution ideas',
+        doneMessage: 'Repository suggestions generated',
+        failedMessage: 'Repository suggestion analysis failed',
+        tone: 'info',
+        step: { index: 4, total: options.totalSteps },
+        heartbeat: {
+          message: 'Still inspecting repository context',
+        },
+      },
+      async () => llmService.analyzeRepository(repoFullName, workspace, memory),
+    );
+
+    return {
+      repoFullName,
+      workspace,
+      memory,
+      suggestions: suggestionsResult.data,
+    };
+  }
+
+  private async collectAnalysisGroups(
+    repos: string[],
+    options: {
+      headless: boolean;
+      runChecks: boolean;
+      totalSteps: number;
+    },
+  ): Promise<PresetAnalyzeGroup[]> {
+    const groups: PresetAnalyzeGroup[] = [];
+
+    for (const repoFullName of repos) {
+      const memory = memoryService.load(repoFullName);
+      const workspace = await ui.task(
+        {
+          title: `Preparing repository workspace for ${repoFullName}`,
+          doneMessage: 'Repository workspace prepared',
+          failedMessage: 'Repository workspace preparation failed',
+          tone: 'info',
+          step: { index: 3, total: options.totalSteps },
+        },
+        async () =>
+          workspaceService.prepareRepositoryWorkspace(
+            repoFullName,
+            memory,
+            options.runChecks,
+            options.headless ? 'headless' : 'interactive',
+          ),
+      );
+
+      const suggestionsResult = await ui.task(
+        {
+          title: `Analyzing repository contribution paths for ${repoFullName}`,
+          doneMessage: 'Repository suggestions generated',
+          failedMessage: 'Repository analysis failed',
+          tone: 'info',
+          step: { index: 4, total: options.totalSteps },
+        },
+        async () => llmService.analyzeRepository(repoFullName, workspace, memory),
+      );
+
+      groups.push({
+        repoFullName,
+        workspace,
+        memory,
+        suggestions: suggestionsResult.data,
+      });
+    }
+
+    return groups;
   }
 
   private buildSyntheticIssue(repoFullName: string, suggestion: RepositoryImprovementSuggestion): RankedIssue {

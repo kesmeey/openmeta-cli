@@ -7,6 +7,7 @@ export { DashboardOrchestrator, dashboardOrchestrator } from './dashboard.js';
 export { DoctorOrchestrator, doctorOrchestrator } from './doctor.js';
 export { InitOrchestrator, initOrchestrator } from './init.js';
 export * from './machine/index.js';
+export { PresetOrchestrator, presetOrchestrator } from './preset.js';
 export { ProviderOrchestrator, providerOrchestrator } from './provider.js';
 export { RunsOrchestrator, runsOrchestrator } from './runs.js';
 export * from './skill/index.js';
