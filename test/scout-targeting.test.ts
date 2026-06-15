@@ -36,6 +36,11 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       minMatchScore: 75,
       skipIfAlreadyGeneratedToday: false,
     },
+    scoring: {
+      weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.3, impact: 0.2, riskPenalty: 0.35 },
+      overallWeights: { technicalMatch: 0.45, opportunityScore: 0.55 },
+      preset: 'balanced',
+    },
     commitTemplate: 'feat: {{title}}',
   };
 
@@ -62,6 +67,18 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       ...base.automation,
       ...overrides.automation,
     },
+    scoring: {
+      ...base.scoring,
+      ...overrides.scoring,
+      weights: {
+        ...base.scoring.weights,
+        ...overrides.scoring?.weights,
+      },
+      overallWeights: {
+        ...base.scoring.overallWeights,
+        ...overrides.scoring?.overallWeights,
+      },
+    },
   };
 }
 
@@ -70,9 +87,11 @@ beforeEach(() => {
   spyOn(infra.ui, 'stats').mockImplementation(() => {});
   spyOn(infra.ui, 'recordList').mockImplementation(() => {});
   spyOn(infra.ui, 'emptyState').mockImplementation(() => {});
-  spyOn(infra.ui, 'task').mockImplementation(async (_options, task) => task({
-    setMessage() {},
-  } as never));
+  spyOn(infra.ui, 'task').mockImplementation(async (_options, task) =>
+    task({
+      setMessage() {},
+    } as never),
+  );
 });
 
 afterEach(() => {
@@ -97,19 +116,35 @@ describe('AgentOrchestrator scout targeting', () => {
       .mockResolvedValueOnce([createRankedIssue({ repoFullName: 'facebook/react', number: 2 })]);
 
     spyOn(infra.configService, 'get').mockResolvedValue(config);
-    spyOn(orchestrator as unknown as { validateConfig(config: AppConfig, options?: { requireLlm?: boolean }): Promise<void> }, 'validateConfig')
-      .mockResolvedValue(undefined);
-    spyOn(orchestrator as unknown as { initializeClients(config: AppConfig, options?: { validateLlm?: boolean }): Promise<void> }, 'initializeClients')
-      .mockResolvedValue(undefined);
+    spyOn(
+      orchestrator as unknown as {
+        validateConfig(config: AppConfig, options?: { requireLlm?: boolean }): Promise<void>;
+      },
+      'validateConfig',
+    ).mockResolvedValue(undefined);
+    spyOn(
+      orchestrator as unknown as {
+        initializeClients(config: AppConfig, options?: { validateLlm?: boolean }): Promise<void>;
+      },
+      'initializeClients',
+    ).mockResolvedValue(undefined);
 
     await orchestrator.scout({ limit: 5 });
 
-    expect(loadRankedIssuesSpy).toHaveBeenNthCalledWith(1, config, expect.objectContaining({
-      repoFullName: 'vercel/next.js',
-    }));
-    expect(loadRankedIssuesSpy).toHaveBeenNthCalledWith(2, config, expect.objectContaining({
-      repoFullName: 'facebook/react',
-    }));
+    expect(loadRankedIssuesSpy).toHaveBeenNthCalledWith(
+      1,
+      config,
+      expect.objectContaining({
+        repoFullName: 'vercel/next.js',
+      }),
+    );
+    expect(loadRankedIssuesSpy).toHaveBeenNthCalledWith(
+      2,
+      config,
+      expect.objectContaining({
+        repoFullName: 'facebook/react',
+      }),
+    );
   });
 
   test('bypasses the active preset when scout runs with --all-repos', async () => {
@@ -124,20 +159,30 @@ describe('AgentOrchestrator scout targeting', () => {
         },
       },
     });
-    const loadRankedIssuesSpy = spyOn(issueRankingService, 'loadRankedIssues')
-      .mockResolvedValue([createRankedIssue()]);
+    const loadRankedIssuesSpy = spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([createRankedIssue()]);
 
     spyOn(infra.configService, 'get').mockResolvedValue(config);
-    spyOn(orchestrator as unknown as { validateConfig(config: AppConfig, options?: { requireLlm?: boolean }): Promise<void> }, 'validateConfig')
-      .mockResolvedValue(undefined);
-    spyOn(orchestrator as unknown as { initializeClients(config: AppConfig, options?: { validateLlm?: boolean }): Promise<void> }, 'initializeClients')
-      .mockResolvedValue(undefined);
+    spyOn(
+      orchestrator as unknown as {
+        validateConfig(config: AppConfig, options?: { requireLlm?: boolean }): Promise<void>;
+      },
+      'validateConfig',
+    ).mockResolvedValue(undefined);
+    spyOn(
+      orchestrator as unknown as {
+        initializeClients(config: AppConfig, options?: { validateLlm?: boolean }): Promise<void>;
+      },
+      'initializeClients',
+    ).mockResolvedValue(undefined);
 
     await orchestrator.scout({ allRepos: true, limit: 5 });
 
     expect(loadRankedIssuesSpy).toHaveBeenCalledTimes(1);
-    expect(loadRankedIssuesSpy).toHaveBeenCalledWith(config, expect.not.objectContaining({
-      repoFullName: 'vercel/next.js',
-    }));
+    expect(loadRankedIssuesSpy).toHaveBeenCalledWith(
+      config,
+      expect.not.objectContaining({
+        repoFullName: 'vercel/next.js',
+      }),
+    );
   });
 });

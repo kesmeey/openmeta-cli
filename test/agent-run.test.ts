@@ -100,7 +100,7 @@ interface AnalyzeRunInternals {
 }
 
 function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
-  return {
+  const base: AppConfig = {
     userProfile: {
       techStack: ['typescript', 'react'],
       proficiency: 'intermediate',
@@ -136,13 +136,41 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       preset: 'balanced',
     },
     commitTemplate: 'feat: {{title}}',
+  };
+
+  return {
+    ...base,
     ...overrides,
+    github: {
+      ...base.github,
+      ...overrides.github,
+    },
     repositoryTargeting: {
-      activePreset: '',
-      presets: {},
+      ...base.repositoryTargeting,
       ...overrides.repositoryTargeting,
       presets: {
+        ...base.repositoryTargeting.presets,
         ...((overrides.repositoryTargeting?.presets as Record<string, { repos: string[] }> | undefined) ?? {}),
+      },
+    },
+    llm: {
+      ...base.llm,
+      ...overrides.llm,
+    },
+    automation: {
+      ...base.automation,
+      ...overrides.automation,
+    },
+    scoring: {
+      ...base.scoring,
+      ...overrides.scoring,
+      weights: {
+        ...base.scoring.weights,
+        ...overrides.scoring?.weights,
+      },
+      overallWeights: {
+        ...base.scoring.overallWeights,
+        ...overrides.scoring?.overallWeights,
       },
     },
   };
@@ -181,6 +209,21 @@ function muteUi(): void {
 
 beforeEach(() => {
   muteUi();
+  spyOn(llmService, 'assessIssueFeasibility').mockResolvedValue({
+    version: '1',
+    kind: 'issue_feasibility_assessment',
+    status: 'success',
+    data: {
+      decision: 'proceed',
+      executionMode: 'full',
+      confidence: 'high',
+      summary: 'Test environment can execute the selected issue.',
+      requiredCapabilities: ['typescript'],
+      gaps: [],
+      validationPlan: ['Run repository validation commands when requested.'],
+      rationale: 'Unit tests mock feasibility as available unless the scenario overrides it.',
+    },
+  });
 });
 
 afterEach(() => {
@@ -960,16 +1003,10 @@ describe('AnalyzeOrchestrator run flow', () => {
       demoWorkspace,
       demoMemory,
     );
-    expect(analysisMarkdownSpy).toHaveBeenCalledWith(
-      'acme/demo',
-      demoWorkspace,
-      [demoSuggestion],
-      demoSuggestion,
-      [
-        { repoFullName: 'acme/demo', suggestions: [demoSuggestion] },
-        { repoFullName: 'acme/docs', suggestions: [docsSuggestion] },
-      ],
-    );
+    expect(analysisMarkdownSpy).toHaveBeenCalledWith('acme/demo', demoWorkspace, [demoSuggestion], demoSuggestion, [
+      { repoFullName: 'acme/demo', suggestions: [demoSuggestion] },
+      { repoFullName: 'acme/docs', suggestions: [docsSuggestion] },
+    ]);
     expect(writeArtifactsSpy).toHaveBeenCalledWith({
       artifacts,
       analysisMarkdown: '# Repository Analysis',

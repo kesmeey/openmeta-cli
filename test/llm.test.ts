@@ -33,6 +33,45 @@ interface LLMServiceInternals {
       prPotentialScore: number;
     }>;
   }>;
+  assessIssueFeasibility(
+    issue: ReturnType<typeof createRankedIssue>,
+    workspace: ReturnType<typeof createWorkspace>,
+    environment: {
+      os: {
+        platform: NodeJS.Platform;
+        arch: string;
+        distro: string;
+        version: string;
+        isWSL: boolean;
+        wslDistros: string[];
+        hypervisor: {
+          isVM: boolean;
+          type: 'hyper-v' | 'virtualbox' | 'vmware' | 'kvm' | 'qemu' | 'parallels' | 'wsl' | 'docker-desktop' | 'none';
+          isContainer: boolean;
+          isCI: boolean;
+          ciName?: string;
+        };
+      };
+      cpu: { model: string; cores: number; threads: number };
+      gpu: Array<{ model: string; vramMB: number; driverVersion?: string; cudaVersion?: string }>;
+      totalRAMGB: number;
+      disks: Array<{ mountPoint: string; totalGB: number; freeGB: number }>;
+      tools: Array<{ name: string; available: boolean; version?: string; path?: string }>;
+    },
+  ): Promise<{
+    status: StructuredOutputStatus;
+    data: {
+      decision:
+        | 'proceed'
+        | 'repair_then_proceed'
+        | 'proceed_static_only'
+        | 'proceed_partial_validation'
+        | 'stop_hard_blocked'
+        | 'stop_user_action_required';
+      executionMode: 'full' | 'partial' | 'static_only' | 'blocked';
+      summary: string;
+    };
+  }>;
   client: {
     chat: {
       completions: {
@@ -264,6 +303,99 @@ describe('LLMService repository suggestion parsing', () => {
     expect(payloads[0]?.messages[1]?.content).toContain('Candidate Files: README.md, src/index.ts');
     expect(payloads[0]?.messages[1]?.content).toContain('FILE: README.md');
     expect(payloads[0]?.messages[1]?.content).toContain('Detected Test Commands: bun test');
+  });
+});
+
+describe('LLMService issue feasibility assessment', () => {
+  test('generates feasibility requests with issue, repo, and local environment context', async () => {
+    const service = new LLMService() as unknown as LLMServiceInternals & {
+      initialize(apiKey: string, baseUrl: string, modelName?: string): void;
+    };
+    const payloads: Array<{ messages: Array<{ role: string; content: string }>; temperature: number }> = [];
+
+    service.initialize('sk-test', 'https://api.openai.com/v1', 'gpt-4o-mini');
+    service.client = {
+      chat: {
+        completions: {
+          create: async (payload) => {
+            payloads.push(payload);
+            return {
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      version: '1',
+                      kind: 'issue_feasibility_assessment',
+                      status: 'success',
+                      data: {
+                        decision: 'proceed_static_only',
+                        executionMode: 'static_only',
+                        confidence: 'high',
+                        summary: 'This docs-only issue can be handled without CUDA runtime validation.',
+                        requiredCapabilities: ['markdown'],
+                        gaps: [
+                          {
+                            code: 'insufficient_gpu',
+                            description: 'CUDA runtime validation is not available locally.',
+                            severity: 'warning',
+                            recoverability: 'not_practical_local',
+                            suggestedAction: 'Keep execution limited to docs-only changes.',
+                          },
+                        ],
+                        validationPlan: ['Review the README diff'],
+                        rationale: 'The issue text and target file scope are documentation-only.',
+                      },
+                    }),
+                  },
+                },
+              ],
+            };
+          },
+        },
+      },
+    };
+
+    const result = await service.assessIssueFeasibility(
+      createRankedIssue({ title: 'Clarify CUDA setup docs', body: 'Update README wording only.' }),
+      createWorkspace({
+        topLevelFiles: ['README.md', 'pyproject.toml'],
+        candidateFiles: ['README.md'],
+        snippets: [{ path: 'README.md', content: '# Demo\n\nCUDA setup is unclear.\n' }],
+      }),
+      {
+        os: {
+          platform: 'win32',
+          arch: 'x64',
+          distro: 'Windows',
+          version: '10.0',
+          isWSL: false,
+          wslDistros: [],
+          hypervisor: {
+            isVM: false,
+            type: 'none',
+            isContainer: false,
+            isCI: false,
+          },
+        },
+        cpu: { model: 'Test CPU', cores: 8, threads: 16 },
+        gpu: [],
+        totalRAMGB: 16,
+        disks: [{ mountPoint: 'C:', totalGB: 512, freeGB: 128 }],
+        tools: [
+          { name: 'git', available: true, version: 'git version 2.45.0' },
+          { name: 'python', available: false },
+          { name: 'nvidia-smi', available: false },
+        ],
+      },
+    );
+
+    expect(result.data.decision).toBe('proceed_static_only');
+    expect(payloads[0]?.temperature).toBe(0.1);
+    expect(payloads[0]?.messages[1]?.content).toContain('Issue: acme/demo#42');
+    expect(payloads[0]?.messages[1]?.content).toContain('FILE: README.md');
+    expect(payloads[0]?.messages[1]?.content).toContain('GPU: none detected');
+    expect(payloads[0]?.messages[1]?.content).toContain('Virtualization: vm=no, type=none');
+    expect(payloads[0]?.messages[1]?.content).toContain('Missing Tools: python, nvidia-smi');
   });
 });
 

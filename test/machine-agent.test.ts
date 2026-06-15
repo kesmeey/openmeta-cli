@@ -75,6 +75,10 @@ function createConfig() {
       pat: 'ghp_test_token',
       username: 'octocat',
     },
+    repositoryTargeting: {
+      activePreset: '',
+      presets: {},
+    },
     llm: {
       provider: 'custom' as const,
       apiBaseUrl: 'https://example.com/v1',
@@ -142,6 +146,21 @@ function muteUi(): void {
 
 beforeEach(() => {
   muteUi();
+  spyOn(llmService, 'assessIssueFeasibility').mockResolvedValue({
+    version: '1',
+    kind: 'issue_feasibility_assessment',
+    status: 'success',
+    data: {
+      decision: 'proceed',
+      executionMode: 'full',
+      confidence: 'high',
+      summary: 'Test environment can execute the selected issue.',
+      requiredCapabilities: ['typescript'],
+      gaps: [],
+      validationPlan: ['Run repository validation commands when requested.'],
+      rationale: 'Unit tests mock feasibility as available unless the scenario overrides it.',
+    },
+  });
 });
 
 afterEach(() => {

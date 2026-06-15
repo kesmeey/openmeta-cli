@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   ImplementationDraftEnvelopeSchema,
   ImplementationDraftSchema,
+  IssueFeasibilityAssessmentEnvelopeSchema,
   IssueMatchListEnvelopeSchema,
   IssueMatchListSchema,
   PatchDraftEnvelopeSchema,
@@ -168,5 +169,36 @@ describe('agent contracts', () => {
 
     expect(parsed.kind).toBe('pull_request_draft');
     expect(parsed.data.title).toBe('Add aria-label handling to icon buttons');
+  });
+
+  test('wraps issue feasibility assessments in a shared structured output envelope', () => {
+    const parsed = IssueFeasibilityAssessmentEnvelopeSchema.parse({
+      version: '1',
+      kind: 'issue_feasibility_assessment',
+      status: 'success',
+      data: {
+        decision: 'proceed_static_only',
+        executionMode: 'static_only',
+        confidence: 'high',
+        summary: 'The issue is docs-only and does not require the GPU-heavy runtime.',
+        requiredCapabilities: ['markdown', 'markdown'],
+        gaps: [
+          {
+            code: 'insufficient_gpu',
+            description: 'The full project may require CUDA for runtime validation.',
+            severity: 'warning',
+            recoverability: 'not_practical_local',
+            suggestedAction: 'Keep this run to documentation-only changes.',
+          },
+        ],
+        validationPlan: ['Review the README diff'],
+        rationale: 'The selected issue only asks for documentation changes.',
+      },
+    });
+
+    expect(parsed.kind).toBe('issue_feasibility_assessment');
+    expect(parsed.data.decision).toBe('proceed_static_only');
+    expect(parsed.data.requiredCapabilities).toEqual(['markdown']);
+    expect(parsed.data.gaps[0]?.recoverability).toBe('not_practical_local');
   });
 });

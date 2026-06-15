@@ -2,6 +2,8 @@ import OpenAI from 'openai';
 import { z } from 'zod';
 import {
   ImplementationDraftEnvelopeSchema,
+  type IssueFeasibilityAssessment,
+  IssueFeasibilityAssessmentEnvelopeSchema,
   IssueMatchListEnvelopeSchema,
   type PatchDraft,
   PatchDraftEnvelopeSchema,
@@ -18,6 +20,8 @@ import {
   DAILY_DIARY_GENERATE_PROMPT,
   DAILY_REPORT_GENERATE_PROMPT,
   fillPrompt,
+  ISSUE_FEASIBILITY_PROMPT,
+  ISSUE_FEASIBILITY_REPAIR_PROMPT,
   ISSUE_MATCH_PROMPT,
   ISSUE_MATCH_REPAIR_PROMPT,
   PATCH_DRAFT_PROMPT,
@@ -28,6 +32,7 @@ import {
   VALIDATION_REPAIR_PROMPT,
 } from '../infra/prompt-templates.js';
 import type {
+  EnvironmentInfo,
   GitHubIssue,
   ImplementationDraft,
   LLMProvider,
@@ -209,6 +214,39 @@ Repo Stars: ${i.repoStars}`,
       prompt,
       parser: this.parsePatchDraft.bind(this),
       repairPrompt: PATCH_DRAFT_REPAIR_PROMPT,
+    });
+  }
+
+  async assessIssueFeasibility(
+    issue: RankedIssue,
+    workspace: RepoWorkspaceContext,
+    environment: EnvironmentInfo,
+  ): Promise<StructuredOutputResult<'issue_feasibility_assessment', IssueFeasibilityAssessment>> {
+    const repoContext = [
+      `Workspace Path: ${workspace.workspacePath}`,
+      `Default Branch: ${workspace.defaultBranch}`,
+      `Workspace Dirty: ${workspace.workspaceDirty}`,
+      `Top-Level Files: ${workspace.topLevelFiles.join(', ') || 'none'}`,
+      `Candidate Files: ${workspace.candidateFiles.join(', ') || 'none'}`,
+      `Detected Test Commands: ${workspace.testCommands.map((item) => item.command).join(', ') || 'none'}`,
+      `Runnable Validation Commands: ${workspace.validationCommands.map((item) => item.command).join(', ') || 'none'}`,
+      `Validation Safety Notes: ${workspace.validationWarnings.join(' | ') || 'none'}`,
+      `Baseline Results: ${workspace.testResults.length > 0 ? workspace.testResults.map((result) => `${result.command} => ${result.passed ? 'passed' : `failed (${result.exitCode ?? 'n/a'})`}`).join('; ') : 'not executed'}`,
+      'Snippets:',
+      ...workspace.snippets.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`),
+    ].join('\n\n');
+
+    const prompt = fillPrompt(ISSUE_FEASIBILITY_PROMPT, {
+      issueContext: this.formatRankedIssue(issue),
+      repoContext,
+      environmentContext: this.formatEnvironment(environment),
+    });
+
+    return this.generateStructuredOutput({
+      prompt,
+      parser: this.parseIssueFeasibilityAssessment.bind(this),
+      repairPrompt: ISSUE_FEASIBILITY_REPAIR_PROMPT,
+      temperature: 0.1,
     });
   }
 
@@ -519,6 +557,12 @@ Repo Stars: ${i.repoStars}`,
     return this.parseStructuredJson(content, PullRequestDraftEnvelopeSchema);
   }
 
+  private parseIssueFeasibilityAssessment(
+    content: string,
+  ): StructuredOutputResult<'issue_feasibility_assessment', IssueFeasibilityAssessment> {
+    return this.parseStructuredJson(content, IssueFeasibilityAssessmentEnvelopeSchema);
+  }
+
   private parseRepositorySuggestions(
     content: string,
   ): StructuredOutputResult<'repository_suggestion_list', RepositoryImprovementSuggestion[]> {
@@ -629,6 +673,43 @@ Repo Stars: ${i.repoStars}`,
       ...validationSignals,
       'Recent Issue Outcomes:',
       ...recentOutcomes,
+    ].join('\n');
+  }
+
+  private formatEnvironment(environment: EnvironmentInfo): string {
+    const availableTools = environment.tools
+      .filter((tool) => tool.available)
+      .map((tool) => `${tool.name}${tool.version ? ` (${tool.version})` : ''}`)
+      .join(', ');
+    const missingTools = environment.tools
+      .filter((tool) => !tool.available)
+      .map((tool) => tool.name)
+      .join(', ');
+    const gpus =
+      environment.gpu.length > 0
+        ? environment.gpu
+            .map((gpu) =>
+              [
+                gpu.model,
+                gpu.vramMB > 0 ? `${gpu.vramMB}MB VRAM` : '',
+                gpu.cudaVersion ? `CUDA ${gpu.cudaVersion}` : '',
+              ]
+                .filter(Boolean)
+                .join(' | '),
+            )
+            .join('; ')
+        : 'none detected';
+
+    return [
+      `OS: ${environment.os.platform} ${environment.os.arch} ${environment.os.distro} ${environment.os.version}`.trim(),
+      `WSL: ${environment.os.isWSL ? `yes (${environment.os.wslDistros.join(', ') || 'no distro listed'})` : 'no'}`,
+      `Virtualization: vm=${environment.os.hypervisor.isVM ? 'yes' : 'no'}, type=${environment.os.hypervisor.type}, container=${environment.os.hypervisor.isContainer ? 'yes' : 'no'}, ci=${environment.os.hypervisor.isCI ? environment.os.hypervisor.ciName || 'yes' : 'no'}`,
+      `CPU: ${environment.cpu.model}, cores=${environment.cpu.cores}, threads=${environment.cpu.threads}`,
+      `RAM: ${environment.totalRAMGB}GB`,
+      `GPU: ${gpus}`,
+      `Disks: ${environment.disks.map((disk) => `${disk.mountPoint} ${disk.freeGB}GB free/${disk.totalGB}GB total`).join(', ') || 'unknown'}`,
+      `Available Tools: ${availableTools || 'none detected'}`,
+      `Missing Tools: ${missingTools || 'none detected'}`,
     ].join('\n');
   }
 

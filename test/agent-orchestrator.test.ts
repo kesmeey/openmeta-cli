@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import * as simpleGitModule from 'simple-git';
 import * as infra from '../src/infra/index.js';
 import { AgentOrchestrator } from '../src/orchestration/agent.js';
@@ -154,7 +154,7 @@ interface AgentOrchestratorInternals {
 const tempDirs: string[] = [];
 
 function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
-  return {
+  const base: AppConfig = {
     userProfile: {
       techStack: ['typescript', 'react'],
       proficiency: 'intermediate',
@@ -163,6 +163,10 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     github: {
       pat: 'ghp_test_token',
       username: 'octocat',
+    },
+    repositoryTargeting: {
+      activePreset: '',
+      presets: {},
     },
     llm: {
       provider: 'custom',
@@ -186,7 +190,47 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       preset: 'balanced',
     },
     commitTemplate: 'feat: {{title}}',
+  };
+
+  return {
+    ...base,
     ...overrides,
+    userProfile: {
+      ...base.userProfile,
+      ...overrides.userProfile,
+    },
+    github: {
+      ...base.github,
+      ...overrides.github,
+    },
+    repositoryTargeting: {
+      ...base.repositoryTargeting,
+      ...overrides.repositoryTargeting,
+      presets: {
+        ...base.repositoryTargeting.presets,
+        ...overrides.repositoryTargeting?.presets,
+      },
+    },
+    llm: {
+      ...base.llm,
+      ...overrides.llm,
+    },
+    automation: {
+      ...base.automation,
+      ...overrides.automation,
+    },
+    scoring: {
+      ...base.scoring,
+      ...overrides.scoring,
+      weights: {
+        ...base.scoring.weights,
+        ...overrides.scoring?.weights,
+      },
+      overallWeights: {
+        ...base.scoring.overallWeights,
+        ...overrides.scoring?.overallWeights,
+      },
+    },
   };
 }
 
@@ -212,7 +256,7 @@ function createPublishInput(
 beforeEach(() => {
   const tempHome = mkdtempSync(join(tmpdir(), 'openmeta-agent-orchestrator-'));
   tempDirs.push(tempHome);
-  process.env['HOME'] = tempHome;
+  Object.assign(process.env, { HOME: tempHome });
 });
 
 afterEach(() => {
@@ -816,7 +860,7 @@ describe('AgentOrchestrator support behavior', () => {
     ).mockResolvedValue(undefined as never);
     spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([]);
 
-    await orchestrator.scout({ localOnly: true });
+    await orchestrator.scout();
 
     expect(emptyStateSpy).toHaveBeenCalledWith(
       'OpenMeta Scout',

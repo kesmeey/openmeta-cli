@@ -1,5 +1,5 @@
-import { mkdirSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { PatchDraft, PullRequestDraft, RepositoryImprovementSuggestion } from '../contracts/index.js';
 import {
   configService,
@@ -7,7 +7,6 @@ import {
   getLocalDateStamp,
   getOpenMetaArtifactRoot,
   logger,
-  parseGitHubRepoFullName,
   selectPrompt,
   ui,
 } from '../infra/index.js';
@@ -92,27 +91,38 @@ export class AnalyzeOrchestrator {
     this.showLocalRepositoryHint(repoPath);
 
     const totalSteps = 7;
-    const groups = scope.mode === 'single'
-      ? [
-          await this.collectSingleAnalysisGroup(scope.repo!, {
-            headless,
-            runChecks,
-            repoPath,
-            totalSteps,
-          }),
-        ]
-      : await this.collectAnalysisGroups(scope.repos, {
+    const groups = await (async (): Promise<PresetAnalyzeGroup[]> => {
+      if (scope.mode !== 'single') {
+        return this.collectAnalysisGroups(scope.repos, {
           headless,
           runChecks,
           totalSteps,
         });
+      }
+
+      if (!scope.repo) {
+        throw new Error('Repository analysis requires --repo, for example: openmeta analyze --repo owner/name.');
+      }
+
+      return [
+        await this.collectSingleAnalysisGroup(scope.repo, {
+          headless,
+          runChecks,
+          repoPath,
+          totalSteps,
+        }),
+      ];
+    })();
     const candidates = groups.flatMap((group) =>
-      group.suggestions.map((suggestion) => ({
-        repoFullName: group.repoFullName,
-        workspace: group.workspace,
-        memory: group.memory,
-        suggestion,
-      }) satisfies PresetAnalyzeCandidate),
+      group.suggestions.map(
+        (suggestion) =>
+          ({
+            repoFullName: group.repoFullName,
+            workspace: group.workspace,
+            memory: group.memory,
+            suggestion,
+          }) satisfies PresetAnalyzeCandidate,
+      ),
     );
     const selectedCandidate = headless
       ? this.selectTopCandidate(candidates)
@@ -121,7 +131,9 @@ export class AnalyzeOrchestrator {
     const workspace = selectedCandidate.workspace;
     const memory = selectedCandidate.memory;
     const selectedSuggestion = selectedCandidate.suggestion;
-    const suggestions = groups.find((group) => group.repoFullName === repoFullName)?.suggestions || [selectedSuggestion];
+    const suggestions = groups.find((group) => group.repoFullName === repoFullName)?.suggestions || [
+      selectedSuggestion,
+    ];
     const syntheticIssue = this.buildSyntheticIssue(repoFullName, selectedSuggestion);
 
     await ui.task(
@@ -214,11 +226,12 @@ export class AnalyzeOrchestrator {
       preset: options.preset,
       allowGlobal: false,
     });
-    const scopeLabel = scope.mode === 'single'
-      ? scope.repo!
-      : scope.presetName
-        ? `preset ${scope.presetName}`
-        : `${scope.repos.length} repositories`;
+    const scopeLabel =
+      scope.mode === 'single'
+        ? scope.repo || 'selected repository'
+        : scope.presetName
+          ? `preset ${scope.presetName}`
+          : `${scope.repos.length} repositories`;
 
     ui.hero({
       label: 'OpenMeta Analyze',
@@ -426,32 +439,10 @@ export class AnalyzeOrchestrator {
     return selected;
   }
 
-  private selectTopSuggestion(suggestions: RepositoryImprovementSuggestion[]): RepositoryImprovementSuggestion {
-    const [selected] = [...suggestions].sort((left, right) => right.prPotentialScore - left.prPotentialScore);
-    if (!selected) {
-      throw new Error('No repository suggestions are available to select.');
-    }
-
-    return selected;
-  }
-
-  private async promptForSuggestion(
-    suggestions: RepositoryImprovementSuggestion[],
-  ): Promise<RepositoryImprovementSuggestion> {
-    return selectPrompt<RepositoryImprovementSuggestion>({
-      message: 'Select a repository suggestion to draft:',
-      pageSize: Math.min(10, suggestions.length),
-      choices: suggestions.slice(0, 5).map((suggestion) => ({
-        name: suggestion.title,
-        description: `score ${suggestion.prPotentialScore} | ${suggestion.summary.slice(0, 72)}`,
-        value: suggestion,
-      })),
-    });
-  }
-
   private async promptForCandidate(candidates: PresetAnalyzeCandidate[]): Promise<PresetAnalyzeCandidate> {
-    if (candidates.length === 1) {
-      return candidates[0]!;
+    const [onlyCandidate] = candidates;
+    if (onlyCandidate && candidates.length === 1) {
+      return onlyCandidate;
     }
 
     return selectPrompt<PresetAnalyzeCandidate>({

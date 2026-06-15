@@ -16,8 +16,33 @@ export interface OpportunityAnalysis {
   breakdown: OpportunityBreakdown;
 }
 
+export type ScoutFeasibilityLevel = 'ready' | 'likely_fixable' | 'risky' | 'likely_blocked' | 'unknown';
+export type ScoutIssueScope =
+  | 'docs_only'
+  | 'config_only'
+  | 'test_only'
+  | 'small_code_change'
+  | 'runtime_bug'
+  | 'performance'
+  | 'hardware_specific'
+  | 'unknown';
+
+export interface ScoutFeasibilityHint {
+  level: ScoutFeasibilityLevel;
+  issueScope: ScoutIssueScope;
+  repoRisks: string[];
+  issueRisks: string[];
+  missingLocalCapabilities: string[];
+  mitigations: string[];
+  confidence: 'low' | 'medium' | 'high';
+  scoreAdjustment: number;
+  adjustedOverallScore: number;
+  explanation: string;
+}
+
 export interface RankedIssue extends MatchedIssue {
   opportunity: OpportunityAnalysis;
+  scoutFeasibility?: ScoutFeasibilityHint;
 }
 
 export interface TestCommand {

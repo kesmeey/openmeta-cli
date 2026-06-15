@@ -1,5 +1,7 @@
-import { logger } from '../infra/index.js';
-import type { AppConfig, GitHubIssue, MatchedIssue, RankedIssue } from '../types/index.js';
+import { detectEnvironment, logger } from '../infra/index.js';
+import type { AppConfig, EnvironmentInfo, GitHubIssue, MatchedIssue, RankedIssue } from '../types/index.js';
+import { feasibilityHintService } from './feasibility-hints.js';
+import type { RepositoryProbe } from './github.js';
 import { githubService } from './github.js';
 import { llmService } from './llm.js';
 import { opportunityService } from './opportunity.js';
@@ -7,6 +9,7 @@ import { proofOfWorkService } from './proof-of-work.js';
 
 const ISSUE_SCORING_BATCH_SIZE = 20;
 const MAX_ISSUES_FOR_LLM_SCORING = 80;
+const MAX_ISSUES_FOR_FEASIBILITY_HINTS = 30;
 
 const PROFILE_TERM_ALIASES: Record<string, string[]> = {
   typescript: ['ts', 'tsx'],
@@ -35,6 +38,33 @@ const FOCUS_AREA_TERMS: Record<string, string[]> = {
 };
 
 export class IssueRankingService {
+  private cachedEnvironment: EnvironmentInfo | null = null;
+  private detectionPromise: Promise<EnvironmentInfo> | null = null;
+  private repoProbeCache = new Map<string, RepositoryProbe | null>();
+
+  ensureEnvironment(): Promise<EnvironmentInfo> {
+    if (this.cachedEnvironment) {
+      return Promise.resolve(this.cachedEnvironment);
+    }
+    if (!this.detectionPromise) {
+      this.detectionPromise = Promise.resolve().then(() => {
+        if (!this.cachedEnvironment) {
+          this.cachedEnvironment = detectEnvironment();
+        }
+        return this.cachedEnvironment;
+      });
+    }
+    return this.detectionPromise;
+  }
+
+  getEnvironmentCached(): EnvironmentInfo | null {
+    // Kick off background detection if not started; don't block the caller
+    if (!this.detectionPromise && !this.cachedEnvironment) {
+      this.ensureEnvironment();
+    }
+    return this.cachedEnvironment;
+  }
+
   async loadRankedIssues(
     config: AppConfig,
     options: {
@@ -51,7 +81,7 @@ export class IssueRankingService {
     });
     const rankedCandidates = this.rankIssuesForProfile(issues, config.userProfile);
     const matched = await this.scoreIssuesInBatches(config.userProfile, rankedCandidates);
-    return opportunityService.rankIssues(matched, config.scoring);
+    return this.applyScoutFeasibilityHints(opportunityService.rankIssues(matched, config.scoring));
   }
 
   async loadTargetIssue(
@@ -61,10 +91,12 @@ export class IssueRankingService {
     const issue = await githubService.fetchIssue(target.repoFullName, target.issueNumber);
     const [matched] = await this.scoreIssuesInBatches(config.userProfile, [issue]);
     if (!matched) {
-      return opportunityService.rankIssues(this.buildLocalIssueMatches([issue], config.userProfile), config.scoring);
+      return this.applyScoutFeasibilityHints(
+        opportunityService.rankIssues(this.buildLocalIssueMatches([issue], config.userProfile), config.scoring),
+      );
     }
 
-    return opportunityService.rankIssues([matched], config.scoring);
+    return this.applyScoutFeasibilityHints(opportunityService.rankIssues([matched], config.scoring));
   }
 
   buildLocalIssueMatches(issues: GitHubIssue[], userProfile: AppConfig['userProfile']): MatchedIssue[] {
@@ -132,7 +164,8 @@ export class IssueRankingService {
 
     const fresh = issues.filter(
       (issue) =>
-        issue.opportunity.overallScore >= minOverallScore &&
+        this.getAdjustedOverallScore(issue) >= minOverallScore &&
+        feasibilityHintService.isSafeForHeadless(issue) &&
         !contributedIds.has(`${issue.repoFullName}#${issue.number}`),
     );
 
@@ -141,7 +174,10 @@ export class IssueRankingService {
     }
 
     // Fallback: all above-threshold issues already attempted — pick best unattempted
-    const unattempted = issues.filter((issue) => !contributedIds.has(`${issue.repoFullName}#${issue.number}`));
+    const unattempted = issues.filter(
+      (issue) =>
+        !contributedIds.has(`${issue.repoFullName}#${issue.number}`) && feasibilityHintService.isSafeForHeadless(issue),
+    );
 
     return unattempted[0];
   }
@@ -181,6 +217,55 @@ export class IssueRankingService {
     }
 
     return selected;
+  }
+
+  private async applyScoutFeasibilityHints(issues: RankedIssue[]): Promise<RankedIssue[]> {
+    if (issues.length === 0) {
+      return [];
+    }
+
+    const environment = await this.ensureEnvironment();
+    const hintedIssues = await Promise.all(
+      issues.map(async (issue, index) => {
+        if (index >= MAX_ISSUES_FOR_FEASIBILITY_HINTS) {
+          return issue;
+        }
+
+        const probe = await this.loadRepositoryProbe(issue.repoFullName);
+        return {
+          ...issue,
+          scoutFeasibility: feasibilityHintService.assess(issue, probe, environment),
+        };
+      }),
+    );
+
+    return hintedIssues.sort(
+      (left, right) =>
+        this.getAdjustedOverallScore(right) - this.getAdjustedOverallScore(left) ||
+        right.opportunity.overallScore - left.opportunity.overallScore ||
+        right.matchScore - left.matchScore ||
+        right.updatedAt.localeCompare(left.updatedAt),
+    );
+  }
+
+  private async loadRepositoryProbe(repoFullName: string): Promise<RepositoryProbe | null> {
+    if (this.repoProbeCache.has(repoFullName)) {
+      return this.repoProbeCache.get(repoFullName) ?? null;
+    }
+
+    try {
+      const probe = await githubService.fetchRepositoryProbe(repoFullName);
+      this.repoProbeCache.set(repoFullName, probe);
+      return probe;
+    } catch (error) {
+      logger.debug(`Unable to build repository feasibility probe for ${repoFullName}`, error);
+      this.repoProbeCache.set(repoFullName, null);
+      return null;
+    }
+  }
+
+  private getAdjustedOverallScore(issue: RankedIssue): number {
+    return issue.scoutFeasibility?.adjustedOverallScore ?? issue.opportunity.overallScore;
   }
 
   private scoreIssueForProfile(issue: GitHubIssue, userProfile: AppConfig['userProfile']): number {

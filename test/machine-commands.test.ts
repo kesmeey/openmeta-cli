@@ -94,6 +94,7 @@ describe('machine commands', () => {
     spyOn(infra.configService, 'get').mockResolvedValue({
       userProfile: { techStack: [], proficiency: 'beginner', focusAreas: [] },
       github: { pat: '', username: '', targetRepoPath: '' },
+      repositoryTargeting: { activePreset: '', presets: {} },
       llm: {
         provider: 'openai',
         apiBaseUrl: 'https://api.openai.com/v1',
@@ -131,6 +132,7 @@ describe('machine commands', () => {
     spyOn(configOrchestrator, 'getMachineSnapshot').mockResolvedValue({
       userProfile: { techStack: [], proficiency: 'beginner', focusAreas: [] },
       github: { username: 'octocat', pat: '***oken', targetRepoPath: '' },
+      repositoryTargeting: { activePreset: '', presets: {} },
       llm: {
         provider: 'openai',
         apiBaseUrl: 'https://api.openai.com/v1',
@@ -171,6 +173,7 @@ describe('machine commands', () => {
       snapshot: {
         userProfile: { techStack: [], proficiency: 'beginner', focusAreas: [] },
         github: { username: 'octocat', pat: '***oken', targetRepoPath: '' },
+        repositoryTargeting: { activePreset: '', presets: {} },
         llm: {
           provider: 'openai',
           apiBaseUrl: 'https://api.openai.com/v1',
@@ -288,6 +291,7 @@ describe('machine commands', () => {
     spyOn(infra.configService, 'get').mockResolvedValue({
       userProfile: { techStack: ['typescript'], proficiency: 'intermediate', focusAreas: ['tooling'] },
       github: { pat: 'ghp_test_token', username: 'octocat', targetRepoPath: '' },
+      repositoryTargeting: { activePreset: '', presets: {} },
       llm: {
         provider: 'custom',
         apiBaseUrl: 'https://example.com/v1',
@@ -497,6 +501,7 @@ describe('machine commands', () => {
     spyOn(infra.configService, 'get').mockResolvedValue({
       userProfile: { techStack: ['typescript'], proficiency: 'intermediate', focusAreas: ['cli'] },
       github: { pat: 'ghp_test_token', username: 'octocat', targetRepoPath: '' },
+      repositoryTargeting: { activePreset: '', presets: {} },
       llm: {
         provider: 'custom',
         apiBaseUrl: 'https://example.com/v1',

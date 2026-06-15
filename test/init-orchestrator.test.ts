@@ -94,6 +94,11 @@ describe('InitOrchestrator LLM reasoning setup', () => {
         minMatchScore: 70,
         skipIfAlreadyGeneratedToday: true,
       },
+      scoring: {
+        weights: { freshness: 0.25, onboardingClarity: 0.25, mergePotential: 0.3, impact: 0.2, riskPenalty: 0.35 },
+        overallWeights: { technicalMatch: 0.45, opportunityScore: 0.55 },
+        preset: 'balanced',
+      },
       commitTemplate: 'feat: {{title}}',
     });
     const saveSpy = spyOn(infra.configService, 'save').mockResolvedValue(undefined);
@@ -103,9 +108,7 @@ describe('InitOrchestrator LLM reasoning setup', () => {
     spyOn(infra.ui, 'stats').mockImplementation(() => {});
     spyOn(infra.ui, 'callout').mockImplementation(() => {});
     spyOn(infra.ui, 'task').mockImplementation(async (_options, task) => task({ setMessage() {} } as never));
-    spyOn(infra, 'selectPrompt')
-      .mockResolvedValueOnce('beginner')
-      .mockResolvedValueOnce('research_note');
+    spyOn(infra, 'selectPrompt').mockResolvedValueOnce('beginner').mockResolvedValueOnce('research_note');
     const promptSpy = spyOn(infra, 'prompt')
       .mockResolvedValueOnce({ techStack: ['TypeScript'] })
       .mockResolvedValueOnce({ focusAreas: ['open-source'] })
@@ -117,21 +120,25 @@ describe('InitOrchestrator LLM reasoning setup', () => {
       .mockResolvedValueOnce({ automationEnabled: false });
     await orchestrator.execute();
 
-    expect(promptSpy).toHaveBeenCalledWith(expect.arrayContaining([
+    expect(promptSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'createPreset',
+          message: 'Create a reusable repository preset now?',
+        }),
+      ]),
+    );
+    expect(saveSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'createPreset',
-        message: 'Create a reusable repository preset now?',
-      }),
-    ]));
-    expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({
-      repositoryTargeting: {
-        activePreset: 'default',
-        presets: {
-          default: {
-            repos: ['vercel/next.js', 'facebook/react'],
+        repositoryTargeting: {
+          activePreset: 'default',
+          presets: {
+            default: {
+              repos: ['vercel/next.js', 'facebook/react'],
+            },
           },
         },
-      },
-    }));
+      }),
+    );
   });
 });
