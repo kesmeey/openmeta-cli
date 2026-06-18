@@ -8,6 +8,7 @@ import type { AppConfig, SchedulerProvider } from '../types/index.js';
 const LAUNCHD_LABEL = 'com.openmeta.daily';
 const CRON_TAG = '# openmeta-daily';
 const SCHTASKS_TASK_NAME = 'OpenMeta Daily';
+const SCHTASKS_MISSING_TASK_EXIT_CODES = new Set([2, 0x80070002]);
 const DEFAULT_PATH = '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin';
 
 type SchedulerSyncStatus = 'installed' | 'removed' | 'manual' | 'failed';
@@ -533,11 +534,24 @@ export class SchedulerService {
   }
 
   private isMissingSchtasksTask(result: CommandResult): boolean {
-    if (result.status !== 2 || process.platform !== 'win32') {
+    if (process.platform !== 'win32') {
+      return false;
+    }
+
+    const normalizedStatus = this.normalizeExitStatus(result.status);
+    if (normalizedStatus === null || !SCHTASKS_MISSING_TASK_EXIT_CODES.has(normalizedStatus)) {
       return false;
     }
 
     return !existsSync(this.getSchtasksTaskFilePath());
+  }
+
+  private normalizeExitStatus(status?: number | null): number | null {
+    if (typeof status !== 'number') {
+      return null;
+    }
+
+    return status >>> 0;
   }
 
   private getSchtasksTaskFilePath(): string {

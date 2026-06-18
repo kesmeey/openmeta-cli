@@ -71,4 +71,14 @@ jobs:
             console.error(remove.stderr || remove.stdout || `delete failed: ${remove.status}`);
             process.exit(remove.status || 1);
           }
+
+          const removeMissing = spawnSync('schtasks', ['/Delete', '/TN', taskName, '/F', '/HRESULT'], {
+            encoding: 'utf8',
+          });
+          if (removeMissing.status !== 2147942402) {
+            console.error(
+              removeMissing.stderr || removeMissing.stdout || `missing-task delete returned: ${removeMissing.status}`,
+            );
+            process.exit(1);
+          }
           '@ | node -

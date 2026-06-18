@@ -34,6 +34,7 @@ interface SchedulerTestHarness {
   windowsEscapeArg(value: string): string;
   escapeXml(value: string): string;
   getSchtasksTaskFilePath(): string;
+  normalizeExitStatus(status?: number | null): number | null;
 }
 
 let tempRoot = '';
@@ -371,7 +372,7 @@ describe('SchedulerService', () => {
       scheduler.runCommand = (command: string, args: string[], allowFailure?: boolean) => {
         invocations.push({ command, args, allowFailure });
         if (args[0] === '/Query') {
-          return { success: false, status: 2, message: 'ERROR: The system cannot find the file specified.' };
+          return { success: false, status: 0x80070002, message: 'ERROR: The system cannot find the file specified.' };
         }
 
         return { success: true };
@@ -411,6 +412,68 @@ describe('SchedulerService', () => {
     }
   });
 
+  test('treats HRESULT missing-task delete failures as already removed', async () => {
+    const scheduler = new SchedulerService() as unknown as SchedulerTestHarness;
+    const originalDetectProvider = scheduler.detectProvider;
+    const originalRunCommand = scheduler.runCommand;
+    const originalPlatform = process.platform;
+    const originalWindir = process.env['WINDIR'];
+    const fakeWindowsRoot = join(tempRoot, 'windows-root');
+    const invocations: Array<{ command: string; args: string[]; allowFailure?: boolean }> = [];
+
+    try {
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+      process.env['WINDIR'] = fakeWindowsRoot;
+      scheduler.detectProvider = () => 'schtasks';
+      scheduler.runCommand = (command: string, args: string[], allowFailure?: boolean) => {
+        invocations.push({ command, args, allowFailure });
+
+        if (args[0] === '/Query') {
+          return { success: true, status: 0 };
+        }
+
+        return { success: false, status: 0x80070002, message: 'ERROR: The system cannot find the file specified.' };
+      };
+
+      const result = await scheduler.sync(
+        createConfig({
+          automation: {
+            ...createConfig().automation,
+            enabled: false,
+            scheduler: 'schtasks',
+          },
+        }),
+      );
+
+      expect(result).toEqual({
+        provider: 'schtasks',
+        status: 'removed',
+        detail: 'Windows Task Scheduler automation was removed.',
+      });
+      expect(invocations).toEqual([
+        {
+          command: 'schtasks',
+          args: ['/Query', '/TN', 'OpenMeta Daily', '/HRESULT'],
+          allowFailure: true,
+        },
+        {
+          command: 'schtasks',
+          args: ['/Delete', '/TN', 'OpenMeta Daily', '/F', '/HRESULT'],
+          allowFailure: false,
+        },
+      ]);
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+      if (originalWindir === undefined) {
+        delete process.env['WINDIR'];
+      } else {
+        process.env['WINDIR'] = originalWindir;
+      }
+      scheduler.detectProvider = originalDetectProvider;
+      scheduler.runCommand = originalRunCommand;
+    }
+  });
+
   test('does not treat localized schtasks failures as missing when the task file still exists', () => {
     const scheduler = new SchedulerService() as unknown as SchedulerTestHarness;
     const originalPlatform = process.platform;
@@ -430,7 +493,7 @@ describe('SchedulerService', () => {
           }
         ).isMissingSchtasksTask({
           success: false,
-          status: 2,
+          status: 0x80070002,
           message: 'ERROR: 系统找不到指定的文件。',
         }),
       ).toBe(false);
@@ -443,6 +506,14 @@ describe('SchedulerService', () => {
         process.env['WINDIR'] = originalWindir;
       }
     }
+  });
+
+  test('normalizes schtasks HRESULT exit codes to unsigned integers', () => {
+    const scheduler = new SchedulerService() as unknown as SchedulerTestHarness;
+
+    expect(scheduler.normalizeExitStatus(0x80070002)).toBe(0x80070002);
+    expect(scheduler.normalizeExitStatus(-2147024894)).toBe(0x80070002);
+    expect(scheduler.normalizeExitStatus(undefined)).toBeNull();
   });
 
   test('renders launchd plist with escaped values and scheduler arguments', () => {
