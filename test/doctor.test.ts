@@ -3,8 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { DoctorOrchestrator } from '../src/orchestration/doctor.js';
-import { schedulerService } from '../src/services/scheduler.js';
 import * as runtimeDiagnosticsModule from '../src/services/runtime-diagnostics.js';
+import { schedulerService } from '../src/services/scheduler.js';
 import type { AppConfig } from '../src/types/index.js';
 
 let tempRoot = '';

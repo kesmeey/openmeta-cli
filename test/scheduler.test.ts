@@ -137,7 +137,9 @@ describe('SchedulerService', () => {
     const scheduler = new SchedulerService() as unknown as SchedulerTestHarness;
 
     expect(scheduler.shellEscape("/tmp/it's here")).toBe("'/tmp/it'\\''s here'");
-    expect(scheduler.windowsEscapeArg('C:\\Program Files\\OpenMeta\\bun.exe')).toBe('"C:\\Program Files\\OpenMeta\\bun.exe"');
+    expect(scheduler.windowsEscapeArg('C:\\Program Files\\OpenMeta\\bun.exe')).toBe(
+      '"C:\\Program Files\\OpenMeta\\bun.exe"',
+    );
     expect(scheduler.escapeXml(`A&B<"'`)).toBe('A&amp;B&lt;&quot;&apos;');
   });
 
@@ -422,7 +424,11 @@ describe('SchedulerService', () => {
       writeFileSync(taskFilePath, '<Task />', 'utf-8');
 
       expect(
-        (scheduler as unknown as { isMissingSchtasksTask: (result: { success: boolean; status?: number | null; message?: string }) => boolean }).isMissingSchtasksTask({
+        (
+          scheduler as unknown as {
+            isMissingSchtasksTask: (result: { success: boolean; status?: number | null; message?: string }) => boolean;
+          }
+        ).isMissingSchtasksTask({
           success: false,
           status: 2,
           message: 'ERROR: 系统找不到指定的文件。',

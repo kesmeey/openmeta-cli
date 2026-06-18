@@ -281,7 +281,19 @@ export class SchedulerService {
     const command = this.buildCommandString(context, 'schtasks');
     const createResult = this.runCommand(
       'schtasks',
-      ['/Create', '/TN', SCHTASKS_TASK_NAME, '/TR', command, '/SC', 'DAILY', '/ST', config.automation.scheduleTime, '/IT', '/F'],
+      [
+        '/Create',
+        '/TN',
+        SCHTASKS_TASK_NAME,
+        '/TR',
+        command,
+        '/SC',
+        'DAILY',
+        '/ST',
+        config.automation.scheduleTime,
+        '/IT',
+        '/F',
+      ],
       false,
     );
 
