@@ -23,6 +23,10 @@ function getDefaultSchedulerProvider(): AppConfig['automation']['scheduler'] {
     return 'cron';
   }
 
+  if (process.platform === 'win32') {
+    return 'schtasks';
+  }
+
   return 'manual';
 }
 
@@ -80,6 +84,18 @@ function createDefaultConfig(): AppConfig {
   };
 }
 
+function normalizeSchedulerProvider(
+  configured: AppConfig['automation']['scheduler'] | undefined,
+): AppConfig['automation']['scheduler'] {
+  const defaultProvider = getDefaultSchedulerProvider();
+
+  if (process.platform === 'win32' && configured === 'manual') {
+    return 'schtasks';
+  }
+
+  return configured || defaultProvider;
+}
+
 export class ConfigService {
   private config: AppConfig | null = null;
 
@@ -117,7 +133,13 @@ export class ConfigService {
 
     const encryptedConfig = this.encryptConfig(config);
     writeFileSync(configFilePath, JSON.stringify(encryptedConfig, null, 2), 'utf-8');
-    this.config = config;
+    this.config = {
+      ...config,
+      automation: {
+        ...config.automation,
+        scheduler: normalizeSchedulerProvider(config.automation?.scheduler),
+      },
+    };
     logger.success('Configuration saved successfully');
   }
 
@@ -224,6 +246,7 @@ export class ConfigService {
       automation: {
         ...defaults.automation,
         ...config.automation,
+        scheduler: normalizeSchedulerProvider(config.automation?.scheduler),
       },
       scoring: {
         ...defaults.scoring,
