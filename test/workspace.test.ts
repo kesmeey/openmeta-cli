@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { simpleGit } from 'simple-git';
+import { pathToFileURL } from 'url';
 import { workspaceService } from '../src/services/workspace.js';
 import { createMemory, createRankedIssue } from './helpers/factories.js';
 
@@ -18,7 +19,13 @@ afterEach(() => {
   while (tempDirs.length > 0) {
     const dir = tempDirs.pop();
     if (dir) {
-      rmSync(dir, { recursive: true, force: true });
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch (error) {
+        if (!(error instanceof Error) || !/EBUSY/i.test(error.message)) {
+          throw error;
+        }
+      }
     }
   }
 });
@@ -122,230 +129,246 @@ describe('workspaceService.applyGeneratedChanges', () => {
 });
 
 describe('workspaceService.detectTestCommands', () => {
-  test('uses a local repository path by creating an isolated worktree instead of cloning into the managed workspace', async () => {
-    const tempRoot = makeWorkspace();
-    const openMetaHome = join(tempRoot, 'openmeta-home');
-    const sourcePath = join(tempRoot, 'source');
-    process.env['OPENMETA_HOME'] = openMetaHome;
+  test(
+    'uses a local repository path by creating an isolated worktree instead of cloning into the managed workspace',
+    async () => {
+      const tempRoot = makeWorkspace();
+      const openMetaHome = join(tempRoot, 'openmeta-home');
+      const sourcePath = join(tempRoot, 'source');
+      process.env['OPENMETA_HOME'] = openMetaHome;
 
-    mkdirSync(sourcePath, { recursive: true });
-    const git = simpleGit(sourcePath);
-    await git.init(['--initial-branch=main']);
-    await git.addConfig('user.name', 'OpenMeta Test');
-    await git.addConfig('user.email', 'openmeta@example.com');
-    writeFileSync(join(sourcePath, 'README.md'), '# Local Demo\n', 'utf-8');
-    await git.add('README.md');
-    await git.commit('chore: seed local repo');
+      mkdirSync(sourcePath, { recursive: true });
+      const git = simpleGit(sourcePath);
+      await git.init(['--initial-branch=main']);
+      await git.addConfig('user.name', 'OpenMeta Test');
+      await git.addConfig('user.email', 'openmeta@example.com');
+      writeFileSync(join(sourcePath, 'README.md'), '# Local Demo\n', 'utf-8');
+      await git.add('README.md');
+      await git.commit('chore: seed local repo');
 
-    try {
-      const workspace = await (
-        workspaceService as unknown as {
-          prepareRepositoryWorkspace(
-            repoFullName: string,
-            memory: ReturnType<typeof createMemory>,
-            runChecks: boolean,
-            executionMode?: 'interactive' | 'headless',
-            repoPath?: string,
-          ): Promise<{
-            workspacePath: string;
-            branchName?: string;
-            topLevelFiles: string[];
-          }>;
-        }
-      ).prepareRepositoryWorkspace(
-        'acme/demo',
-        createMemory({ repoFullName: 'acme/demo' }),
-        false,
-        'interactive',
-        sourcePath,
-      );
+      try {
+        const workspace = await (
+          workspaceService as unknown as {
+            prepareRepositoryWorkspace(
+              repoFullName: string,
+              memory: ReturnType<typeof createMemory>,
+              runChecks: boolean,
+              executionMode?: 'interactive' | 'headless',
+              repoPath?: string,
+            ): Promise<{
+              workspacePath: string;
+              branchName?: string;
+              topLevelFiles: string[];
+            }>;
+          }
+        ).prepareRepositoryWorkspace(
+          'acme/demo',
+          createMemory({ repoFullName: 'acme/demo' }),
+          false,
+          'interactive',
+          sourcePath,
+        );
 
-      expect(workspace.workspacePath).toContain(join('openmeta-home', 'worktrees'));
-      expect(workspace.workspacePath).not.toBe(sourcePath);
-      expect(workspace.branchName).toMatch(/^openmeta\/analyze-acme-demo/);
-      expect(workspace.topLevelFiles).toContain('README.md');
+        expect(workspace.workspacePath).toContain(join('openmeta-home', 'worktrees'));
+        expect(workspace.workspacePath).not.toBe(sourcePath);
+        expect(workspace.branchName).toMatch(/^openmeta\/analyze-acme-demo/);
+        expect(workspace.topLevelFiles).toContain('README.md');
 
-      const managedMirrorPath = join(openMetaHome, 'workspaces', 'acme__demo');
-      expect(existsSync(managedMirrorPath)).toBe(false);
-    } finally {
-      delete process.env['OPENMETA_HOME'];
-    }
-  });
+        const managedMirrorPath = join(openMetaHome, 'workspaces', 'acme__demo');
+        expect(existsSync(managedMirrorPath)).toBe(false);
+      } finally {
+        delete process.env['OPENMETA_HOME'];
+      }
+    },
+    { timeout: 20_000 },
+  );
 
-  test('prepares repository workspace without a real issue target', async () => {
-    const tempRoot = makeWorkspace();
-    const openMetaHome = join(tempRoot, 'openmeta-home');
-    const remotePath = join(tempRoot, 'remote.git');
-    const seedPath = join(tempRoot, 'seed');
-    process.env['OPENMETA_HOME'] = openMetaHome;
+  test(
+    'prepares repository workspace without a real issue target',
+    async () => {
+      const tempRoot = makeWorkspace();
+      const openMetaHome = join(tempRoot, 'openmeta-home');
+      const remotePath = join(tempRoot, 'remote.git');
+      const seedPath = join(tempRoot, 'seed');
+      process.env['OPENMETA_HOME'] = openMetaHome;
 
-    mkdirSync(seedPath, { recursive: true });
-    const seedGit = simpleGit(seedPath);
-    await seedGit.init(['--initial-branch=main']);
-    await seedGit.addConfig('user.name', 'OpenMeta Test');
-    await seedGit.addConfig('user.email', 'openmeta@example.com');
-    mkdirSync(join(seedPath, 'src'), { recursive: true });
-    writeFileSync(join(seedPath, 'README.md'), '# Demo\n\nMissing setup notes.\n', 'utf-8');
-    writeFileSync(
-      join(seedPath, 'package.json'),
-      JSON.stringify({
-        scripts: {
-          test: 'bun test',
-        },
-      }),
-      'utf-8',
-    );
-    writeFileSync(join(seedPath, 'src', 'index.ts'), 'export const demo = true;\n', 'utf-8');
-    await seedGit.add('.');
-    await seedGit.commit('chore: seed repo');
-    await simpleGit().clone(seedPath, remotePath, ['--bare']);
-
-    const service = workspaceService as unknown as {
-      buildRepoUrl(repoFullName: string): string;
-      prepareRepositoryWorkspace(
-        repoFullName: string,
-        memory: ReturnType<typeof createMemory>,
-        runChecks: boolean,
-        executionMode?: 'interactive' | 'headless',
-      ): Promise<{
-        workspacePath: string;
-        defaultBranch: string;
-        branchName?: string;
-        topLevelFiles: string[];
-        candidateFiles: string[];
-        snippets: Array<{ path: string; content: string }>;
-        testCommands: Array<{ command: string }>;
-      }>;
-    };
-    const originalBuildRepoUrl = service.buildRepoUrl;
-    service.buildRepoUrl = () => remotePath;
-
-    try {
-      const workspace = await service.prepareRepositoryWorkspace(
-        'acme/demo',
-        createMemory({
-          repoFullName: 'acme/demo',
-          preferredPaths: ['src/index.ts'],
+      mkdirSync(seedPath, { recursive: true });
+      const seedGit = simpleGit(seedPath);
+      await seedGit.init(['--initial-branch=main']);
+      await seedGit.addConfig('user.name', 'OpenMeta Test');
+      await seedGit.addConfig('user.email', 'openmeta@example.com');
+      mkdirSync(join(seedPath, 'src'), { recursive: true });
+      writeFileSync(join(seedPath, 'README.md'), '# Demo\n\nMissing setup notes.\n', 'utf-8');
+      writeFileSync(
+        join(seedPath, 'package.json'),
+        JSON.stringify({
+          scripts: {
+            test: 'bun test',
+          },
         }),
-        false,
+        'utf-8',
       );
+      writeFileSync(join(seedPath, 'src', 'index.ts'), 'export const demo = true;\n', 'utf-8');
+      await seedGit.add('.');
+      await seedGit.commit('chore: seed repo');
+      await simpleGit().clone(seedPath, remotePath, ['--bare']);
 
-      expect(workspace.defaultBranch).toBe('main');
-      expect(workspace.branchName).toMatch(/^openmeta\/analyze-acme-demo/);
-      expect(workspace.topLevelFiles).toContain('README.md');
-      expect(workspace.candidateFiles).toContain('README.md');
-      expect(workspace.candidateFiles).toContain('src/index.ts');
-      expect(workspace.snippets.some((snippet) => snippet.path === 'README.md')).toBe(true);
-      expect(workspace.testCommands.map((command) => command.command)).toContain('bun run test');
-    } finally {
-      service.buildRepoUrl = originalBuildRepoUrl;
-      delete process.env['OPENMETA_HOME'];
-    }
-  });
+      const service = workspaceService as unknown as {
+        buildRepoUrl(repoFullName: string): string;
+        prepareRepositoryWorkspace(
+          repoFullName: string,
+          memory: ReturnType<typeof createMemory>,
+          runChecks: boolean,
+          executionMode?: 'interactive' | 'headless',
+        ): Promise<{
+          workspacePath: string;
+          defaultBranch: string;
+          branchName?: string;
+          topLevelFiles: string[];
+          candidateFiles: string[];
+          snippets: Array<{ path: string; content: string }>;
+          testCommands: Array<{ command: string }>;
+        }>;
+      };
+      const originalBuildRepoUrl = service.buildRepoUrl;
+      service.buildRepoUrl = () => pathToFileURL(remotePath).href;
 
-  test('creates a shallow single-branch clone for new managed workspaces', async () => {
-    const tempRoot = makeWorkspace();
-    const openMetaHome = join(tempRoot, 'openmeta-home');
-    const remotePath = join(tempRoot, 'remote.git');
-    const seedPath = join(tempRoot, 'seed');
-    process.env['OPENMETA_HOME'] = openMetaHome;
+      try {
+        const workspace = await service.prepareRepositoryWorkspace(
+          'acme/demo',
+          createMemory({
+            repoFullName: 'acme/demo',
+            preferredPaths: ['src/index.ts'],
+          }),
+          false,
+        );
 
-    mkdirSync(seedPath, { recursive: true });
-    const seedGit = simpleGit(seedPath);
-    await seedGit.init(['--initial-branch=main']);
-    await seedGit.addConfig('user.name', 'OpenMeta Test');
-    await seedGit.addConfig('user.email', 'openmeta@example.com');
-    writeFileSync(join(seedPath, 'README.md'), '# Demo\n', 'utf-8');
-    await seedGit.add('README.md');
-    await seedGit.commit('chore: seed repo');
-    await simpleGit().clone(seedPath, remotePath, ['--bare']);
+        expect(workspace.defaultBranch).toBe('main');
+        expect(workspace.branchName).toMatch(/^openmeta\/analyze-acme-demo/);
+        expect(workspace.topLevelFiles).toContain('README.md');
+        expect(workspace.candidateFiles).toContain('README.md');
+        expect(workspace.candidateFiles).toContain('src/index.ts');
+        expect(workspace.snippets.some((snippet) => snippet.path === 'README.md')).toBe(true);
+        expect(workspace.testCommands.map((command) => command.command)).toContain('bun run test');
+      } finally {
+        service.buildRepoUrl = originalBuildRepoUrl;
+        delete process.env['OPENMETA_HOME'];
+      }
+    },
+    { timeout: 20_000 },
+  );
 
-    const service = workspaceService as unknown as {
-      buildRepoUrl(repoFullName: string): string;
-      prepareRepositoryWorkspace(
-        repoFullName: string,
-        memory: ReturnType<typeof createMemory>,
-        runChecks: boolean,
-        executionMode?: 'interactive' | 'headless',
-        repoPath?: string,
-      ): Promise<{ workspacePath: string }>;
-    };
-    const originalBuildRepoUrl = service.buildRepoUrl;
-    service.buildRepoUrl = () => remotePath;
+  test(
+    'creates a shallow single-branch clone for new managed workspaces',
+    async () => {
+      const tempRoot = makeWorkspace();
+      const openMetaHome = join(tempRoot, 'openmeta-home');
+      const remotePath = join(tempRoot, 'remote.git');
+      const seedPath = join(tempRoot, 'seed');
+      process.env['OPENMETA_HOME'] = openMetaHome;
 
-    try {
-      const workspace = await service.prepareRepositoryWorkspace(
-        'acme/demo',
-        createMemory({ repoFullName: 'acme/demo' }),
-        false,
-      );
-      const clonedGit = simpleGit(workspace.workspacePath);
-      const shallowFile = join(workspace.workspacePath, '.git', 'shallow');
-      const remoteBranches = await clonedGit.branch(['-r']);
+      mkdirSync(seedPath, { recursive: true });
+      const seedGit = simpleGit(seedPath);
+      await seedGit.init(['--initial-branch=main']);
+      await seedGit.addConfig('user.name', 'OpenMeta Test');
+      await seedGit.addConfig('user.email', 'openmeta@example.com');
+      writeFileSync(join(seedPath, 'README.md'), '# Demo\n', 'utf-8');
+      await seedGit.add('README.md');
+      await seedGit.commit('chore: seed repo');
+      await simpleGit().clone(seedPath, remotePath, ['--bare']);
 
-      expect(existsSync(shallowFile)).toBe(true);
-      expect(remoteBranches.all).toEqual(['origin/main']);
-    } finally {
-      service.buildRepoUrl = originalBuildRepoUrl;
-      delete process.env['OPENMETA_HOME'];
-    }
-  });
+      const service = workspaceService as unknown as {
+        buildRepoUrl(repoFullName: string): string;
+        prepareRepositoryWorkspace(
+          repoFullName: string,
+          memory: ReturnType<typeof createMemory>,
+          runChecks: boolean,
+          executionMode?: 'interactive' | 'headless',
+          repoPath?: string,
+        ): Promise<{ workspacePath: string }>;
+      };
+      const originalBuildRepoUrl = service.buildRepoUrl;
+      service.buildRepoUrl = () => pathToFileURL(remotePath).href;
 
-  test('rebuilds a managed workspace when the cached clone has an invalid HEAD', async () => {
-    const tempRoot = makeWorkspace();
-    const openMetaHome = join(tempRoot, 'openmeta-home');
-    const remotePath = join(tempRoot, 'remote.git');
-    const seedPath = join(tempRoot, 'seed');
-    process.env['OPENMETA_HOME'] = openMetaHome;
+      try {
+        const workspace = await service.prepareRepositoryWorkspace(
+          'acme/demo',
+          createMemory({ repoFullName: 'acme/demo' }),
+          false,
+        );
+        const clonedGit = simpleGit(workspace.workspacePath);
+        const shallowFile = join(workspace.workspacePath, '.git', 'shallow');
+        const remoteBranches = await clonedGit.branch(['-r']);
 
-    mkdirSync(seedPath, { recursive: true });
-    const seedGit = simpleGit(seedPath);
-    await seedGit.init(['--initial-branch=main']);
-    await seedGit.addConfig('user.name', 'OpenMeta Test');
-    await seedGit.addConfig('user.email', 'openmeta@example.com');
-    writeFileSync(join(seedPath, 'README.md'), '# Demo\n', 'utf-8');
-    await seedGit.add('README.md');
-    await seedGit.commit('chore: seed repo');
-    await simpleGit().clone(seedPath, remotePath, ['--bare']);
+        expect(existsSync(shallowFile)).toBe(true);
+        expect(remoteBranches.all).toEqual(['origin/main']);
+      } finally {
+        service.buildRepoUrl = originalBuildRepoUrl;
+        delete process.env['OPENMETA_HOME'];
+      }
+    },
+    { timeout: 20_000 },
+  );
 
-    const service = workspaceService as unknown as {
-      buildRepoUrl(repoFullName: string): string;
-      prepareRepositoryWorkspace(
-        repoFullName: string,
-        memory: ReturnType<typeof createMemory>,
-        runChecks: boolean,
-        executionMode?: 'interactive' | 'headless',
-        repoPath?: string,
-      ): Promise<{ workspacePath: string; topLevelFiles: string[] }>;
-    };
-    const originalBuildRepoUrl = service.buildRepoUrl;
-    service.buildRepoUrl = () => remotePath;
+  test(
+    'rebuilds a managed workspace when the cached clone has an invalid HEAD',
+    async () => {
+      const tempRoot = makeWorkspace();
+      const openMetaHome = join(tempRoot, 'openmeta-home');
+      const remotePath = join(tempRoot, 'remote.git');
+      const seedPath = join(tempRoot, 'seed');
+      process.env['OPENMETA_HOME'] = openMetaHome;
 
-    try {
-      const firstWorkspace = await service.prepareRepositoryWorkspace(
-        'acme/demo',
-        createMemory({ repoFullName: 'acme/demo' }),
-        false,
-      );
-      const headPath = join(firstWorkspace.workspacePath, '.git', 'refs', 'heads', 'main');
-      writeFileSync(headPath, '0000000000000000000000000000000000000000\n', 'utf-8');
+      mkdirSync(seedPath, { recursive: true });
+      const seedGit = simpleGit(seedPath);
+      await seedGit.init(['--initial-branch=main']);
+      await seedGit.addConfig('user.name', 'OpenMeta Test');
+      await seedGit.addConfig('user.email', 'openmeta@example.com');
+      writeFileSync(join(seedPath, 'README.md'), '# Demo\n', 'utf-8');
+      await seedGit.add('README.md');
+      await seedGit.commit('chore: seed repo');
+      await simpleGit().clone(seedPath, remotePath, ['--bare']);
 
-      const recoveredWorkspace = await service.prepareRepositoryWorkspace(
-        'acme/demo',
-        createMemory({ repoFullName: 'acme/demo' }),
-        false,
-      );
-      const recoveredGit = simpleGit(recoveredWorkspace.workspacePath);
-      const branchSummary = await recoveredGit.branchLocal();
+      const service = workspaceService as unknown as {
+        buildRepoUrl(repoFullName: string): string;
+        prepareRepositoryWorkspace(
+          repoFullName: string,
+          memory: ReturnType<typeof createMemory>,
+          runChecks: boolean,
+          executionMode?: 'interactive' | 'headless',
+          repoPath?: string,
+        ): Promise<{ workspacePath: string; topLevelFiles: string[] }>;
+      };
+      const originalBuildRepoUrl = service.buildRepoUrl;
+      service.buildRepoUrl = () => pathToFileURL(remotePath).href;
 
-      expect(recoveredWorkspace.workspacePath).toBe(firstWorkspace.workspacePath);
-      expect(recoveredWorkspace.topLevelFiles).toContain('README.md');
-      expect(branchSummary.current).toMatch(/^openmeta\/analyze-acme-demo/);
-    } finally {
-      service.buildRepoUrl = originalBuildRepoUrl;
-      delete process.env['OPENMETA_HOME'];
-    }
-  });
+      try {
+        const firstWorkspace = await service.prepareRepositoryWorkspace(
+          'acme/demo',
+          createMemory({ repoFullName: 'acme/demo' }),
+          false,
+        );
+        const headPath = join(firstWorkspace.workspacePath, '.git', 'refs', 'heads', 'main');
+        writeFileSync(headPath, '0000000000000000000000000000000000000000\n', 'utf-8');
+
+        const recoveredWorkspace = await service.prepareRepositoryWorkspace(
+          'acme/demo',
+          createMemory({ repoFullName: 'acme/demo' }),
+          false,
+        );
+        const recoveredGit = simpleGit(recoveredWorkspace.workspacePath);
+        const branchSummary = await recoveredGit.branchLocal();
+
+        expect(recoveredWorkspace.workspacePath).toBe(firstWorkspace.workspacePath);
+        expect(recoveredWorkspace.topLevelFiles).toContain('README.md');
+        expect(branchSummary.current).toMatch(/^openmeta\/analyze-acme-demo/);
+      } finally {
+        service.buildRepoUrl = originalBuildRepoUrl;
+        delete process.env['OPENMETA_HOME'];
+      }
+    },
+    { timeout: 20_000 },
+  );
 
   test('prefers bun for package scripts when a bun lockfile is present', () => {
     const workspacePath = makeWorkspace();

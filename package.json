@@ -20,7 +20,7 @@
     "openmeta": "bin/openmeta.js"
   },
   "scripts": {
-    "build": "bun build --target=bun --outfile=bin/openmeta.js ./src/cli.ts",
+    "build": "node ./scripts/build.mjs",
     "dev": "bun run ./src/cli.ts",
     "start": "bun run ./src/cli.ts",
     "lint": "biome lint --max-diagnostics=1000 src test index.ts package.json tsconfig.json",

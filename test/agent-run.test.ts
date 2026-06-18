@@ -65,6 +65,14 @@ interface AgentRunInternals {
   writeLocalArtifacts(input: unknown): void;
   showResult(result: ContributionAgentResult): void;
   showStructuredReviewNotice(input: { title: string; subtitle: string; lines?: string[] }): void;
+  assessExecutionFeasibility(input: unknown): Promise<{
+    assessment: { summary: string };
+    shouldStop: boolean;
+    effectiveDraftOnly: boolean;
+    effectiveLocalArtifactsOnly: boolean;
+    allowRealPr: boolean;
+    skipReasons: string[];
+  }>;
 }
 
 interface AnalyzeRunInternals {
@@ -357,6 +365,19 @@ describe('AgentOrchestrator run flow', () => {
     spyOn(contentService, 'formatContributionDossier').mockReturnValue('# Dossier');
     spyOn(
       orchestrator as object as {
+        assessExecutionFeasibility: AgentRunInternals['assessExecutionFeasibility'];
+      },
+      'assessExecutionFeasibility',
+    ).mockResolvedValue({
+      assessment: { summary: 'Ready to proceed' },
+      shouldStop: false,
+      effectiveDraftOnly: false,
+      effectiveLocalArtifactsOnly: false,
+      allowRealPr: true,
+      skipReasons: [],
+    });
+    spyOn(
+      orchestrator as object as {
         submitContributionPullRequestIfPossible: AgentRunInternals['submitContributionPullRequestIfPossible'];
       },
       'submitContributionPullRequestIfPossible',
@@ -388,6 +409,19 @@ describe('AgentOrchestrator run flow', () => {
     spyOn(proofOfWorkService, 'record').mockReturnValue([createProofRecord()]);
     spyOn(memoryService, 'renderMarkdown').mockReturnValue('# Memory');
     spyOn(memoryService, 'recordOutcome').mockReturnValue(memory);
+    spyOn(
+      orchestrator as object as {
+        assessExecutionFeasibility: AgentRunInternals['assessExecutionFeasibility'];
+      },
+      'assessExecutionFeasibility',
+    ).mockResolvedValue({
+      assessment: { summary: 'Ready to proceed' },
+      shouldStop: false,
+      effectiveDraftOnly: false,
+      effectiveLocalArtifactsOnly: false,
+      allowRealPr: true,
+      skipReasons: [],
+    });
 
     await orchestrator.run();
 
@@ -494,6 +528,19 @@ describe('AgentOrchestrator run flow', () => {
     spyOn(proofOfWorkService, 'record').mockReturnValue([createProofRecord()]);
     spyOn(memoryService, 'renderMarkdown').mockReturnValue('# Memory');
     spyOn(memoryService, 'recordOutcome').mockReturnValue(memory);
+    spyOn(
+      orchestrator as object as {
+        assessExecutionFeasibility: AgentRunInternals['assessExecutionFeasibility'];
+      },
+      'assessExecutionFeasibility',
+    ).mockResolvedValue({
+      assessment: { summary: 'Ready to proceed' },
+      shouldStop: false,
+      effectiveDraftOnly: false,
+      effectiveLocalArtifactsOnly: false,
+      allowRealPr: true,
+      skipReasons: [],
+    });
 
     await orchestrator.run({ issue: 'https://github.com/Wei-Shaw/sub2api/issues/3014' });
 
@@ -654,6 +701,19 @@ describe('AgentOrchestrator run flow', () => {
     spyOn(proofOfWorkService, 'record').mockReturnValue([createProofRecord()]);
     spyOn(memoryService, 'renderMarkdown').mockReturnValue('# Memory');
     spyOn(memoryService, 'recordOutcome').mockReturnValue(nextMemory);
+    spyOn(
+      orchestrator as object as {
+        assessExecutionFeasibility: AgentRunInternals['assessExecutionFeasibility'];
+      },
+      'assessExecutionFeasibility',
+    ).mockResolvedValue({
+      assessment: { summary: 'Ready to proceed' },
+      shouldStop: false,
+      effectiveDraftOnly: false,
+      effectiveLocalArtifactsOnly: false,
+      allowRealPr: true,
+      skipReasons: [],
+    });
 
     await orchestrator.run();
 
@@ -838,6 +898,19 @@ describe('AgentOrchestrator run flow', () => {
     spyOn(proofOfWorkService, 'record').mockReturnValue([createProofRecord()]);
     spyOn(memoryService, 'renderMarkdown').mockReturnValue('# Memory');
     spyOn(memoryService, 'recordOutcome').mockReturnValue(memory);
+    spyOn(
+      orchestrator as object as {
+        assessExecutionFeasibility: AgentRunInternals['assessExecutionFeasibility'];
+      },
+      'assessExecutionFeasibility',
+    ).mockResolvedValue({
+      assessment: { summary: 'Ready to proceed' },
+      shouldStop: false,
+      effectiveDraftOnly: false,
+      effectiveLocalArtifactsOnly: false,
+      allowRealPr: true,
+      skipReasons: [],
+    });
 
     await orchestrator.run();
 
@@ -932,6 +1005,19 @@ describe('AgentOrchestrator run flow', () => {
     spyOn(proofOfWorkService, 'record').mockReturnValue([createProofRecord()]);
     spyOn(memoryService, 'renderMarkdown').mockReturnValue('# Memory');
     const recordOutcomeSpy = spyOn(memoryService, 'recordOutcome').mockReturnValue(memory);
+    spyOn(
+      orchestrator as object as {
+        assessExecutionFeasibility: AgentRunInternals['assessExecutionFeasibility'];
+      },
+      'assessExecutionFeasibility',
+    ).mockResolvedValue({
+      assessment: { summary: 'Ready to proceed' },
+      shouldStop: false,
+      effectiveDraftOnly: false,
+      effectiveLocalArtifactsOnly: false,
+      allowRealPr: true,
+      skipReasons: [],
+    });
     const showResultSpy = spyOn(
       orchestrator as object as { showResult: AgentRunInternals['showResult'] },
       'showResult',
