@@ -93,6 +93,19 @@ export interface MachineAgentResult {
   changedFiles: string[];
   validationResults: TestResult[];
   reviewRequired: boolean;
+  implementationAttempts?: number;
+  implementationStopReason?:
+    | 'draft_only'
+    | 'dirty_workspace'
+    | 'no_new_context'
+    | 'max_attempts'
+    | 'implementation_requires_review'
+    | 'no_changes'
+    | 'apply_review_required'
+    | 'no_effective_change'
+    | 'applied'
+    | 'generation_failed';
+  implementationContextFilesAdded?: number;
   published: boolean;
   prCreated: boolean;
   repoMutated: boolean;
@@ -131,6 +144,19 @@ interface ConcretePatchResult {
   changedFiles: string[];
   validationResults: TestResult[];
   reviewRequired: boolean;
+  implementationAttempts?: number;
+  implementationStopReason?:
+    | 'draft_only'
+    | 'dirty_workspace'
+    | 'no_new_context'
+    | 'max_attempts'
+    | 'implementation_requires_review'
+    | 'no_changes'
+    | 'apply_review_required'
+    | 'no_effective_change'
+    | 'applied'
+    | 'generation_failed';
+  implementationContextFilesAdded?: number;
 }
 
 interface FeasibilityPolicy {
@@ -151,6 +177,8 @@ interface PresetAnalyzeCandidate {
 
 type AgentStageId = 'scout' | 'select' | 'prepare' | 'draft' | 'validate' | 'pr' | 'publish';
 const ARTIFACT_PUBLISH_BRANCH = 'openmeta-artifacts';
+const MAX_IMPLEMENTATION_ATTEMPTS = 3;
+const MAX_IMPLEMENTATION_EXPANSION_FILES = 8;
 
 const AGENT_STAGES: Array<{ id: AgentStageId; label: string; description: string }> = [
   {
@@ -537,6 +565,9 @@ export class AgentOrchestrator {
           changedFiles: implementation.changedFiles,
           validationResults: implementation.validationResults,
           reviewRequired,
+          implementationAttempts: implementation.implementationAttempts,
+          implementationStopReason: implementation.implementationStopReason,
+          implementationContextFilesAdded: implementation.implementationContextFilesAdded,
           published: false,
           prCreated: Boolean(contributionPullRequest.url),
           repoMutated: implementation.changedFiles.length > 0,
@@ -635,6 +666,9 @@ export class AgentOrchestrator {
             changedFiles: [],
             validationResults: implementationWorkspace.testResults,
             reviewRequired: true,
+            implementationAttempts: 0,
+            implementationStopReason: 'implementation_requires_review' as const,
+            implementationContextFilesAdded: 0,
           };
 
     const workspaceForArtifacts: RepoWorkspaceContext = {
@@ -841,6 +875,9 @@ export class AgentOrchestrator {
           : ['inspect_artifact_paths'],
       pullRequestUrl: contributionPullRequest.url,
       pullRequestNumber: contributionPullRequest.number,
+      implementationAttempts: implementation.implementationAttempts,
+      implementationStopReason: implementation.implementationStopReason,
+      implementationContextFilesAdded: implementation.implementationContextFilesAdded,
     };
   }
 
@@ -2594,6 +2631,9 @@ export class AgentOrchestrator {
         changedFiles: [],
         validationResults: workspace.testResults,
         reviewRequired: false,
+        implementationAttempts: 0,
+        implementationStopReason: 'draft_only',
+        implementationContextFilesAdded: 0,
       };
     }
 
@@ -2611,20 +2651,60 @@ export class AgentOrchestrator {
         changedFiles: [],
         validationResults: workspace.testResults,
         reviewRequired: true,
+        implementationAttempts: 0,
+        implementationStopReason: 'dirty_workspace',
+        implementationContextFilesAdded: 0,
       };
     }
 
     try {
-      const implementation = await ui.task(
+      let implementationWorkspace = workspace;
+      let implementationContextFilesAdded = 0;
+      let implementationStopReason: ConcretePatchResult['implementationStopReason'] = 'max_attempts';
+      let implementation = await ui.task(
         {
           title: 'Generating concrete patch',
           doneMessage: 'Concrete patch generated',
           failedMessage: 'Concrete patch generation failed',
           tone: 'info',
         },
-        async () => llmService.generateImplementationDraft(issue, workspace, patchDraft),
+        async () => llmService.generateImplementationDraft(issue, implementationWorkspace, patchDraft),
       );
+      let implementationAttempts = 1;
+
+      while (
+        implementationAttempts < MAX_IMPLEMENTATION_ATTEMPTS &&
+        (implementation.status !== 'success' || implementation.data.fileChanges.length === 0)
+      ) {
+        const expansion = workspaceService.expandImplementationContext(implementationWorkspace, {
+          maxFiles: MAX_IMPLEMENTATION_EXPANSION_FILES,
+        });
+
+        if (expansion.addedFiles.length === 0) {
+          implementationStopReason = 'no_new_context';
+          break;
+        }
+
+        implementationContextFilesAdded += expansion.addedFiles.length;
+        logger.info(
+          `Implementation context expansion round ${implementationAttempts} loaded ${expansion.addedFiles.length} additional file(s).`,
+        );
+        implementationWorkspace = expansion.workspace;
+        implementationAttempts += 1;
+        implementation = await ui.task(
+          {
+            title: `Retrying concrete patch with expanded context (${implementationAttempts}/${MAX_IMPLEMENTATION_ATTEMPTS})`,
+            doneMessage: 'Concrete patch retry generated',
+            failedMessage: 'Concrete patch retry failed',
+            tone: 'info',
+          },
+          async () => llmService.generateImplementationDraft(issue, implementationWorkspace, patchDraft),
+        );
+      }
+
       if (implementation.status !== 'success') {
+        implementationStopReason =
+          implementationStopReason === 'max_attempts' ? 'implementation_requires_review' : implementationStopReason;
         this.showStructuredReviewNotice({
           title: 'Concrete patch requires review',
           subtitle:
@@ -2637,12 +2717,17 @@ export class AgentOrchestrator {
         logger.warn('Skipping automatic file edits because the implementation draft requires review.');
         return {
           changedFiles: [],
-          validationResults: workspace.testResults,
+          validationResults: implementationWorkspace.testResults,
           reviewRequired: true,
+          implementationAttempts,
+          implementationStopReason,
+          implementationContextFilesAdded,
         };
       }
 
       if (implementation.data.fileChanges.length === 0) {
+        implementationStopReason =
+          implementationStopReason === 'max_attempts' ? 'no_changes' : implementationStopReason;
         ui.callout({
           label: 'OpenMeta Agent',
           title: 'Concrete patch not produced',
@@ -2656,8 +2741,11 @@ export class AgentOrchestrator {
         );
         return {
           changedFiles: [],
-          validationResults: workspace.testResults,
+          validationResults: implementationWorkspace.testResults,
           reviewRequired: false,
+          implementationAttempts,
+          implementationStopReason,
+          implementationContextFilesAdded,
         };
       }
 
@@ -2679,7 +2767,7 @@ export class AgentOrchestrator {
         },
         async () =>
           workspaceService.applyGeneratedChanges(workspace.workspacePath, implementation.data.fileChanges, {
-            allowedPaths: workspace.snippets.map((snippet) => snippet.path),
+            allowedPaths: implementationWorkspace.snippets.map((snippet) => snippet.path),
           }),
       );
       if (changedFiles.reviewRequired) {
@@ -2692,8 +2780,11 @@ export class AgentOrchestrator {
         logger.warn(`Generated patch requires review: ${changedFiles.reviewReason || 'unspecified reason'}`);
         return {
           changedFiles: changedFiles.appliedFiles,
-          validationResults: workspace.testResults,
+          validationResults: implementationWorkspace.testResults,
           reviewRequired: true,
+          implementationAttempts,
+          implementationStopReason: 'apply_review_required',
+          implementationContextFilesAdded,
         };
       }
       if (changedFiles.appliedFiles.length === 0) {
@@ -2712,15 +2803,18 @@ export class AgentOrchestrator {
         );
         return {
           changedFiles: [],
-          validationResults: workspace.testResults,
+          validationResults: implementationWorkspace.testResults,
           reviewRequired: false,
+          implementationAttempts,
+          implementationStopReason: 'no_effective_change',
+          implementationContextFilesAdded,
         };
       }
 
       logger.success(`Applied ${changedFiles.appliedFiles.length} workspace file updates`);
 
       const validationResults =
-        runChecks && workspace.validationCommands.length > 0
+        runChecks && implementationWorkspace.validationCommands.length > 0
           ? await ui.task(
               {
                 title: 'Running baseline validation commands',
@@ -2730,11 +2824,11 @@ export class AgentOrchestrator {
               },
               async () =>
                 workspaceService.runValidationCommands(
-                  workspace.workspacePath,
-                  workspace.validationCommands.slice(0, 3),
+                  implementationWorkspace.workspacePath,
+                  implementationWorkspace.validationCommands.slice(0, 3),
                 ),
             )
-          : workspace.testResults;
+          : implementationWorkspace.testResults;
 
       if (runChecks && changedFiles.appliedFiles.length > 0 && this.hasBlockingValidationFailures(validationResults)) {
         const repaired = await this.attemptValidationRepair({
@@ -2754,6 +2848,9 @@ export class AgentOrchestrator {
         changedFiles: changedFiles.appliedFiles,
         validationResults,
         reviewRequired: false,
+        implementationAttempts,
+        implementationStopReason: 'applied',
+        implementationContextFilesAdded,
       };
     } catch (error) {
       logger.warn(
@@ -2764,6 +2861,9 @@ export class AgentOrchestrator {
         changedFiles: [],
         validationResults: workspace.testResults,
         reviewRequired: false,
+        implementationAttempts: 0,
+        implementationStopReason: 'generation_failed',
+        implementationContextFilesAdded: 0,
       };
     }
   }

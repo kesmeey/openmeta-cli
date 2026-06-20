@@ -5,7 +5,7 @@ import { join } from 'path';
 import { simpleGit } from 'simple-git';
 import { pathToFileURL } from 'url';
 import { workspaceService } from '../src/services/workspace.js';
-import { createMemory, createRankedIssue } from './helpers/factories.js';
+import { createMemory, createRankedIssue, createWorkspace } from './helpers/factories.js';
 
 const tempDirs: string[] = [];
 
@@ -539,6 +539,43 @@ describe('workspaceService.detectTestCommands', () => {
     );
 
     expect(rankedFiles[0]).toBe('src/components/IconButton.tsx');
+  });
+
+  test('expands implementation context with adjacent tests before low-signal files', () => {
+    const workspacePath = makeWorkspace();
+    mkdirSync(join(workspacePath, 'src', 'components'), { recursive: true });
+    mkdirSync(join(workspacePath, '.github', 'workflows'), { recursive: true });
+    writeFileSync(
+      join(workspacePath, 'src', 'components', 'IconButton.tsx'),
+      'export function IconButton() { return <button />; }\n',
+      'utf-8',
+    );
+    writeFileSync(
+      join(workspacePath, 'src', 'components', 'IconButton.test.tsx'),
+      'test("icon button", () => {});\n',
+      'utf-8',
+    );
+    writeFileSync(join(workspacePath, '.github', 'workflows', 'ci.yml'), 'name: ci\n', 'utf-8');
+    writeFileSync(join(workspacePath, 'README.md'), '# Demo\n', 'utf-8');
+
+    const result = workspaceService.expandImplementationContext(
+      createWorkspace({
+        workspacePath,
+        candidateFiles: ['src/components/IconButton.tsx'],
+        snippets: [
+          {
+            path: 'src/components/IconButton.tsx',
+            content: 'export function IconButton() { return <button />; }\n',
+          },
+        ],
+      }),
+      { maxFiles: 2 },
+    );
+
+    expect(result.addedFiles).toContain('src/components/IconButton.test.tsx');
+    expect(result.addedFiles).not.toContain('.github/workflows/ci.yml');
+    expect(result.addedFiles).not.toContain('README.md');
+    expect(result.workspace.snippets.map((snippet) => snippet.path)).toContain('src/components/IconButton.test.tsx');
   });
 
   test('prioritizes repository analysis paths with docs, config, source, tests, and memory signals', () => {

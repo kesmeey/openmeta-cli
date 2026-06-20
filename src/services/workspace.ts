@@ -20,6 +20,7 @@ const MAX_DISCOVERED_FILES = 250;
 const MAX_SNIPPET_CHARS = 8000;
 const MAX_GENERATED_FILES = 6;
 const MAX_GENERATED_FILE_CHARS = 60_000;
+const DEFAULT_EXPANSION_LIMIT = 8;
 type ExecutionMode = 'interactive' | 'headless';
 
 function normalizeRepoRelativePath(path: string): string {
@@ -218,6 +219,43 @@ export class WorkspaceService {
         },
       ];
     });
+  }
+
+  expandImplementationContext(
+    workspace: RepoWorkspaceContext,
+    options: { maxFiles?: number } = {},
+  ): { workspace: RepoWorkspaceContext; addedFiles: string[] } {
+    const existingPaths = new Set([
+      ...workspace.candidateFiles.map((path) => normalizeRepoRelativePath(path)),
+      ...workspace.snippets.map((snippet) => normalizeRepoRelativePath(snippet.path)),
+    ]);
+    const currentSnippetPaths = workspace.snippets.map((snippet) => normalizeRepoRelativePath(snippet.path));
+    const discoveredFiles = this.discoverFiles(workspace.workspacePath);
+    const maxFiles = options.maxFiles ?? DEFAULT_EXPANSION_LIMIT;
+    const candidates = discoveredFiles
+      .filter((path) => !existingPaths.has(path))
+      .map((path) => ({ path, score: this.scoreImplementationExpansionPath(path, currentSnippetPaths) }))
+      .filter((candidate) => candidate.score > 0)
+      .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path))
+      .slice(0, maxFiles)
+      .map((candidate) => candidate.path);
+    const snippets = this.readWorkspaceFiles(workspace.workspacePath, candidates).filter(
+      (snippet) => snippet.content.trim().length > 0,
+    );
+    const addedFiles = snippets.map((snippet) => snippet.path);
+
+    if (addedFiles.length === 0) {
+      return { workspace, addedFiles: [] };
+    }
+
+    return {
+      workspace: {
+        ...workspace,
+        candidateFiles: [...new Set([...workspace.candidateFiles, ...addedFiles])],
+        snippets: [...workspace.snippets, ...snippets],
+      },
+      addedFiles,
+    };
   }
 
   private async detectDefaultBranch(git: SimpleGit): Promise<string> {
@@ -658,6 +696,63 @@ export class WorkspaceService {
     }
 
     return score;
+  }
+
+  private scoreImplementationExpansionPath(path: string, currentSnippetPaths: string[]): number {
+    const lowerPath = path.toLowerCase();
+    const fileName = basename(lowerPath);
+    let score = 0;
+
+    if (this.isLowSignalImplementationPath(lowerPath)) {
+      score -= 50;
+    }
+
+    if (/(^|\/)(__tests__|test|tests)\/|\.test\.|\.spec\./.test(lowerPath)) {
+      score += 16;
+    }
+
+    if (/(^|\/)(src|api|services?)\//.test(lowerPath)) {
+      score += 8;
+    }
+
+    if (/(route|service|validator|query-config)\.(ts|tsx|js|jsx|py|go|rs|java|kt)$/.test(fileName)) {
+      score += 8;
+    }
+
+    for (const currentPath of currentSnippetPaths) {
+      const currentLowerPath = currentPath.toLowerCase();
+      const currentDir = dirname(currentLowerPath).replace(/\\/g, '/');
+      const currentBase = basename(currentLowerPath).replace(/\.(test|spec)?\.(ts|tsx|js|jsx|py|go|rs|java|kt)$/, '');
+
+      if (dirname(lowerPath).replace(/\\/g, '/') === currentDir) {
+        score += 24;
+      }
+
+      if (basename(lowerPath).startsWith(currentBase)) {
+        score += 18;
+      }
+
+      if (currentDir !== '.' && lowerPath.startsWith(`${currentDir}/`)) {
+        score += 10;
+      }
+    }
+
+    if (!/\.(ts|tsx|js|jsx|py|go|rs|java|kt)$/.test(fileName)) {
+      score -= 20;
+    }
+
+    return score;
+  }
+
+  private isLowSignalImplementationPath(lowerPath: string): boolean {
+    const fileName = basename(lowerPath);
+    return (
+      lowerPath.startsWith('.github/workflows/') ||
+      fileName === 'readme.md' ||
+      fileName.endsWith('.config.dev.ts') ||
+      fileName.startsWith('ormconfig') ||
+      lowerPath.includes('typedoc-config/')
+    );
   }
 
   private readSnippet(path: string): string {
