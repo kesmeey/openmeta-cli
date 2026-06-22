@@ -31,6 +31,7 @@ import {
   issueRankingService,
   llmService,
   memoryService,
+  permissionPolicyService,
   proofOfWorkService,
   repositoryTargetingService,
   workspaceService,
@@ -2784,6 +2785,12 @@ export class AgentOrchestrator {
     validationResults: TestResult[];
     pullRequestUrl?: string;
   }): Promise<{ published: boolean }> {
+    const publishDecision = permissionPolicyService.evaluateArtifactPublish({
+      dryRun: input.dryRun,
+      headless: input.headless,
+    });
+    logger.debug(`Artifact publish policy: ${publishDecision.outcome} - ${publishDecision.reason}`);
+
     const artifactRelativeDir = join(
       'contributions',
       getLocalDateStamp(),
@@ -2889,18 +2896,17 @@ export class AgentOrchestrator {
       };
     }
 
-    if (!input.allowRealPr) {
-      logger.warn('Skipping real draft PR creation because one or more structured drafts require review.');
-      return {
-        changedFiles: input.changedFiles,
-        validationResults: input.validationResults,
-      };
-    }
-
     const hasValidationFailures = input.validationResults.some((result) => !result.passed);
     const hasBlockingValidationFailures = this.hasBlockingValidationFailures(input.validationResults);
-    if (input.headless && hasBlockingValidationFailures) {
-      logger.warn('Skipping real draft PR creation because validation failed in headless mode.');
+    const prDecision = permissionPolicyService.evaluatePullRequest({
+      allowRealPr: input.allowRealPr,
+      headless: input.headless,
+      hasBlockingValidationFailures,
+    });
+    logger.debug(`Draft PR policy: ${prDecision.outcome} - ${prDecision.reason}`);
+
+    if (prDecision.outcome !== 'allow') {
+      logger.warn(`Skipping real draft PR creation: ${prDecision.reason}`);
       return {
         changedFiles: input.changedFiles,
         validationResults: input.validationResults,

@@ -45,6 +45,7 @@ import type {
   TestResult,
   UserProfile,
 } from '../types/index.js';
+import { contextAssemblerService } from './context-assembler.js';
 import {
   LLM_VALIDATION_FALLBACK_HINTS,
   LLM_VALIDATION_PROMPT,
@@ -190,24 +191,10 @@ Repo Stars: ${i.repoStars}`,
     workspace: RepoWorkspaceContext,
     memory: RepoMemory,
   ): Promise<StructuredOutputResult<'patch_draft', PatchDraft>> {
-    const repoContext = [
-      `Workspace Path: ${workspace.workspacePath}`,
-      `Default Branch: ${workspace.defaultBranch}`,
-      `Workspace Dirty: ${workspace.workspaceDirty}`,
-      `Candidate Files: ${workspace.candidateFiles.join(', ') || 'none'}`,
-      `Detected Test Commands: ${workspace.testCommands.map((item) => item.command).join(', ') || 'none'}`,
-      `Runnable Validation Commands: ${workspace.validationCommands.map((item) => item.command).join(', ') || 'none'}`,
-      `Validation Safety Notes: ${workspace.validationWarnings.join(' | ') || 'none'}`,
-      'Snippets:',
-      ...workspace.snippets.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`),
-    ].join('\n\n');
-
-    const repoMemory = this.formatRepoMemory(memory);
-
     const prompt = fillPrompt(PATCH_DRAFT_PROMPT, {
       issueContext: this.formatRankedIssue(issue),
-      repoContext,
-      repoMemory,
+      repoContext: contextAssemblerService.buildRepositoryContext(workspace),
+      repoMemory: contextAssemblerService.buildRepoMemoryContext(memory),
     });
 
     return this.generateStructuredOutput({
@@ -222,23 +209,12 @@ Repo Stars: ${i.repoStars}`,
     workspace: RepoWorkspaceContext,
     environment: EnvironmentInfo,
   ): Promise<StructuredOutputResult<'issue_feasibility_assessment', IssueFeasibilityAssessment>> {
-    const repoContext = [
-      `Workspace Path: ${workspace.workspacePath}`,
-      `Default Branch: ${workspace.defaultBranch}`,
-      `Workspace Dirty: ${workspace.workspaceDirty}`,
-      `Top-Level Files: ${workspace.topLevelFiles.join(', ') || 'none'}`,
-      `Candidate Files: ${workspace.candidateFiles.join(', ') || 'none'}`,
-      `Detected Test Commands: ${workspace.testCommands.map((item) => item.command).join(', ') || 'none'}`,
-      `Runnable Validation Commands: ${workspace.validationCommands.map((item) => item.command).join(', ') || 'none'}`,
-      `Validation Safety Notes: ${workspace.validationWarnings.join(' | ') || 'none'}`,
-      `Baseline Results: ${workspace.testResults.length > 0 ? workspace.testResults.map((result) => `${result.command} => ${result.passed ? 'passed' : `failed (${result.exitCode ?? 'n/a'})`}`).join('; ') : 'not executed'}`,
-      'Snippets:',
-      ...workspace.snippets.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`),
-    ].join('\n\n');
-
     const prompt = fillPrompt(ISSUE_FEASIBILITY_PROMPT, {
       issueContext: this.formatRankedIssue(issue),
-      repoContext,
+      repoContext: contextAssemblerService.buildRepositoryContext(workspace, {
+        includeTopLevelFiles: true,
+        includeBaselineResults: true,
+      }),
       environmentContext: this.formatEnvironment(environment),
     });
 
@@ -255,23 +231,12 @@ Repo Stars: ${i.repoStars}`,
     workspace: RepoWorkspaceContext,
     memory: RepoMemory,
   ): Promise<StructuredOutputResult<'repository_suggestion_list', RepositoryImprovementSuggestion[]>> {
-    const repoContext = [
-      `Repository: ${repoFullName}`,
-      `Workspace Path: ${workspace.workspacePath}`,
-      `Default Branch: ${workspace.defaultBranch}`,
-      `Workspace Dirty: ${workspace.workspaceDirty}`,
-      `Top-Level Files: ${workspace.topLevelFiles.join(', ') || 'none'}`,
-      `Candidate Files: ${workspace.candidateFiles.join(', ') || 'none'}`,
-      `Detected Test Commands: ${workspace.testCommands.map((item) => item.command).join(', ') || 'none'}`,
-      `Runnable Validation Commands: ${workspace.validationCommands.map((item) => item.command).join(', ') || 'none'}`,
-      `Validation Safety Notes: ${workspace.validationWarnings.join(' | ') || 'none'}`,
-      'Snippets:',
-      ...workspace.snippets.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`),
-    ].join('\n\n');
-
     const prompt = fillPrompt(REPOSITORY_ANALYSIS_PROMPT, {
-      repoContext,
-      repoMemory: this.formatRepoMemory(memory),
+      repoContext: contextAssemblerService.buildRepositoryContext(workspace, {
+        repoFullName,
+        includeTopLevelFiles: true,
+      }),
+      repoMemory: contextAssemblerService.buildRepoMemoryContext(memory),
     });
 
     return this.generateStructuredOutput({
@@ -287,15 +252,10 @@ Repo Stars: ${i.repoStars}`,
     workspace: RepoWorkspaceContext,
     patchDraft: PatchDraft,
   ): Promise<StructuredOutputResult<'implementation_draft', ImplementationDraft>> {
-    const editableFiles =
-      workspace.snippets.length > 0
-        ? workspace.snippets.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`).join('\n\n')
-        : 'No editable files were detected.';
-
     const prompt = fillPrompt(CODE_CHANGE_PROMPT, {
       issueContext: this.formatRankedIssue(issue),
       patchDraft: JSON.stringify(patchDraft, null, 2),
-      editableFiles,
+      editableFiles: contextAssemblerService.buildEditableFilesContext(workspace.snippets),
     });
 
     return this.generateStructuredOutput({
@@ -311,16 +271,10 @@ Repo Stars: ${i.repoStars}`,
     patchDraft: PatchDraft,
     workspace: RepoWorkspaceContext,
   ): Promise<StructuredOutputResult<'pull_request_draft', PullRequestDraft>> {
-    const validationContext = [
-      `Detected Commands: ${workspace.testCommands.map((item) => item.command).join(', ') || 'none'}`,
-      `Runnable Commands: ${workspace.validationCommands.map((item) => item.command).join(', ') || 'none'}`,
-      `Baseline Results: ${workspace.testResults.length > 0 ? workspace.testResults.map((result) => `${result.command} => ${result.passed ? 'passed' : `failed (${result.exitCode ?? 'n/a'})`}`).join('; ') : 'not executed'}`,
-    ].join('\n');
-
     const prompt = fillPrompt(PR_DRAFT_PROMPT, {
       issueContext: this.formatRankedIssue(issue),
       patchDraft: JSON.stringify(patchDraft, null, 2),
-      validationContext,
+      validationContext: contextAssemblerService.buildValidationContext(workspace),
     });
 
     return this.generateStructuredOutput({
@@ -335,22 +289,11 @@ Repo Stars: ${i.repoStars}`,
     validationResults: TestResult[],
     currentFiles: RepoFileSnippet[],
   ): Promise<StructuredOutputResult<'implementation_draft', ImplementationDraft>> {
-    const validationFailures =
-      validationResults.length > 0
-        ? validationResults
-            .filter((result) => !result.passed)
-            .map((result) => `${result.command} | exit=${result.exitCode ?? 'n/a'}\n${result.output}`.trim())
-            .join('\n\n---\n\n')
-        : 'No validation failures were provided.';
-
     const prompt = fillPrompt(VALIDATION_REPAIR_PROMPT, {
       issueContext: this.formatRankedIssue(issue),
       patchDraft: JSON.stringify(patchDraft, null, 2),
-      validationFailures,
-      currentFiles:
-        currentFiles.length > 0
-          ? currentFiles.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`).join('\n\n')
-          : 'No current files were provided.',
+      validationFailures: contextAssemblerService.buildValidationFailureContext(validationResults),
+      currentFiles: contextAssemblerService.buildEditableFilesContext(currentFiles, 'No current files were provided.'),
     });
 
     return this.generateStructuredOutput({
@@ -629,50 +572,6 @@ Repo Stars: ${i.repoStars}`,
       `Opportunity Score: ${issue.opportunity.score}`,
       `Overall Score: ${issue.opportunity.overallScore}`,
       `Opportunity Summary: ${issue.opportunity.summary}`,
-    ].join('\n');
-  }
-
-  private formatRepoMemory(memory: RepoMemory): string {
-    const topPathSignals =
-      memory.pathSignals.length > 0
-        ? memory.pathSignals
-            .slice(0, 5)
-            .map(
-              (signal) =>
-                `- ${signal.path} | candidate ${signal.candidateCount} | changed ${signal.changedCount} | validation ${signal.successfulValidationCount} | published ${signal.publishedCount}`,
-            )
-        : ['- none'];
-    const validationSignals =
-      memory.validationSignals.length > 0
-        ? memory.validationSignals
-            .slice(0, 5)
-            .map(
-              (signal) =>
-                `- ${signal.command} | failures ${signal.failureCount} | last exit ${signal.lastExitCode ?? 'n/a'}${signal.sampleOutput ? ` | sample ${signal.sampleOutput}` : ''}`,
-            )
-        : ['- none'];
-    const recentOutcomes =
-      memory.recentIssues.length > 0
-        ? memory.recentIssues
-            .slice(0, 5)
-            .map(
-              (issue) =>
-                `- ${issue.reference} | status ${issue.status} | changed ${issue.changedFiles.join(', ') || 'none'} | validation ${issue.validationSummary}`,
-            )
-        : ['- none'];
-
-    return [
-      `Last Selected Issue: ${memory.lastSelectedIssue || 'n/a'}`,
-      `Generated Dossiers: ${memory.generatedDossiers}`,
-      `Preferred Paths: ${memory.preferredPaths.join(', ') || 'none'}`,
-      `Known Test Commands: ${memory.detectedTestCommands.join(', ') || 'none'}`,
-      `Run Stats: total=${memory.runStats.totalRuns}, published=${memory.runStats.publishedRuns}, real_pr=${memory.runStats.realPrRuns}, review_required=${memory.runStats.reviewRequiredRuns}, validation_ok=${memory.runStats.successfulValidationRuns}, validation_failed=${memory.runStats.failedValidationRuns}`,
-      'Top Path Signals:',
-      ...topPathSignals,
-      'Recent Validation Failure Signals:',
-      ...validationSignals,
-      'Recent Issue Outcomes:',
-      ...recentOutcomes,
     ].join('\n');
   }
 
