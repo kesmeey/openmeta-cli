@@ -1,7 +1,7 @@
 export { ConfigService, configService } from './config.js';
-export { detectEnvironment } from './environment.js';
 export { CryptoService } from './crypto.js';
 export { getDailyNoteFileName, getLocalDateStamp } from './date.js';
+export { detectEnvironment } from './environment.js';
 export { getErrorMessage, isPromptAbortError, isUserCancelledError, UserCancelledError } from './errors.js';
 export { isMachineContext, runInMachineContext } from './execution-context.js';
 export type {

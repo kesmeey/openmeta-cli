@@ -428,6 +428,105 @@ describe('machine flow result builders', () => {
     expect(recordOutcomeSpy).not.toHaveBeenCalled();
   });
 
+  test('machine agent preset flow honors feasibility-adjusted threshold scores', async () => {
+    const config = {
+      ...createConfig(),
+      repositoryTargeting: {
+        activePreset: 'frontend',
+        presets: {
+          frontend: {
+            repos: ['facebook/react'],
+          },
+        },
+      },
+    };
+    const issue = createRankedIssue({
+      repoFullName: 'facebook/react',
+      repoName: 'react',
+      number: 12,
+      title: 'Fix TypeScript docs generation guard',
+      opportunity: {
+        score: 73,
+        overallScore: 73,
+        summary: 'Raw score is below threshold but local feasibility raises it',
+        breakdown: {
+          technicalFit: 82,
+          freshness: 78,
+          onboardingClarity: 76,
+          mergePotential: 72,
+          impact: 66,
+        },
+      },
+      scoutFeasibility: {
+        level: 'ready',
+        issueScope: 'small_code_change',
+        repoRisks: [],
+        issueRisks: [],
+        missingLocalCapabilities: [],
+        mitigations: [],
+        confidence: 'high',
+        scoreAdjustment: 3,
+        adjustedOverallScore: 76,
+        explanation: 'Local TypeScript tooling is available.',
+      },
+    });
+    const memory = createMemory({ repoFullName: 'facebook/react' });
+    const workspace = createWorkspace({
+      workspacePath: '/tmp/openmeta-react',
+      branchName: 'openmeta/12-typescript-docs-generation',
+      testResults: [],
+    });
+    const patchDraft = createPatchDraft();
+    const prDraft = createPullRequestDraft();
+    const artifacts = createArtifacts();
+    const orchestrator = new AgentOrchestrator() as unknown as AgentMachineRunShape;
+    const machineInternals = orchestrator as unknown as AgentMachineInternals;
+
+    spyOn(infra.configService, 'get').mockResolvedValue(config);
+    spyOn(machineInternals, 'validateConfig').mockResolvedValue(undefined);
+    spyOn(machineInternals, 'initializeClients').mockResolvedValue(undefined);
+    spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([issue]);
+    spyOn(proofOfWorkService, 'load').mockReturnValue({ records: [] });
+    spyOn(memoryService, 'load').mockReturnValue(memory);
+    spyOn(memoryService, 'update').mockReturnValue(memory);
+    const prepareWorkspaceSpy = spyOn(workspaceService, 'prepareWorkspace').mockResolvedValue(workspace);
+    const prepareRepositoryWorkspaceSpy = spyOn(workspaceService, 'prepareRepositoryWorkspace').mockRejectedValue(
+      new Error('preset repository-analysis fallback should not run'),
+    );
+    spyOn(llmService, 'generatePatchDraft').mockResolvedValue({
+      version: '1',
+      kind: 'patch_draft',
+      status: 'success',
+      data: patchDraft,
+    });
+    spyOn(machineInternals, 'generateConcretePatch').mockResolvedValue({
+      changedFiles: ['packages/react/src/docs.ts'],
+      validationResults: [],
+      reviewRequired: false,
+    });
+    spyOn(llmService, 'generatePrDraft').mockResolvedValue({
+      version: '1',
+      kind: 'pull_request_draft',
+      status: 'success',
+      data: prDraft,
+    });
+    spyOn(contentService, 'formatPatchDraftMarkdown').mockReturnValue('# Patch');
+    spyOn(contentService, 'formatPullRequestDraftMarkdown').mockReturnValue('# PR');
+    spyOn(machineInternals, 'submitContributionPullRequestIfPossible').mockResolvedValue({
+      changedFiles: ['packages/react/src/docs.ts'],
+      validationResults: [],
+    });
+    spyOn(machineInternals, 'prepareLocalArtifactPaths').mockReturnValue(artifacts);
+
+    const result = await orchestrator.runMachine({ dryRun: true });
+
+    expect(result.issue).toBe(issue);
+    expect(result.executionOutcome).toBe('changes_applied');
+    expect(result.executionPolicy.headless).toBe(true);
+    expect(prepareWorkspaceSpy).toHaveBeenCalledWith(issue, memory, false, 'headless', undefined);
+    expect(prepareRepositoryWorkspaceSpy).not.toHaveBeenCalled();
+  });
+
   test('machine agent can write local artifacts without publish prompts', async () => {
     const config = createConfig();
     const issue = createRankedIssue({ repoFullName: 'acme/demo', number: 42 });

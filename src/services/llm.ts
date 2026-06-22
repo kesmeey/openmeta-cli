@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { z } from 'zod';
+import type { z } from 'zod';
 import {
   ImplementationDraftEnvelopeSchema,
   type IssueFeasibilityAssessment,

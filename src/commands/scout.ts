@@ -1,4 +1,4 @@
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import { agentOrchestrator } from '../orchestration/index.js';
 import { runCommand } from './run-command.js';
 
@@ -11,13 +11,7 @@ export function registerScoutCommand(program: Command): void {
     .option('--repo <repository>', 'Limit issue discovery to one GitHub repository URL or owner/name')
     .option('--preset <name>', 'Use one saved repository preset as the discovery scope')
     .option('--all-repos', 'Ignore the active repository preset and search the broader issue stream')
-    .action((options: {
-      limit?: string;
-      refresh?: boolean;
-      repo?: string;
-      preset?: string;
-      allRepos?: boolean;
-    }) =>
+    .action((options: { limit?: string; refresh?: boolean; repo?: string; preset?: string; allRepos?: boolean }) =>
       runCommand('OpenMeta Scout', () =>
         agentOrchestrator.scout({
           limit: Number.parseInt(options.limit || '10', 10) || 10,

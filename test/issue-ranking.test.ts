@@ -1,6 +1,34 @@
 import { describe, expect, test } from 'bun:test';
 import { githubService, issueRankingService, llmService } from '../src/services/index.js';
+import type { EnvironmentInfo } from '../src/types/index.js';
 import { createIssue, createMatchedIssue, createRankedIssue } from './helpers/factories.js';
+
+const testEnvironment: EnvironmentInfo = {
+  os: {
+    platform: 'linux',
+    arch: 'x64',
+    distro: 'Linux',
+    version: 'test',
+    isWSL: false,
+    wslDistros: [],
+    hypervisor: {
+      isVM: false,
+      type: 'none',
+      isContainer: false,
+      isCI: true,
+    },
+  },
+  cpu: { model: 'Test CPU', cores: 4, threads: 8 },
+  gpu: [],
+  totalRAMGB: 16,
+  disks: [{ mountPoint: '/', totalGB: 256, freeGB: 128 }],
+  tools: [
+    { name: 'git', available: true, version: 'git version 2.45.0' },
+    { name: 'node', available: true, version: 'v22.0.0' },
+    { name: 'docker', available: false },
+    { name: 'nvidia-smi', available: false },
+  ],
+};
 
 describe('IssueRankingService', () => {
   test('selects the first issue that meets the automation threshold', () => {
@@ -143,10 +171,19 @@ describe('IssueRankingService', () => {
 
   test('builds a ranked target issue without batch discovery', async () => {
     const originalFetchIssue = githubService.fetchIssue;
+    const originalFetchRepositoryProbe = githubService.fetchRepositoryProbe;
     const originalScoreIssues = llmService.scoreIssues;
+    const rankingServiceState = issueRankingService as unknown as {
+      cachedEnvironment: EnvironmentInfo | null;
+      detectionPromise: Promise<EnvironmentInfo> | null;
+    };
+    const originalCachedEnvironment = rankingServiceState.cachedEnvironment;
+    const originalDetectionPromise = rankingServiceState.detectionPromise;
     const observedFetches: unknown[] = [];
 
     try {
+      rankingServiceState.cachedEnvironment = testEnvironment;
+      rankingServiceState.detectionPromise = null;
       githubService.fetchIssue = async (repoFullName, issueNumber) => {
         observedFetches.push({ repoFullName, issueNumber });
         return createIssue({
@@ -158,6 +195,21 @@ describe('IssueRankingService', () => {
           labels: [],
         });
       };
+      githubService.fetchRepositoryProbe = async (repoFullName) => ({
+        repoFullName,
+        files: {
+          packageJson: '{"dependencies":{"typescript":"latest"}}',
+          pyprojectToml: undefined,
+          requirementsTxt: undefined,
+          cargoToml: undefined,
+          goMod: undefined,
+          dockerCompose: undefined,
+          dockerfile: undefined,
+          readme: '# sub2api\n\nTypeScript API project.',
+          workflows: [],
+        },
+        missingPaths: [],
+      });
       llmService.scoreIssues = async (_profile, issues) => ({
         version: '1',
         kind: 'issue_match_list',
@@ -232,7 +284,10 @@ describe('IssueRankingService', () => {
       expect(ranked?.matchScore).toBe(77);
       expect(ranked?.opportunity.overallScore).toBeGreaterThan(0);
     } finally {
+      rankingServiceState.cachedEnvironment = originalCachedEnvironment;
+      rankingServiceState.detectionPromise = originalDetectionPromise;
       githubService.fetchIssue = originalFetchIssue;
+      githubService.fetchRepositoryProbe = originalFetchRepositoryProbe;
       llmService.scoreIssues = originalScoreIssues;
     }
   });

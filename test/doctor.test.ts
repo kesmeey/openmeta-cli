@@ -4,6 +4,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { DoctorOrchestrator } from '../src/orchestration/doctor.js';
 import * as runtimeDiagnosticsModule from '../src/services/runtime-diagnostics.js';
+import { schedulerService } from '../src/services/scheduler.js';
 import type { AppConfig } from '../src/types/index.js';
 
 let tempRoot = '';
@@ -161,28 +162,58 @@ describe('DoctorOrchestrator', () => {
   test('warns when presets exist without an active preset and fails on invalid active preset references', async () => {
     const doctor = new DoctorOrchestrator();
 
-    const warned = await doctor.inspect(createConfig({
-      repositoryTargeting: {
-        activePreset: '',
-        presets: {
-          frontend: {
-            repos: ['vercel/next.js'],
+    const warned = await doctor.inspect(
+      createConfig({
+        repositoryTargeting: {
+          activePreset: '',
+          presets: {
+            frontend: {
+              repos: ['vercel/next.js'],
+            },
           },
         },
-      },
-    }));
+      }),
+    );
     expect(warned.checks.find((check) => check.id === 'repository-targeting')?.status).toBe('warn');
 
-    const failed = await doctor.inspect(createConfig({
-      repositoryTargeting: {
-        activePreset: 'missing',
-        presets: {
-          frontend: {
-            repos: ['vercel/next.js'],
+    const failed = await doctor.inspect(
+      createConfig({
+        repositoryTargeting: {
+          activePreset: 'missing',
+          presets: {
+            frontend: {
+              repos: ['vercel/next.js'],
+            },
           },
         },
-      },
-    }));
+      }),
+    );
     expect(failed.checks.find((check) => check.id === 'repository-targeting')?.status).toBe('fail');
+  });
+
+  test('passes scheduler checks on Windows when schtasks is available', async () => {
+    const originalDetectProvider = schedulerService.detectProvider;
+
+    try {
+      schedulerService.detectProvider = () => 'schtasks';
+      const report = await new DoctorOrchestrator().inspect(
+        createConfig({
+          automation: {
+            ...createConfig().automation,
+            enabled: true,
+            scheduler: 'schtasks',
+          },
+        }),
+      );
+
+      expect(report.checks.find((check) => check.id === 'scheduler-config')).toEqual(
+        expect.objectContaining({
+          status: 'pass',
+          summary: 'schtasks can run automation at 09:00.',
+        }),
+      );
+    } finally {
+      schedulerService.detectProvider = originalDetectProvider;
+    }
   });
 });

@@ -40,6 +40,7 @@ const FOCUS_AREA_TERMS: Record<string, string[]> = {
 export class IssueRankingService {
   private cachedEnvironment: EnvironmentInfo | null = null;
   private detectionPromise: Promise<EnvironmentInfo> | null = null;
+  private detectionScheduled = false;
   private repoProbeCache = new Map<string, RepositoryProbe | null>();
 
   ensureEnvironment(): Promise<EnvironmentInfo> {
@@ -59,10 +60,20 @@ export class IssueRankingService {
 
   getEnvironmentCached(): EnvironmentInfo | null {
     // Kick off background detection if not started; don't block the caller
-    if (!this.detectionPromise && !this.cachedEnvironment) {
-      this.ensureEnvironment();
-    }
+    this.warmEnvironmentCache();
     return this.cachedEnvironment;
+  }
+
+  warmEnvironmentCache(): void {
+    if (this.cachedEnvironment || this.detectionPromise || this.detectionScheduled) {
+      return;
+    }
+
+    this.detectionScheduled = true;
+    setTimeout(() => {
+      this.detectionScheduled = false;
+      void this.ensureEnvironment();
+    }, 0);
   }
 
   async loadRankedIssues(
@@ -264,8 +275,8 @@ export class IssueRankingService {
     }
   }
 
-  private getAdjustedOverallScore(issue: RankedIssue): number {
-    return issue.scoutFeasibility?.adjustedOverallScore ?? issue.opportunity.overallScore;
+  getAdjustedOverallScore(issue: RankedIssue | undefined): number {
+    return issue?.scoutFeasibility?.adjustedOverallScore ?? issue?.opportunity.overallScore ?? 0;
   }
 
   private scoreIssueForProfile(issue: GitHubIssue, userProfile: AppConfig['userProfile']): number {

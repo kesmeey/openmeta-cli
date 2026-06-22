@@ -1,3 +1,4 @@
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { configService, parseLLMReasoningEffort, prompt, selectPrompt, ui } from '../infra/index.js';
 import {
   getPreset,
@@ -7,7 +8,7 @@ import {
   SCORING_PRESETS,
   schedulerService,
 } from '../services/index.js';
-import type { AppConfig, OverallWeights, ScoringWeights } from '../types/index.js';
+import type { AppConfig, LLMProviderProfile, OverallWeights, ScoringWeights } from '../types/index.js';
 
 export class ConfigOrchestrator {
   async setMachineValue(
@@ -152,7 +153,11 @@ export class ConfigOrchestrator {
         tone: config.github.username ? 'info' : 'warning',
       },
       { label: 'PAT', value: ui.maskSecret(config.github.pat), tone: config.github.pat ? 'info' : 'warning' },
-      { label: 'Artifact repo', value: config.github.targetRepoPath || 'Auto-managed private repository', tone: 'info' },
+      {
+        label: 'Artifact repo',
+        value: config.github.targetRepoPath || 'Auto-managed private repository',
+        tone: 'info',
+      },
     ]);
 
     ui.keyValues('Repository targeting', [
@@ -437,6 +442,150 @@ export class ConfigOrchestrator {
         tone: 'info',
       });
     }
+  }
+
+  async exportConfig(outputPath: string, options: { includeSecrets?: boolean } = {}): Promise<void> {
+    const config = await configService.get();
+
+    const exported: Record<string, unknown> = {
+      userProfile: config.userProfile,
+      github: {
+        username: config.github.username,
+        pat: options.includeSecrets ? config.github.pat : '<REDACTED>',
+        targetRepoPath: config.github.targetRepoPath,
+      },
+      repositoryTargeting: config.repositoryTargeting,
+      llm: {
+        provider: config.llm.provider,
+        apiBaseUrl: config.llm.apiBaseUrl,
+        apiKey: options.includeSecrets ? config.llm.apiKey : '<REDACTED>',
+        modelName: config.llm.modelName,
+        apiHeaders: config.llm.apiHeaders ?? {},
+        reasoningEffort: config.llm.reasoningEffort,
+        stream: config.llm.stream,
+        activeProfile: config.llm.activeProfile,
+        profiles: options.includeSecrets ? config.llm.profiles : this.redactProfileSecrets(config.llm.profiles ?? {}),
+      },
+      automation: config.automation,
+      scoring: config.scoring,
+      commitTemplate: config.commitTemplate,
+    };
+
+    const content = JSON.stringify(exported, null, 2);
+    writeFileSync(outputPath, content, 'utf-8');
+
+    ui.card({
+      label: 'OpenMeta Config',
+      title: 'Configuration exported',
+      subtitle: options.includeSecrets
+        ? 'Secrets are included in plaintext. Keep this file safe.'
+        : 'Secrets have been redacted. Use --include-secrets to include credentials.',
+      lines: [`Output: ${outputPath}`],
+      tone: options.includeSecrets ? 'warning' : 'success',
+    });
+  }
+
+  async importConfig(inputPath: string): Promise<void> {
+    if (!existsSync(inputPath)) {
+      throw new Error(`File not found: ${inputPath}`);
+    }
+
+    let parsed: Record<string, unknown>;
+    try {
+      const content = readFileSync(inputPath, 'utf-8');
+      parsed = JSON.parse(content) as Record<string, unknown>;
+    } catch (error) {
+      throw new Error(`Failed to parse config file: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    const current = await configService.get();
+    const partial: Record<string, unknown> = {};
+
+    if (parsed['userProfile'] && typeof parsed['userProfile'] === 'object') {
+      partial['userProfile'] = parsed['userProfile'];
+    }
+
+    if (parsed['github'] && typeof parsed['github'] === 'object') {
+      const gh = parsed['github'] as Record<string, unknown>;
+      partial['github'] = {
+        ...current.github,
+        ...(gh['username'] && gh['username'] !== '<REDACTED>' ? { username: gh['username'] } : {}),
+        ...(gh['pat'] && gh['pat'] !== '<REDACTED>' ? { pat: gh['pat'] } : {}),
+        ...(gh['targetRepoPath'] !== undefined ? { targetRepoPath: gh['targetRepoPath'] } : {}),
+      };
+    }
+
+    if (parsed['repositoryTargeting'] && typeof parsed['repositoryTargeting'] === 'object') {
+      partial['repositoryTargeting'] = parsed['repositoryTargeting'];
+    }
+
+    if (parsed['llm'] && typeof parsed['llm'] === 'object') {
+      const llm = parsed['llm'] as Record<string, unknown>;
+      partial['llm'] = {
+        ...current.llm,
+        ...(llm['provider'] !== undefined ? { provider: llm['provider'] } : {}),
+        ...(llm['apiBaseUrl'] !== undefined ? { apiBaseUrl: llm['apiBaseUrl'] } : {}),
+        ...(llm['apiKey'] && llm['apiKey'] !== '<REDACTED>' ? { apiKey: llm['apiKey'] } : {}),
+        ...(llm['modelName'] !== undefined ? { modelName: llm['modelName'] } : {}),
+        ...(llm['apiHeaders'] !== undefined ? { apiHeaders: llm['apiHeaders'] } : {}),
+        ...(llm['reasoningEffort'] !== undefined ? { reasoningEffort: llm['reasoningEffort'] } : {}),
+        ...(llm['stream'] !== undefined ? { stream: llm['stream'] } : {}),
+        ...(llm['activeProfile'] !== undefined ? { activeProfile: llm['activeProfile'] } : {}),
+        ...(llm['profiles'] !== undefined
+          ? {
+              profiles: this.restoreProfileSecrets(
+                llm['profiles'] as Record<string, unknown>,
+                current.llm.profiles ?? {},
+              ),
+            }
+          : {}),
+      };
+    }
+
+    if (parsed['automation'] && typeof parsed['automation'] === 'object') {
+      partial['automation'] = parsed['automation'];
+    }
+
+    if (parsed['scoring'] && typeof parsed['scoring'] === 'object') {
+      partial['scoring'] = parsed['scoring'];
+    }
+
+    if (parsed['commitTemplate'] && typeof parsed['commitTemplate'] === 'string') {
+      partial['commitTemplate'] = parsed['commitTemplate'];
+    }
+
+    await configService.update(partial as Partial<typeof current>);
+
+    ui.card({
+      label: 'OpenMeta Config',
+      title: 'Configuration imported',
+      subtitle:
+        'Settings have been merged into the local configuration. Redacted secrets were preserved from the existing config.',
+      lines: [`Source: ${inputPath}`, `Config: ${configService.getConfigPath()}`],
+      tone: 'success',
+    });
+  }
+
+  private redactProfileSecrets(profiles: Record<string, LLMProviderProfile>): Record<string, LLMProviderProfile> {
+    return Object.fromEntries(
+      Object.entries(profiles).map(([name, profile]) => [name, { ...profile, apiKey: '<REDACTED>' }]),
+    );
+  }
+
+  private restoreProfileSecrets(
+    imported: Record<string, unknown>,
+    existing: Record<string, LLMProviderProfile>,
+  ): Record<string, LLMProviderProfile> {
+    return Object.fromEntries(
+      Object.entries(imported).map(([name, profile]) => {
+        const p = profile as LLMProviderProfile;
+        const existingProfile = existing[name];
+        if (p.apiKey === '<REDACTED>' && existingProfile?.apiKey) {
+          return [name, { ...p, apiKey: existingProfile.apiKey }];
+        }
+        return [name, p];
+      }),
+    );
   }
 
   async reset(): Promise<void> {

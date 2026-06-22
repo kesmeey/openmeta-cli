@@ -65,6 +65,14 @@ interface AgentRunInternals {
   writeLocalArtifacts(input: unknown): void;
   showResult(result: ContributionAgentResult): void;
   showStructuredReviewNotice(input: { title: string; subtitle: string; lines?: string[] }): void;
+  assessExecutionFeasibility(input: unknown): Promise<{
+    assessment: { summary: string };
+    shouldStop: boolean;
+    effectiveDraftOnly: boolean;
+    effectiveLocalArtifactsOnly: boolean;
+    allowRealPr: boolean;
+    skipReasons: string[];
+  }>;
 }
 
 interface AnalyzeRunInternals {
@@ -357,6 +365,19 @@ describe('AgentOrchestrator run flow', () => {
     spyOn(contentService, 'formatContributionDossier').mockReturnValue('# Dossier');
     spyOn(
       orchestrator as object as {
+        assessExecutionFeasibility: AgentRunInternals['assessExecutionFeasibility'];
+      },
+      'assessExecutionFeasibility',
+    ).mockResolvedValue({
+      assessment: { summary: 'Ready to proceed' },
+      shouldStop: false,
+      effectiveDraftOnly: false,
+      effectiveLocalArtifactsOnly: false,
+      allowRealPr: true,
+      skipReasons: [],
+    });
+    spyOn(
+      orchestrator as object as {
         submitContributionPullRequestIfPossible: AgentRunInternals['submitContributionPullRequestIfPossible'];
       },
       'submitContributionPullRequestIfPossible',
@@ -388,6 +409,19 @@ describe('AgentOrchestrator run flow', () => {
     spyOn(proofOfWorkService, 'record').mockReturnValue([createProofRecord()]);
     spyOn(memoryService, 'renderMarkdown').mockReturnValue('# Memory');
     spyOn(memoryService, 'recordOutcome').mockReturnValue(memory);
+    spyOn(
+      orchestrator as object as {
+        assessExecutionFeasibility: AgentRunInternals['assessExecutionFeasibility'];
+      },
+      'assessExecutionFeasibility',
+    ).mockResolvedValue({
+      assessment: { summary: 'Ready to proceed' },
+      shouldStop: false,
+      effectiveDraftOnly: false,
+      effectiveLocalArtifactsOnly: false,
+      allowRealPr: true,
+      skipReasons: [],
+    });
 
     await orchestrator.run();
 
@@ -494,6 +528,19 @@ describe('AgentOrchestrator run flow', () => {
     spyOn(proofOfWorkService, 'record').mockReturnValue([createProofRecord()]);
     spyOn(memoryService, 'renderMarkdown').mockReturnValue('# Memory');
     spyOn(memoryService, 'recordOutcome').mockReturnValue(memory);
+    spyOn(
+      orchestrator as object as {
+        assessExecutionFeasibility: AgentRunInternals['assessExecutionFeasibility'];
+      },
+      'assessExecutionFeasibility',
+    ).mockResolvedValue({
+      assessment: { summary: 'Ready to proceed' },
+      shouldStop: false,
+      effectiveDraftOnly: false,
+      effectiveLocalArtifactsOnly: false,
+      allowRealPr: true,
+      skipReasons: [],
+    });
 
     await orchestrator.run({ issue: 'https://github.com/Wei-Shaw/sub2api/issues/3014' });
 
@@ -654,6 +701,19 @@ describe('AgentOrchestrator run flow', () => {
     spyOn(proofOfWorkService, 'record').mockReturnValue([createProofRecord()]);
     spyOn(memoryService, 'renderMarkdown').mockReturnValue('# Memory');
     spyOn(memoryService, 'recordOutcome').mockReturnValue(nextMemory);
+    spyOn(
+      orchestrator as object as {
+        assessExecutionFeasibility: AgentRunInternals['assessExecutionFeasibility'];
+      },
+      'assessExecutionFeasibility',
+    ).mockResolvedValue({
+      assessment: { summary: 'Ready to proceed' },
+      shouldStop: false,
+      effectiveDraftOnly: false,
+      effectiveLocalArtifactsOnly: false,
+      allowRealPr: true,
+      skipReasons: [],
+    });
 
     await orchestrator.run();
 
@@ -679,6 +739,188 @@ describe('AgentOrchestrator run flow', () => {
           number: 0,
         }),
         changedFiles: ['packages/next/src/server/config.ts'],
+      }),
+    );
+  });
+
+  test('uses feasibility-adjusted scores before falling back from preset issue flow', async () => {
+    const orchestrator = new AgentOrchestrator() as unknown as AgentRunInternals;
+    const config = createConfig({
+      repositoryTargeting: {
+        activePreset: 'frontend',
+        presets: {
+          frontend: {
+            repos: ['vercel/next.js', 'facebook/react'],
+          },
+        },
+      },
+    });
+    const rawHigherIssue = createRankedIssue({
+      repoFullName: 'vercel/next.js',
+      repoName: 'next.js',
+      number: 11,
+      opportunity: {
+        score: 74,
+        overallScore: 74,
+        summary: 'Raw score is higher but adjusted below threshold',
+        breakdown: {
+          technicalFit: 78,
+          freshness: 76,
+          onboardingClarity: 74,
+          mergePotential: 72,
+          impact: 70,
+        },
+      },
+      scoutFeasibility: {
+        level: 'likely_fixable',
+        issueScope: 'small_code_change',
+        repoRisks: [],
+        issueRisks: [],
+        missingLocalCapabilities: ['docker'],
+        mitigations: [],
+        confidence: 'medium',
+        scoreAdjustment: -4,
+        adjustedOverallScore: 70,
+        explanation: 'Docker is missing but the issue can still be inspected statically.',
+      },
+    });
+    const adjustedQualifiedIssue = createRankedIssue({
+      repoFullName: 'facebook/react',
+      repoName: 'react',
+      number: 12,
+      title: 'Fix TypeScript docs generation guard',
+      opportunity: {
+        score: 73,
+        overallScore: 73,
+        summary: 'Raw score is below threshold but local feasibility raises it',
+        breakdown: {
+          technicalFit: 82,
+          freshness: 78,
+          onboardingClarity: 76,
+          mergePotential: 72,
+          impact: 66,
+        },
+      },
+      scoutFeasibility: {
+        level: 'ready',
+        issueScope: 'small_code_change',
+        repoRisks: [],
+        issueRisks: [],
+        missingLocalCapabilities: [],
+        mitigations: [],
+        confidence: 'high',
+        scoreAdjustment: 3,
+        adjustedOverallScore: 76,
+        explanation: 'Local TypeScript tooling is available.',
+      },
+    });
+    const memory = createMemory({ repoFullName: 'facebook/react' });
+    const workspace = createWorkspace({
+      workspacePath: '/tmp/openmeta-react',
+      branchName: 'openmeta/12-typescript-docs-generation',
+    });
+    const patchDraft = createPatchDraft();
+    const prDraft = createPullRequestDraft();
+    const artifacts = createArtifacts();
+    const promptForIssueSpy = spyOn(
+      orchestrator as object as { promptForIssue: AgentRunInternals['promptForIssue'] },
+      'promptForIssue',
+    ).mockResolvedValue(adjustedQualifiedIssue);
+    const prepareWorkspaceSpy = spyOn(workspaceService, 'prepareWorkspace').mockResolvedValue(workspace);
+    const prepareRepositoryWorkspaceSpy = spyOn(workspaceService, 'prepareRepositoryWorkspace').mockRejectedValue(
+      new Error('preset repository-analysis fallback should not run'),
+    );
+    const showResultSpy = spyOn(
+      orchestrator as object as { showResult: AgentRunInternals['showResult'] },
+      'showResult',
+    ).mockImplementation(() => {});
+
+    spyOn(infra.configService, 'get').mockResolvedValue(config);
+    spyOn(
+      orchestrator as object as { initializeClients: AgentRunInternals['initializeClients'] },
+      'initializeClients',
+    ).mockResolvedValue(undefined);
+    spyOn(issueRankingService, 'loadRankedIssues')
+      .mockResolvedValueOnce([rawHigherIssue])
+      .mockResolvedValueOnce([adjustedQualifiedIssue]);
+    spyOn(memoryService, 'load').mockReturnValue(memory);
+    spyOn(memoryService, 'update').mockReturnValue(memory);
+    spyOn(llmService, 'generatePatchDraft').mockResolvedValue({
+      version: '1',
+      kind: 'patch_draft',
+      status: 'success',
+      data: patchDraft,
+    });
+    spyOn(
+      orchestrator as object as { generateConcretePatch: AgentRunInternals['generateConcretePatch'] },
+      'generateConcretePatch',
+    ).mockResolvedValue({
+      changedFiles: ['packages/react/src/docs.ts'],
+      validationResults: [],
+      reviewRequired: false,
+    });
+    spyOn(llmService, 'generatePrDraft').mockResolvedValue({
+      version: '1',
+      kind: 'pull_request_draft',
+      status: 'success',
+      data: prDraft,
+    });
+    spyOn(contentService, 'formatPatchDraftMarkdown').mockReturnValue('# Patch');
+    spyOn(contentService, 'formatPullRequestDraftMarkdown').mockReturnValue('# PR');
+    spyOn(contentService, 'formatContributionDossier').mockReturnValue('# Dossier');
+    spyOn(
+      orchestrator as object as {
+        submitContributionPullRequestIfPossible: AgentRunInternals['submitContributionPullRequestIfPossible'];
+      },
+      'submitContributionPullRequestIfPossible',
+    ).mockResolvedValue({
+      changedFiles: ['packages/react/src/docs.ts'],
+      validationResults: [],
+    });
+    spyOn(
+      orchestrator as object as { prepareLocalArtifactPaths: AgentRunInternals['prepareLocalArtifactPaths'] },
+      'prepareLocalArtifactPaths',
+    ).mockReturnValue(artifacts);
+    spyOn(
+      orchestrator as object as { writeLocalArtifacts: AgentRunInternals['writeLocalArtifacts'] },
+      'writeLocalArtifacts',
+    ).mockImplementation(() => {});
+    spyOn(
+      orchestrator as object as { publishArtifactsIfNeeded: AgentRunInternals['publishArtifactsIfNeeded'] },
+      'publishArtifactsIfNeeded',
+    ).mockResolvedValue({
+      published: false,
+    });
+    spyOn(inboxService, 'saveItem').mockReturnValue([createInboxItem()]);
+    spyOn(inboxService, 'renderMarkdown').mockReturnValue('# Inbox');
+    spyOn(proofOfWorkService, 'load').mockReturnValue({ records: [] });
+    spyOn(proofOfWorkService, 'renderMarkdown').mockReturnValue('# Proof');
+    spyOn(proofOfWorkService, 'record').mockReturnValue([createProofRecord()]);
+    spyOn(memoryService, 'renderMarkdown').mockReturnValue('# Memory');
+    spyOn(memoryService, 'recordOutcome').mockReturnValue(memory);
+    spyOn(
+      orchestrator as object as {
+        assessExecutionFeasibility: AgentRunInternals['assessExecutionFeasibility'];
+      },
+      'assessExecutionFeasibility',
+    ).mockResolvedValue({
+      assessment: { summary: 'Ready to proceed' },
+      shouldStop: false,
+      effectiveDraftOnly: false,
+      effectiveLocalArtifactsOnly: false,
+      allowRealPr: true,
+      skipReasons: [],
+    });
+
+    await orchestrator.run();
+
+    expect(promptForIssueSpy).toHaveBeenCalledWith(expect.arrayContaining([adjustedQualifiedIssue]));
+    expect(prepareWorkspaceSpy).toHaveBeenCalledWith(adjustedQualifiedIssue, memory, true, 'interactive', undefined);
+    expect(prepareRepositoryWorkspaceSpy).not.toHaveBeenCalled();
+    expect(showResultSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue: adjustedQualifiedIssue,
+        changedFiles: ['packages/react/src/docs.ts'],
       }),
     );
   });
@@ -763,6 +1005,19 @@ describe('AgentOrchestrator run flow', () => {
     spyOn(proofOfWorkService, 'record').mockReturnValue([createProofRecord()]);
     spyOn(memoryService, 'renderMarkdown').mockReturnValue('# Memory');
     const recordOutcomeSpy = spyOn(memoryService, 'recordOutcome').mockReturnValue(memory);
+    spyOn(
+      orchestrator as object as {
+        assessExecutionFeasibility: AgentRunInternals['assessExecutionFeasibility'];
+      },
+      'assessExecutionFeasibility',
+    ).mockResolvedValue({
+      assessment: { summary: 'Ready to proceed' },
+      shouldStop: false,
+      effectiveDraftOnly: false,
+      effectiveLocalArtifactsOnly: false,
+      allowRealPr: true,
+      skipReasons: [],
+    });
     const showResultSpy = spyOn(
       orchestrator as object as { showResult: AgentRunInternals['showResult'] },
       'showResult',

@@ -239,7 +239,7 @@ export class AgentOrchestrator {
 
     await this.validateConfig(config);
 
-    issueRankingService.ensureEnvironment();
+    issueRankingService.warmEnvironmentCache();
 
     if (headless && !schedulerRun && !dryRun && !localArtifactsOnly) {
       await this.confirmManualHeadlessRun(config);
@@ -301,7 +301,7 @@ export class AgentOrchestrator {
     const presetIssueFlowAllowed =
       !issueTarget &&
       scope?.mode === 'preset' &&
-      (rankedIssues[0]?.opportunity.overallScore || 0) >= config.automation.minMatchScore;
+      issueRankingService.getAdjustedOverallScore(rankedIssues[0]) >= config.automation.minMatchScore;
     const presetQualifiedIssue = presetIssueFlowAllowed
       ? issueRankingService.selectIssueForAutomation(rankedIssues, config.automation.minMatchScore)
       : undefined;
@@ -906,7 +906,7 @@ export class AgentOrchestrator {
     await this.validateConfig(config);
 
     // Kick off background environment detection early; do not block the main flow
-    issueRankingService.ensureEnvironment();
+    issueRankingService.warmEnvironmentCache();
 
     if (headless && !schedulerRun && !localArtifactsOnly) {
       await this.confirmManualHeadlessRun(config);
@@ -969,7 +969,7 @@ export class AgentOrchestrator {
     const presetIssueFlowAllowed =
       !issueTarget &&
       scope?.mode === 'preset' &&
-      (rankedIssues[0]?.opportunity.overallScore || 0) >= config.automation.minMatchScore;
+      issueRankingService.getAdjustedOverallScore(rankedIssues[0]) >= config.automation.minMatchScore;
     const presetQualifiedIssue = presetIssueFlowAllowed
       ? issueRankingService.selectIssueForAutomation(rankedIssues, config.automation.minMatchScore)
       : undefined;
@@ -1954,7 +1954,10 @@ export class AgentOrchestrator {
       for (const issue of issues) {
         const key = `${issue.repoFullName}#${issue.number}`;
         const existing = issueMap.get(key);
-        if (!existing || issue.opportunity.overallScore > existing.opportunity.overallScore) {
+        if (
+          !existing ||
+          issueRankingService.getAdjustedOverallScore(issue) > issueRankingService.getAdjustedOverallScore(existing)
+        ) {
           issueMap.set(key, issue);
         }
       }
@@ -1962,6 +1965,7 @@ export class AgentOrchestrator {
 
     return [...issueMap.values()].sort(
       (left, right) =>
+        issueRankingService.getAdjustedOverallScore(right) - issueRankingService.getAdjustedOverallScore(left) ||
         right.opportunity.overallScore - left.opportunity.overallScore ||
         right.matchScore - left.matchScore ||
         right.updatedAt.localeCompare(left.updatedAt),

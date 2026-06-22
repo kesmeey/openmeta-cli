@@ -17,11 +17,11 @@ export class CryptoService {
       return plainText;
     }
 
-    if (this.isEncrypted(plainText)) {
+    if (CryptoService.isEncrypted(plainText)) {
       return plainText;
     }
 
-    const key = this.getKey({ createIfMissing: true });
+    const key = CryptoService.getKey({ createIfMissing: true });
     const iv = randomBytes(IV_SIZE);
     const cipher = createCipheriv('aes-256-gcm', key, iv);
     const encrypted = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()]);
@@ -37,7 +37,7 @@ export class CryptoService {
       return cipherText;
     }
 
-    if (this.isModernEncrypted(cipherText)) {
+    if (CryptoService.isModernEncrypted(cipherText)) {
       const parts = cipherText.split(':');
       if (parts.length !== 5) {
         throw new Error('Encrypted value has an invalid format');
@@ -48,7 +48,7 @@ export class CryptoService {
         throw new Error('Encrypted value is missing required data');
       }
 
-      const key = this.getKey({ createIfMissing: false });
+      const key = CryptoService.getKey({ createIfMissing: false });
       const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivBase64, 'base64'));
       decipher.setAuthTag(Buffer.from(authTagBase64, 'base64'));
 
@@ -73,7 +73,7 @@ export class CryptoService {
   }
 
   static isEncrypted(value: string): boolean {
-    return this.isModernEncrypted(value) || value.startsWith('U2FsdGVkX1');
+    return CryptoService.isModernEncrypted(value) || value.startsWith('U2FsdGVkX1');
   }
 
   private static isModernEncrypted(value: string): boolean {

@@ -860,7 +860,7 @@ describe('AgentOrchestrator support behavior', () => {
     ).mockResolvedValue(undefined as never);
     spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([]);
 
-    await orchestrator.scout();
+    await orchestrator.scout({});
 
     expect(emptyStateSpy).toHaveBeenCalledWith(
       'OpenMeta Scout',
