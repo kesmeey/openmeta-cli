@@ -11,6 +11,14 @@ interface GitHubServiceInternals {
     rest: {
       issues: {
         get: (params: { owner: string; repo: string; issue_number: number }) => Promise<{ data: unknown }>;
+        listComments: (params: {
+          owner: string;
+          repo: string;
+          issue_number: number;
+          per_page: number;
+          sort: 'created';
+          direction: 'desc';
+        }) => Promise<{ data: unknown[] }>;
         listEventsForTimeline: (params: {
           owner: string;
           repo: string;
@@ -345,6 +353,59 @@ describe('GitHubService internals', () => {
 
     expect(requests).toEqual([{ owner: 'acme', repo: 'demo', issue_number: 18, per_page: 100 }]);
     expect(references).toEqual([{ number: 19, url: 'https://github.com/acme/demo/pull/19' }]);
+  });
+
+  test('extracts recent human claim signals from issue comments', async () => {
+    const service = new GitHubService();
+    const internals = service as unknown as GitHubServiceInternals;
+    const recent = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    const stale = new Date(Date.now() - 250 * 24 * 60 * 60 * 1000).toISOString();
+
+    internals.octokit = {
+      rest: {
+        issues: {
+          listComments: async () => ({
+            data: [
+              {
+                body: 'Assigned this issue to @alice. Please go ahead.',
+                user: { login: 'maintainer', type: 'User' },
+                author_association: 'MEMBER',
+                created_at: recent,
+                html_url: 'https://github.com/acme/demo/issues/18#issuecomment-1',
+              },
+              {
+                body: "I'd like to work on this.",
+                user: { login: 'alice', type: 'User' },
+                author_association: 'CONTRIBUTOR',
+                created_at: recent,
+                html_url: 'https://github.com/acme/demo/issues/18#issuecomment-2',
+              },
+              {
+                body: "I'll work on this.",
+                user: { login: 'old-contributor', type: 'User' },
+                author_association: 'CONTRIBUTOR',
+                created_at: stale,
+                html_url: 'https://github.com/acme/demo/issues/18#issuecomment-3',
+              },
+              {
+                body: "I'd like to work on this.",
+                user: { login: 'triage-bot[bot]', type: 'Bot' },
+                author_association: 'NONE',
+                created_at: recent,
+                html_url: 'https://github.com/acme/demo/issues/18#issuecomment-4',
+              },
+            ],
+          }),
+        },
+      },
+    } as unknown as GitHubServiceInternals['octokit'];
+
+    const context = await service.fetchIssueClaimContext('acme/demo', 18);
+
+    expect(context.claimAssessment.status).toBe('claimed');
+    expect(context.claimAssessment.evidence).toHaveLength(2);
+    expect(context.recentComments.map((comment) => comment.author)).not.toContain('triage-bot[bot]');
+    expect(context.recentComments.map((comment) => comment.author)).not.toContain('old-contributor');
   });
 
   test('classifies search failures by rate limit and validation errors', () => {
