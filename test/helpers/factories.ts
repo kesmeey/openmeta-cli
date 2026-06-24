@@ -96,6 +96,7 @@ export function createWorkspace(overrides: Partial<RepoWorkspaceContext> = {}): 
       'Skipped bun test during headless validation because it comes from repository-defined scripts.',
     ],
     testResults: [{ command: 'bun test', exitCode: 0, passed: true, output: '2 passed' }],
+    executionMode: 'headless',
     ...overrides,
   };
 }

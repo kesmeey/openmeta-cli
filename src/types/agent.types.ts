@@ -1,3 +1,4 @@
+import type { z } from 'zod';
 import type { PatchDraft, PullRequestDraft } from '../contracts/index.js';
 import type { MatchedIssue } from './github.types.js';
 
@@ -98,6 +99,7 @@ export interface RepoWorkspaceContext {
   validationCommands: TestCommand[];
   validationWarnings: string[];
   testResults: TestResult[];
+  executionMode: 'interactive' | 'headless';
 }
 
 export interface RepoMemoryIssueRecord {
@@ -230,7 +232,11 @@ export type AgentEventType =
   | 'permission_decision'
   | 'context_assembled'
   | 'agent_checkpoint'
-  | 'agent_role_completed';
+  | 'agent_role_completed'
+  | 'tool_execution_started'
+  | 'tool_execution_completed'
+  | 'tool_execution_blocked'
+  | 'tool_execution_failed';
 
 export interface AgentEventLogEntry {
   version: 1;
@@ -252,7 +258,7 @@ export interface PermissionDecision {
   details?: Record<string, unknown>;
 }
 
-export interface AgentCapability<Input = unknown, Output = unknown> {
+export interface AgentCapability {
   name: string;
   description: string;
   isReadOnly: boolean;
@@ -260,10 +266,40 @@ export interface AgentCapability<Input = unknown, Output = unknown> {
   riskLevel: PermissionRiskLevel;
   inputSchemaName: string;
   outputSchemaName: string;
-  execute?: (input: Input) => Promise<Output> | Output;
+  requiredPermissions: string[];
 }
 
-export type AgentHookEvent = 'permission_decision' | 'context_assembled';
+export interface AgentToolContext {
+  allowReview?: boolean;
+  permissionDecision?: PermissionDecision;
+}
+
+export interface AgentTool<Input, Output> extends AgentCapability {
+  inputSchema: z.ZodType<Input>;
+  outputSchema: z.ZodType<Output>;
+  checkPermission: (input: Input, context: AgentToolContext) => PermissionDecision;
+  execute: (input: Input, context: AgentToolContext) => Promise<Output> | Output;
+}
+
+export type ToolExecutionStatus = 'success' | 'blocked' | 'failed';
+
+export interface ToolExecutionResult<Output> {
+  toolName: string;
+  status: ToolExecutionStatus;
+  permissionDecision?: PermissionDecision;
+  output?: Output;
+  error?: string;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+}
+
+export type AgentHookEvent =
+  | 'permission_decision'
+  | 'context_assembled'
+  | 'before_tool_execute'
+  | 'after_tool_execute'
+  | 'tool_execute_failed';
 
 export interface AgentHookPayload {
   event: AgentHookEvent;
@@ -272,7 +308,14 @@ export interface AgentHookPayload {
   data: Record<string, unknown>;
 }
 
-export type AgentHookHandler = (payload: AgentHookPayload) => void;
+export interface AgentHookResult {
+  continue?: boolean;
+  reason?: string;
+  updatedInput?: unknown;
+  permissionDecision?: PermissionDecision;
+}
+
+export type AgentHookHandler = (payload: AgentHookPayload) => AgentHookResult | void | Promise<AgentHookResult | void>;
 
 export interface ContextSection {
   id: string;

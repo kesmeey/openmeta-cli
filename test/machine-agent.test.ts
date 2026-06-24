@@ -146,6 +146,7 @@ function muteUi(): void {
 
 beforeEach(() => {
   muteUi();
+  spyOn(issueRankingService, 'ensureEnvironment').mockResolvedValue({} as never);
   spyOn(llmService, 'assessIssueFeasibility').mockResolvedValue({
     version: '1',
     kind: 'issue_feasibility_assessment',

@@ -140,7 +140,7 @@ export class WorkspaceService {
   applyGeneratedChanges(
     workspacePath: string,
     fileChanges: GeneratedFileChange[],
-    options: { allowedPaths?: string[] } = {},
+    options: { allowedPaths?: string[]; permissionDecision?: PermissionDecision } = {},
   ): GeneratedChangeApplyResult {
     const rootPath = resolve(workspacePath);
     const allowedPaths = new Set(
@@ -148,24 +148,27 @@ export class WorkspaceService {
     );
     const appliedFiles: string[] = [];
     const skippedFiles: GeneratedChangeApplyResult['skippedFiles'] = [];
-    const permission = permissionPolicyService.evaluateGeneratedFileChanges({
-      workspacePath,
-      fileChanges,
-      allowedPaths: options.allowedPaths,
-      maxFiles: MAX_GENERATED_FILES,
-      maxFileChars: MAX_GENERATED_FILE_CHARS,
-    });
+    const permission =
+      options.permissionDecision ??
+      permissionPolicyService.evaluateGeneratedFileChanges({
+        workspacePath,
+        fileChanges,
+        allowedPaths: options.allowedPaths,
+        maxFiles: MAX_GENERATED_FILES,
+        maxFileChars: MAX_GENERATED_FILE_CHARS,
+      });
     this.lastPermissionDecisions = [permission];
 
-    if (permission.outcome === 'review' && fileChanges.length > MAX_GENERATED_FILES) {
+    if (fileChanges.length > MAX_GENERATED_FILES) {
+      const reason = permission.reason;
       return {
         appliedFiles: [],
         skippedFiles: fileChanges.map((change) => ({
           path: change.path,
-          reason: permission.reason,
+          reason,
         })),
         reviewRequired: true,
-        reviewReason: permission.reason,
+        reviewReason: reason,
       };
     }
 
@@ -521,6 +524,7 @@ export class WorkspaceService {
       validationCommands,
       validationWarnings,
       testResults,
+      executionMode: input.executionMode,
     };
   }
 

@@ -32,14 +32,16 @@ import {
   issueRankingService,
   llmService,
   memoryService,
-  permissionPolicyService,
   proofOfWorkService,
   repositoryTargetingService,
+  toolExecutorService,
   workspaceService,
 } from '../services/index.js';
 import type {
   AppConfig,
   ContributionAgentResult,
+  GeneratedChangeApplyResult,
+  GeneratedFileChange,
   RankedIssue,
   RepoFileSnippet,
   RepoMemory,
@@ -2683,9 +2685,11 @@ export class AgentOrchestrator {
           tone: 'info',
         },
         async () =>
-          workspaceService.applyGeneratedChanges(workspace.workspacePath, implementation.data.fileChanges, {
-            allowedPaths: workspace.snippets.map((snippet) => snippet.path),
-          }),
+          this.executeFilePatchTool(
+            workspace.workspacePath,
+            implementation.data.fileChanges,
+            workspace.snippets.map((snippet) => snippet.path),
+          ),
       );
       if (changedFiles.reviewRequired) {
         this.showStructuredReviewNotice({
@@ -2734,9 +2738,10 @@ export class AgentOrchestrator {
                 tone: 'info',
               },
               async () =>
-                workspaceService.runValidationCommands(
+                this.executeValidationTool(
                   workspace.workspacePath,
                   workspace.validationCommands.slice(0, 3),
+                  workspace.executionMode,
                 ),
             )
           : workspace.testResults;
@@ -2773,6 +2778,49 @@ export class AgentOrchestrator {
     }
   }
 
+  private async executeFilePatchTool(
+    workspacePath: string,
+    fileChanges: GeneratedFileChange[],
+    allowedPaths: string[],
+  ): Promise<GeneratedChangeApplyResult> {
+    const execution = await toolExecutorService.execute<GeneratedChangeApplyResult>(
+      'workspace.file_write',
+      { workspacePath, fileChanges, allowedPaths },
+      { allowReview: true },
+    );
+    if (execution.status === 'failed') {
+      throw new Error(execution.error || 'File patch tool execution failed.');
+    }
+    if (execution.status === 'blocked' || !execution.output) {
+      return {
+        appliedFiles: [],
+        skippedFiles: fileChanges.map((change) => ({
+          path: change.path,
+          reason: execution.error || 'File patch tool execution was blocked.',
+        })),
+        reviewRequired: true,
+        reviewReason: execution.error || 'File patch tool execution was blocked.',
+      };
+    }
+    return execution.output;
+  }
+
+  private async executeValidationTool(
+    workspacePath: string,
+    commands: RepoWorkspaceContext['validationCommands'],
+    executionMode: RepoWorkspaceContext['executionMode'],
+  ): Promise<TestResult[]> {
+    const execution = await toolExecutorService.execute<TestResult[]>('validation.command', {
+      workspacePath,
+      commands,
+      executionMode,
+    });
+    if (execution.status !== 'success' || !execution.output) {
+      throw new Error(execution.error || 'Validation tool execution failed.');
+    }
+    return execution.output;
+  }
+
   private async publishArtifactsIfNeeded(input: {
     config: AppConfig;
     allowRealPr?: boolean;
@@ -2789,12 +2837,6 @@ export class AgentOrchestrator {
     validationResults: TestResult[];
     pullRequestUrl?: string;
   }): Promise<{ published: boolean }> {
-    const publishDecision = permissionPolicyService.evaluateArtifactPublish({
-      dryRun: input.dryRun,
-      headless: input.headless,
-    });
-    logger.debug(`Artifact publish policy: ${publishDecision.outcome} - ${publishDecision.reason}`);
-
     const artifactRelativeDir = join(
       'contributions',
       getLocalDateStamp(),
@@ -2836,15 +2878,20 @@ export class AgentOrchestrator {
     if (!gitInitialized) {
       throw new Error(`Failed to initialize the target repository at ${targetRepo.path}.`);
     }
-
     const commitMessage = `feat(agent): draft contribution for ${input.issue.repoFullName}#${input.issue.number}`;
     const finalConfirm = input.headless ? true : await this.promptForFinalCommitConfirmation(commitMessage);
     if (!finalConfirm) {
       return { published: false };
     }
 
-    const publishResult = await gitService.writeAndPublish(
-      [
+    const publishExecution = await toolExecutorService.execute<{
+      branch: string;
+      fileNames: string[];
+      filePaths: string[];
+      pushed: boolean;
+    }>('artifact.publish', {
+      targetRepoPath: targetRepo.path,
+      files: [
         { path: join(artifactRelativeDir, 'dossier.md'), content: input.dossier },
         { path: join(artifactRelativeDir, 'patch-draft.md'), content: input.patchDraftMarkdown },
         { path: join(artifactRelativeDir, 'pr-draft.md'), content: input.prDraftMarkdown },
@@ -2853,15 +2900,16 @@ export class AgentOrchestrator {
         { path: 'PROOF_OF_WORK.md', content: input.proofMarkdown },
       ],
       commitMessage,
-      {
-        branchName: ARTIFACT_PUBLISH_BRANCH,
-        baseBranch: targetRepo.defaultBranch,
-      },
-    );
+      branchName: ARTIFACT_PUBLISH_BRANCH,
+      baseBranch: targetRepo.defaultBranch,
+      headless: input.headless,
+      confirmed: true,
+    });
 
-    if (!publishResult) {
-      throw new Error('OpenMeta could not publish the generated contribution artifacts.');
+    if (publishExecution.status !== 'success' || !publishExecution.output) {
+      throw new Error(publishExecution.error || 'OpenMeta could not publish the generated contribution artifacts.');
     }
+    const publishResult = publishExecution.output;
 
     ui.card({
       label: 'OpenMeta Agent',
@@ -2906,22 +2954,34 @@ export class AgentOrchestrator {
 
     const hasValidationFailures = input.validationResults.some((result) => !result.passed);
     const hasBlockingValidationFailures = this.hasBlockingValidationFailures(input.validationResults);
-    const prDecision = permissionPolicyService.evaluatePullRequest({
+    const toolInput = (confirmed: boolean) => ({
+      issue: input.issue,
+      prDraft: input.prDraft,
+      workspacePath: input.workspace.workspacePath,
+      changedFiles: input.changedFiles,
       allowRealPr: input.allowRealPr,
       headless: input.headless,
       hasBlockingValidationFailures,
+      confirmed,
     });
-    logger.debug(`Draft PR policy: ${prDecision.outcome} - ${prDecision.reason}`);
-
-    if (prDecision.outcome !== 'allow') {
-      logger.warn(`Skipping real draft PR creation: ${prDecision.reason}`);
-      return {
-        changedFiles: input.changedFiles,
-        validationResults: input.validationResults,
-      };
-    }
 
     if (!input.headless) {
+      const authorization = await toolExecutorService.execute('github.create_draft_pr', toolInput(false));
+      if (authorization.status === 'failed') {
+        logger.warn(`Skipping real draft PR creation: ${authorization.error || 'tool authorization failed'}`);
+        return {
+          changedFiles: input.changedFiles,
+          validationResults: input.validationResults,
+        };
+      }
+      if (authorization.permissionDecision?.details?.['requiresConfirmation'] !== true) {
+        logger.warn(`Skipping real draft PR creation: ${authorization.error || 'permission denied'}`);
+        return {
+          changedFiles: input.changedFiles,
+          validationResults: input.validationResults,
+        };
+      }
+
       ui.callout({
         label: 'OpenMeta Agent',
         title: 'Create a real draft PR',
@@ -2955,12 +3015,22 @@ export class AgentOrchestrator {
     }
 
     try {
-      const contributionPullRequest = await contributionPrService.submitDraftPullRequest({
-        issue: input.issue,
-        prDraft: input.prDraft,
-        workspacePath: input.workspace.workspacePath,
-        changedFiles: input.changedFiles,
-      });
+      const execution = await toolExecutorService.execute<{
+        branchName: string;
+        url: string;
+        number: number;
+      }>('github.create_draft_pr', toolInput(true));
+      if (execution.status === 'blocked') {
+        logger.warn(`Skipping real draft PR creation: ${execution.error || 'permission denied'}`);
+        return {
+          changedFiles: input.changedFiles,
+          validationResults: input.validationResults,
+        };
+      }
+      if (execution.status !== 'success' || !execution.output) {
+        throw new Error(execution.error || 'Draft PR tool execution failed.');
+      }
+      const contributionPullRequest = execution.output;
 
       ui.card({
         label: 'OpenMeta Agent',
@@ -3230,9 +3300,7 @@ export class AgentOrchestrator {
         tone: 'info',
       },
       async () =>
-        workspaceService.applyGeneratedChanges(input.workspace.workspacePath, repairDraft.data.fileChanges, {
-          allowedPaths: input.changedFiles,
-        }),
+        this.executeFilePatchTool(input.workspace.workspacePath, repairDraft.data.fileChanges, input.changedFiles),
     );
 
     if (repairedFiles.reviewRequired) {
@@ -3263,9 +3331,10 @@ export class AgentOrchestrator {
         tone: 'info',
       },
       async () =>
-        workspaceService.runValidationCommands(
+        this.executeValidationTool(
           input.workspace.workspacePath,
           input.workspace.validationCommands.slice(0, 3),
+          input.workspace.executionMode,
         ),
     );
 

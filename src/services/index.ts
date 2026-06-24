@@ -2,6 +2,7 @@ export { AgentCheckpointService, agentCheckpointService } from './agent-checkpoi
 export { AgentEventLogService, agentEventLogService } from './agent-event-log.js';
 export { AgentHookService, agentHookService } from './agent-hooks.js';
 export { AgentRolePipelineService, agentRolePipelineService } from './agent-role-pipeline.js';
+export { registerDefaultAgentTools } from './agent-tools.js';
 export { CapabilityRegistryService, capabilityRegistryService } from './capabilities.js';
 export { ContentService, contentService } from './content.js';
 export { ContextAssemblerService, contextAssemblerService } from './context-assembler.js';
@@ -34,4 +35,5 @@ export {
   normalizeWeights,
   SCORING_PRESETS,
 } from './scoring-presets.js';
+export { ToolExecutorService, toolExecutorService } from './tool-executor.js';
 export { WorkspaceService, workspaceService } from './workspace.js';

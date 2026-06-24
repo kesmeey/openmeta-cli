@@ -139,10 +139,25 @@ export class PermissionPolicyService {
     };
   }
 
+  evaluateValidationExecution(commands: TestCommand[], executionMode: ExecutionMode): PermissionDecision {
+    const repositoryCommands = commands.filter((command) => command.source === 'repo-script');
+    if (executionMode === 'headless' && repositoryCommands.length > 0) {
+      return deny('validation.command', 'Headless validation rejects repository-defined scripts.', {
+        commands: repositoryCommands.map((command) => command.command),
+      });
+    }
+
+    return allow('validation.command', 'Validation commands are allowed by the current execution mode.', {
+      commands: commands.map((command) => command.command),
+      executionMode,
+    });
+  }
+
   evaluatePullRequest(input: {
     allowRealPr: boolean;
     headless: boolean;
     hasBlockingValidationFailures: boolean;
+    confirmed?: boolean;
   }): PermissionDecision {
     if (!input.allowRealPr) {
       return review('github.create_draft_pr', 'Structured drafts require review before creating a real PR.');
@@ -152,12 +167,22 @@ export class PermissionPolicyService {
       return deny('github.create_draft_pr', 'Headless mode refuses to create PRs with blocking validation failures.');
     }
 
+    if (!input.headless && !input.confirmed) {
+      return review('github.create_draft_pr', 'Interactive draft PR creation requires user confirmation.', {
+        requiresConfirmation: true,
+      });
+    }
+
     return allow('github.create_draft_pr', 'Draft PR creation is allowed by the current execution policy.');
   }
 
-  evaluateArtifactPublish(input: { dryRun?: boolean; headless: boolean }): PermissionDecision {
+  evaluateArtifactPublish(input: { dryRun?: boolean; headless: boolean; confirmed?: boolean }): PermissionDecision {
     if (input.dryRun) {
       return review('artifact.publish', 'Dry-run mode previews artifact publication without writing git changes.');
+    }
+
+    if (input.confirmed) {
+      return allow('artifact.publish', 'Artifact publication was explicitly confirmed.');
     }
 
     return input.headless
