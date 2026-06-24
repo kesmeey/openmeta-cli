@@ -1,6 +1,7 @@
 import { type Command, Option } from 'commander';
 import { dailyOrchestrator } from '../orchestration/index.js';
 import { runCommand } from './run-command.js';
+import { parseStarCount } from './star-range.js';
 
 export function registerDailyCommand(program: Command): void {
   program
@@ -12,6 +13,8 @@ export function registerDailyCommand(program: Command): void {
     .option('--draft-only', 'Generate dossier and PR draft artifacts without applying file edits or opening a PR')
     .option('--local-artifacts-only', 'Write local artifacts without publishing, committing, or pushing them')
     .option('--refresh', 'Ignore cached GitHub issue discovery results')
+    .option('--min-stars <count>', 'Minimum repository star count', parseStarCount)
+    .option('--max-stars <count>', 'Maximum repository star count', parseStarCount)
     .addOption(new Option('--scheduler-run', 'Internal flag for scheduled automation').hideHelp())
     .action(
       (options: {
@@ -21,6 +24,8 @@ export function registerDailyCommand(program: Command): void {
         draftOnly?: boolean;
         localArtifactsOnly?: boolean;
         refresh?: boolean;
+        minStars?: number;
+        maxStars?: number;
         schedulerRun?: boolean;
       }) =>
         runCommand('OpenMeta Daily', () =>
@@ -31,6 +36,8 @@ export function registerDailyCommand(program: Command): void {
             draftOnly: options.draftOnly,
             localArtifactsOnly: options.localArtifactsOnly,
             refresh: options.refresh,
+            minStars: options.minStars,
+            maxStars: options.maxStars,
             schedulerRun: options.schedulerRun,
           }),
         ),

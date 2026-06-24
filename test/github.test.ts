@@ -405,6 +405,34 @@ describe('GitHubService internals', () => {
     expect(loaded).toEqual(issues);
   });
 
+  test('filters cached issues by a configurable inclusive repository star range', async () => {
+    const service = new GitHubService();
+    const internals = service as unknown as GitHubServiceInternals;
+    internals.saveCachedIssues([
+      createIssue({ number: 1, repoStars: 10 }),
+      createIssue({ number: 2, repoStars: 100 }),
+      createIssue({ number: 3, repoStars: 1_000 }),
+    ]);
+    internals.octokit = { rest: {} } as unknown as GitHubServiceInternals['octokit'];
+
+    const defaults = await service.fetchTrendingIssues();
+    const bounded = await service.fetchTrendingIssues({ minStars: 100, maxStars: 500 });
+    const broadened = await service.fetchTrendingIssues({ minStars: 0, maxStars: 20 });
+
+    expect(defaults.map((issue) => issue.number)).toEqual([2, 3]);
+    expect(bounded.map((issue) => issue.number)).toEqual([2]);
+    expect(broadened.map((issue) => issue.number)).toEqual([1]);
+  });
+
+  test('rejects invalid repository star ranges', () => {
+    const service = new GitHubService();
+
+    expect(() => service.resolveRepositoryStarRange(-1, 10)).toThrow('non-negative integer');
+    expect(() => service.resolveRepositoryStarRange(100, 99)).toThrow(
+      'Maximum repository stars (99) cannot be lower than minimum repository stars (100).',
+    );
+  });
+
   test('ignores stale or malformed cached issue payloads', () => {
     const service = new GitHubService() as unknown as GitHubServiceInternals;
     const cachePath = service.getCachePath();

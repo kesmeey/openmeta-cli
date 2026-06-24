@@ -57,6 +57,8 @@ export interface AgentRunOptions {
   draftOnly?: boolean;
   localArtifactsOnly?: boolean;
   refresh?: boolean;
+  minStars?: number;
+  maxStars?: number;
   repo?: string;
   preset?: string;
   allRepos?: boolean;
@@ -68,6 +70,8 @@ export interface AgentRunOptions {
 export interface ScoutRunOptions {
   limit?: number;
   refresh?: boolean;
+  minStars?: number;
+  maxStars?: number;
   repo?: string;
   preset?: string;
   allRepos?: boolean;
@@ -79,6 +83,8 @@ export interface MachineScoutResult {
     limit: number;
     refresh: boolean;
     repo?: string;
+    minStars?: number;
+    maxStars?: number;
   };
   emptyExplanation?: {
     title: string;
@@ -109,6 +115,8 @@ export interface MachineAgentResult {
     runChecks: boolean;
     dryRun: boolean;
     refresh: boolean;
+    minStars?: number;
+    maxStars?: number;
   };
   skipReasons: string[];
   nextActions: string[];
@@ -232,6 +240,9 @@ export class AgentOrchestrator {
     const dryRun = Boolean(options.dryRun);
     const repoPath = options.repoPath?.trim() || undefined;
     const issueTarget = options.issue ? resolveGitHubIssueTarget(options.issue, options.repo) : undefined;
+    const starRange = issueTarget
+      ? undefined
+      : githubService.resolveRepositoryStarRange(options.minStars, options.maxStars);
     const scope = issueTarget
       ? undefined
       : repositoryTargetingService.resolveScope(config, {
@@ -285,11 +296,15 @@ export class AgentOrchestrator {
             scope?.mode === 'preset'
               ? this.loadPresetRankedIssues(config, scope.repos, {
                   refresh,
+                  minStars: starRange?.minStars,
+                  maxStars: starRange?.maxStars,
                   onStatus: (message) => task.setMessage(message),
                 })
               : issueRankingService.loadRankedIssues(config, {
                   refresh,
                   repoFullName,
+                  minStars: starRange?.minStars,
+                  maxStars: starRange?.maxStars,
                   onStatus: (message) => task.setMessage(message),
                 }),
         );
@@ -564,6 +579,8 @@ export class AgentOrchestrator {
             runChecks: patchExecution.runChecks,
             dryRun,
             refresh,
+            minStars: starRange?.minStars,
+            maxStars: starRange?.maxStars,
           },
           skipReasons: [...new Set(skipReasons)],
           nextActions: dryRun
@@ -842,6 +859,8 @@ export class AgentOrchestrator {
         runChecks: patchExecution.runChecks,
         dryRun,
         refresh,
+        minStars: starRange?.minStars,
+        maxStars: starRange?.maxStars,
       },
       skipReasons: [...new Set(skipReasons)],
       nextActions: dryRun
@@ -864,6 +883,9 @@ export class AgentOrchestrator {
     const refresh = Boolean(options.refresh);
     const repoPath = options.repoPath?.trim() || undefined;
     const issueTarget = options.issue ? resolveGitHubIssueTarget(options.issue, options.repo) : undefined;
+    const starRange = issueTarget
+      ? undefined
+      : githubService.resolveRepositoryStarRange(options.minStars, options.maxStars);
     const scope = issueTarget
       ? undefined
       : repositoryTargetingService.resolveScope(config, {
@@ -897,6 +919,11 @@ export class AgentOrchestrator {
           : refresh
             ? 'Issue discovery will bypass the local search cache for this run.'
             : 'Issue discovery may reuse the short local search cache.',
+        ...(starRange
+          ? [
+              `Repository stars: ${starRange.minStars} to ${starRange.maxStars === undefined ? 'unbounded' : starRange.maxStars}.`,
+            ]
+          : []),
         issueTarget
           ? 'Issue discovery and interactive selection are skipped for this run.'
           : scope?.mode === 'preset'
@@ -945,11 +972,15 @@ export class AgentOrchestrator {
           : scope?.mode === 'preset'
             ? this.loadPresetRankedIssues(config, scope.repos, {
                 refresh,
+                minStars: starRange?.minStars,
+                maxStars: starRange?.maxStars,
                 onStatus: (message) => task.setMessage(message),
               })
             : issueRankingService.loadRankedIssues(config, {
                 refresh,
                 repoFullName,
+                minStars: starRange?.minStars,
+                maxStars: starRange?.maxStars,
                 onStatus: (message) => task.setMessage(message),
               }),
     );
@@ -1300,6 +1331,9 @@ export class AgentOrchestrator {
   async scout(options: ScoutRunOptions | number = {}): Promise<void> {
     const limit = typeof options === 'number' ? options : (options.limit ?? 10);
     const refresh = typeof options === 'number' ? false : Boolean(options.refresh);
+    const minStars = typeof options === 'number' ? undefined : options.minStars;
+    const maxStars = typeof options === 'number' ? undefined : options.maxStars;
+    const starRange = githubService.resolveRepositoryStarRange(minStars, maxStars);
     const explicitRepo =
       typeof options === 'number' || !options.repo ? undefined : parseGitHubRepoFullName(options.repo);
     const config = await configService.get();
@@ -1331,6 +1365,7 @@ export class AgentOrchestrator {
             ? `Issue discovery is limited to ${repoFullName}.`
             : 'Issue discovery will scan the broader GitHub issue stream.',
         'LLM scoring will refine the local candidate shortlist.',
+        `Repository stars: ${starRange.minStars} to ${starRange.maxStars === undefined ? 'unbounded' : starRange.maxStars}.`,
       ],
     });
 
@@ -1345,6 +1380,8 @@ export class AgentOrchestrator {
         if (scope.mode === 'preset') {
           return this.loadPresetRankedIssues(config, scope.repos, {
             refresh,
+            minStars: starRange.minStars,
+            maxStars: starRange.maxStars,
             onStatus: (message) => task.setMessage(message),
           });
         }
@@ -1352,6 +1389,8 @@ export class AgentOrchestrator {
         return issueRankingService.loadRankedIssues(config, {
           refresh,
           repoFullName,
+          minStars: starRange.minStars,
+          maxStars: starRange.maxStars,
           onStatus: (message) => task.setMessage(message),
         });
       },
@@ -1379,6 +1418,7 @@ export class AgentOrchestrator {
     const totalSteps = 3;
     const limit = options.limit ?? 10;
     const refresh = Boolean(options.refresh);
+    const starRange = githubService.resolveRepositoryStarRange(options.minStars, options.maxStars);
     const config = await configService.get();
     const scope = repositoryTargetingService.resolveScope(config, {
       repo: options.repo,
@@ -1412,6 +1452,8 @@ export class AgentOrchestrator {
         if (scope.mode === 'preset') {
           return this.loadPresetRankedIssues(config, scope.repos, {
             refresh,
+            minStars: starRange.minStars,
+            maxStars: starRange.maxStars,
             onStatus: (message) => task.setMessage(message),
           });
         }
@@ -1419,6 +1461,8 @@ export class AgentOrchestrator {
         return issueRankingService.loadRankedIssues(config, {
           refresh,
           repoFullName,
+          minStars: starRange.minStars,
+          maxStars: starRange.maxStars,
           onStatus: (message) => task.setMessage(message),
         });
       },
@@ -1432,6 +1476,8 @@ export class AgentOrchestrator {
         limit,
         refresh,
         repo: repoFullName,
+        minStars: starRange.minStars,
+        maxStars: starRange.maxStars,
       },
       ...(emptyExplanation ? { emptyExplanation } : {}),
       nextActions: rankedIssues.length === 0 ? ['broaden_profile_filters'] : ['inspect_ranked_opportunities'],
@@ -1995,6 +2041,8 @@ export class AgentOrchestrator {
     repos: string[],
     options: {
       refresh?: boolean;
+      minStars?: number;
+      maxStars?: number;
       onStatus?: (message: string) => void;
     } = {},
   ): Promise<RankedIssue[]> {
@@ -2005,6 +2053,8 @@ export class AgentOrchestrator {
       const issues = await issueRankingService.loadRankedIssues(config, {
         refresh: options.refresh,
         repoFullName,
+        minStars: options.minStars,
+        maxStars: options.maxStars,
       });
 
       for (const issue of issues) {

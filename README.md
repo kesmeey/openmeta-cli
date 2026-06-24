@@ -294,6 +294,7 @@ openmeta machine analyze --repo owner/name --dry-run
 | `openmeta agent` | 运行自治贡献主流程 |
 | `openmeta agent --draft-only` | 只生成 dossier、patch draft 和 PR draft，不改仓库、不创建 PR |
 | `openmeta agent --refresh` | 忽略本地 issue 搜索缓存，重新从 GitHub 发现机会 |
+| `openmeta agent --min-stars <n> --max-stars <n>` | 仅搜索 star 数位于包含上下界范围内的仓库；默认最小值为 50 |
 | `openmeta agent --repo <repository>` | 限定到一个 GitHub 仓库 URL 或 `owner/name` 进行发现、分析和 PR 创建 |
 | `openmeta agent --repo <repository> --issue <number>` | 直接解决指定仓库里的某个 issue，并沿用 agent 的 patch / PR 流程 |
 | `openmeta agent --issue <issue-url>` | 直接从 GitHub issue URL 推导仓库并解决该 issue |
@@ -302,6 +303,7 @@ openmeta machine analyze --repo owner/name --dry-run
 | `openmeta daily` | `agent` 的兼容别名，支持相同运行参数 |
 | `openmeta scout --limit <count>` | 查看高价值贡献机会排名 |
 | `openmeta scout --refresh` | 强制刷新 GitHub issue discovery 缓存 |
+| `openmeta scout --min-stars <n> --max-stars <n>` | 按仓库 star 数范围筛选贡献机会 |
 | `openmeta scout --repo <repository>` | 从一个 GitHub 仓库 URL 或 `owner/name` 中筛选贡献机会 |
 | `openmeta scout --local` | 使用本地启发式评分，不调用 LLM，适合模型服务暂时不可用时先筛机会 |
 | `openmeta inbox` | 查看已起草的贡献机会收件箱 |
@@ -640,6 +642,7 @@ openmeta machine analyze --repo owner/name --dry-run
 | `openmeta agent` | Run the autonomous contribution workflow |
 | `openmeta agent --draft-only` | Generate dossier, patch draft, and PR draft artifacts without editing files or opening a PR |
 | `openmeta agent --refresh` | Ignore the local issue search cache and discover fresh GitHub opportunities |
+| `openmeta agent --min-stars <n> --max-stars <n>` | Search repositories within an inclusive star range; the default minimum is 50 |
 | `openmeta agent --repo <repository>` | Limit issue discovery, ranking, workspace prep, and draft PR creation to one upstream GitHub repository URL or `owner/name` |
 | `openmeta agent --repo <repository> --issue <number>` | Solve one issue from the specified repository and continue through the normal patch / PR flow |
 | `openmeta agent --issue <issue-url>` | Infer the repository from a GitHub issue URL and solve that issue directly |
@@ -648,6 +651,7 @@ openmeta machine analyze --repo owner/name --dry-run
 | `openmeta daily` | Compatibility alias for `agent` with the same runtime options |
 | `openmeta scout --limit <count>` | Show ranked contribution opportunities |
 | `openmeta scout --refresh` | Force-refresh the GitHub issue discovery cache |
+| `openmeta scout --min-stars <n> --max-stars <n>` | Filter contribution opportunities by repository star range |
 | `openmeta scout --repo <repository>` | Rank opportunities from one upstream GitHub repository URL or `owner/name` |
 | `openmeta scout --local` | Use local heuristic scoring without calling the LLM provider |
 | `openmeta inbox` | Show drafted contribution opportunities |

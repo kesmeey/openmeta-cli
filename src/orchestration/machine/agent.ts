@@ -11,6 +11,8 @@ export class MachineAgentFlowOrchestrator {
       draftOnly?: boolean;
       localArtifactsOnly?: boolean;
       refresh?: boolean;
+      minStars?: number;
+      maxStars?: number;
       repo?: string;
       repoPath?: string;
       issue?: string;
@@ -34,6 +36,8 @@ export class MachineAgentFlowOrchestrator {
           draftOnly: options.draftOnly,
           localArtifactsOnly: options.localArtifactsOnly,
           refresh: options.refresh,
+          minStars: options.minStars,
+          maxStars: options.maxStars,
           repo: options.repo,
           repoPath: options.repoPath,
           issue: options.issue,

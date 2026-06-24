@@ -32,6 +32,8 @@ interface AgentRunInternals {
     draftOnly?: boolean;
     localArtifactsOnly?: boolean;
     refresh?: boolean;
+    minStars?: number;
+    maxStars?: number;
     repo?: string;
     preset?: string;
     allRepos?: boolean;
@@ -304,6 +306,25 @@ describe('AgentOrchestrator run flow', () => {
     await orchestrator.run({ headless: true, force: true });
 
     expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
+  test('passes repository star ranges into issue discovery', async () => {
+    const orchestrator = new AgentOrchestrator() as unknown as AgentRunInternals;
+    spyOn(infra.configService, 'get').mockResolvedValue(createConfig());
+    spyOn(
+      orchestrator as object as { initializeClients: AgentRunInternals['initializeClients'] },
+      'initializeClients',
+    ).mockResolvedValue(undefined);
+    const loadSpy = spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([]);
+
+    await orchestrator.run({
+      headless: true,
+      schedulerRun: true,
+      minStars: 100,
+      maxStars: 500,
+    });
+
+    expect(loadSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ minStars: 100, maxStars: 500 }));
   });
 
   test('returns early when automation cannot select an issue above the threshold', async () => {
