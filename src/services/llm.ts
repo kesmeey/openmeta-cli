@@ -54,6 +54,8 @@ import {
   LLM_VALIDATION_TIMEOUT_MS,
 } from './llm.constants.js';
 
+const REPOSITORY_CONTEXT_TOKEN_BUDGET = 30_000;
+
 export class LLMService {
   private client: OpenAI | null = null;
   private modelName: string = 'gpt-4o-mini';
@@ -193,7 +195,9 @@ Repo Stars: ${i.repoStars}`,
   ): Promise<StructuredOutputResult<'patch_draft', PatchDraft>> {
     const prompt = fillPrompt(PATCH_DRAFT_PROMPT, {
       issueContext: this.formatRankedIssue(issue),
-      repoContext: contextAssemblerService.buildRepositoryContext(workspace),
+      repoContext: contextAssemblerService.buildRepositoryContext(workspace, {
+        maxEstimatedTokens: REPOSITORY_CONTEXT_TOKEN_BUDGET,
+      }),
       repoMemory: contextAssemblerService.buildRepoMemoryContext(memory),
     });
 
@@ -214,6 +218,7 @@ Repo Stars: ${i.repoStars}`,
       repoContext: contextAssemblerService.buildRepositoryContext(workspace, {
         includeTopLevelFiles: true,
         includeBaselineResults: true,
+        maxEstimatedTokens: REPOSITORY_CONTEXT_TOKEN_BUDGET,
       }),
       environmentContext: this.formatEnvironment(environment),
     });
@@ -235,6 +240,7 @@ Repo Stars: ${i.repoStars}`,
       repoContext: contextAssemblerService.buildRepositoryContext(workspace, {
         repoFullName,
         includeTopLevelFiles: true,
+        maxEstimatedTokens: REPOSITORY_CONTEXT_TOKEN_BUDGET,
       }),
       repoMemory: contextAssemblerService.buildRepoMemoryContext(memory),
     });

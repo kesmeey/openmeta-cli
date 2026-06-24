@@ -1,5 +1,9 @@
 import { resolve, sep } from 'path';
+import { getCurrentRunId } from '../infra/execution-context.js';
+import { logger } from '../infra/logger.js';
 import type { GeneratedFileChange, PermissionDecision, TestCommand } from '../types/index.js';
+import { agentEventLogService } from './agent-event-log.js';
+import { agentHookService } from './agent-hooks.js';
 
 type ExecutionMode = 'interactive' | 'headless';
 
@@ -7,16 +11,31 @@ function normalizeRepoRelativePath(path: string): string {
   return path.replace(/\\/g, '/').replace(/^\/+/, '').trim();
 }
 
+function traceDecision(decision: PermissionDecision): PermissionDecision {
+  const runId = getCurrentRunId();
+  agentHookService.emit('permission_decision', { decision });
+
+  if (runId) {
+    try {
+      agentEventLogService.record(runId, 'permission_decision', { decision });
+    } catch (error) {
+      logger.debug(`Unable to append permission decision for ${runId}`, error);
+    }
+  }
+
+  return decision;
+}
+
 function allow(action: string, reason: string, details?: Record<string, unknown>): PermissionDecision {
-  return { outcome: 'allow', action, riskLevel: 'low', reason, details };
+  return traceDecision({ outcome: 'allow', action, riskLevel: 'low', reason, details });
 }
 
 function review(action: string, reason: string, details?: Record<string, unknown>): PermissionDecision {
-  return { outcome: 'review', action, riskLevel: 'medium', reason, details };
+  return traceDecision({ outcome: 'review', action, riskLevel: 'medium', reason, details });
 }
 
 function deny(action: string, reason: string, details?: Record<string, unknown>): PermissionDecision {
-  return { outcome: 'deny', action, riskLevel: 'high', reason, details };
+  return traceDecision({ outcome: 'deny', action, riskLevel: 'high', reason, details });
 }
 
 export class PermissionPolicyService {

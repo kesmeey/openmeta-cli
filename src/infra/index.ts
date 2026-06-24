@@ -3,7 +3,7 @@ export { CryptoService } from './crypto.js';
 export { getDailyNoteFileName, getLocalDateStamp } from './date.js';
 export { detectEnvironment } from './environment.js';
 export { getErrorMessage, isPromptAbortError, isUserCancelledError, UserCancelledError } from './errors.js';
-export { isMachineContext, runInMachineContext } from './execution-context.js';
+export { getCurrentRunId, isMachineContext, runInMachineContext, runWithRunContext } from './execution-context.js';
 export type {
   GitHubIssueReference,
   GitHubIssueTarget,

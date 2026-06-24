@@ -37,4 +37,21 @@ describe('ContextAssemblerService', () => {
       'No current files were provided.',
     );
   });
+
+  test('returns context budget metadata without exposing omitted snippets', () => {
+    const workspace = createWorkspace({
+      snippets: [
+        { path: 'src/important.ts', content: 'important'.repeat(10) },
+        { path: 'src/large.ts', content: 'optional'.repeat(1000) },
+      ],
+    });
+
+    const result = contextAssemblerService.buildRepositoryContextResult(workspace, {
+      maxEstimatedTokens: 100,
+    });
+
+    expect(result.estimatedTokens).toBeLessThanOrEqual(100);
+    expect(result.originalEstimatedTokens).toBeGreaterThan(result.estimatedTokens);
+    expect(result.truncatedSections.some((section) => section.startsWith('snippet:'))).toBe(true);
+  });
 });

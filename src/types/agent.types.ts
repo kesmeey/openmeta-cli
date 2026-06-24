@@ -222,7 +222,13 @@ export interface AgentRunRecord {
   error?: string;
 }
 
-export type AgentEventType = 'run_started' | 'run_finished' | 'run_cancelled' | 'run_failed' | 'permission_decision';
+export type AgentEventType =
+  | 'run_started'
+  | 'run_finished'
+  | 'run_cancelled'
+  | 'run_failed'
+  | 'permission_decision'
+  | 'context_assembled';
 
 export interface AgentEventLogEntry {
   version: 1;
@@ -253,4 +259,29 @@ export interface AgentCapability<Input = unknown, Output = unknown> {
   inputSchemaName: string;
   outputSchemaName: string;
   execute?: (input: Input) => Promise<Output> | Output;
+}
+
+export type AgentHookEvent = 'permission_decision' | 'context_assembled';
+
+export interface AgentHookPayload {
+  event: AgentHookEvent;
+  timestamp: string;
+  runId?: string;
+  data: Record<string, unknown>;
+}
+
+export type AgentHookHandler = (payload: AgentHookPayload) => void;
+
+export interface ContextSection {
+  id: string;
+  content: string;
+  priority: number;
+  required?: boolean;
+}
+
+export interface ContextBudgetResult {
+  content: string;
+  estimatedTokens: number;
+  originalEstimatedTokens: number;
+  truncatedSections: string[];
 }

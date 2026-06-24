@@ -1,4 +1,4 @@
-import { getErrorMessage, isUserCancelledError, logger, ui } from '../infra/index.js';
+import { getErrorMessage, isUserCancelledError, logger, runWithRunContext, ui } from '../infra/index.js';
 import { agentEventLogService, runHistoryService } from '../services/index.js';
 import type { AgentEventType } from '../types/index.js';
 
@@ -30,7 +30,7 @@ export async function runCommand(
   }
 
   try {
-    await task();
+    await (run ? runWithRunContext(run.id, task) : task());
     if (run) {
       runHistoryService.finish(run.id, 'success');
       recordRunEvent(run.id, 'run_finished', { status: 'success' });

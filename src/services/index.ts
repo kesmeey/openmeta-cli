@@ -1,7 +1,9 @@
 export { AgentEventLogService, agentEventLogService } from './agent-event-log.js';
+export { AgentHookService, agentHookService } from './agent-hooks.js';
 export { CapabilityRegistryService, capabilityRegistryService } from './capabilities.js';
 export { ContentService, contentService } from './content.js';
 export { ContextAssemblerService, contextAssemblerService } from './context-assembler.js';
+export { ContextBudgetService, contextBudgetService } from './context-budget.js';
 export { ContributionPrService, contributionPrService } from './contribution-pr.js';
 export { FeasibilityHintService, feasibilityHintService } from './feasibility-hints.js';
 export { GitService, gitService } from './git.js';

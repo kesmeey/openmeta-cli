@@ -1,5 +1,5 @@
 import { ui } from '../infra/index.js';
-import { runHistoryService } from '../services/index.js';
+import { agentEventLogService, runHistoryService } from '../services/index.js';
 import type { AgentRunStatus } from '../types/index.js';
 
 export interface RunsListOptions {
@@ -52,7 +52,9 @@ export class RunsOrchestrator {
 
   async showMachine(id: string): Promise<{
     record: NonNullable<ReturnType<typeof runHistoryService.find>>;
+    events: ReturnType<typeof agentEventLogService.load>;
     ledgerPath: string;
+    eventLogPath: string;
   }> {
     const record = runHistoryService.find(id);
 
@@ -62,7 +64,9 @@ export class RunsOrchestrator {
 
     return {
       record,
+      events: agentEventLogService.load(id),
       ledgerPath: runHistoryService.getPath(),
+      eventLogPath: agentEventLogService.getPath(id),
     };
   }
 
@@ -113,10 +117,11 @@ export class RunsOrchestrator {
   }
 
   async show(id: string, options: { json?: boolean } = {}): Promise<void> {
-    const { record, ledgerPath } = await this.showMachine(id);
+    const result = await this.showMachine(id);
+    const { record, events, ledgerPath, eventLogPath } = result;
 
     if (options.json) {
-      process.stdout.write(`${JSON.stringify(record, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       return;
     }
 
@@ -138,7 +143,20 @@ export class RunsOrchestrator {
       { label: 'Args', value: record.args.join(' ') || '(none)', tone: 'info' },
       { label: 'Error', value: record.error || '(none)', tone: record.error ? 'error' : 'muted' },
       { label: 'Ledger', value: ledgerPath, tone: 'muted' },
+      { label: 'Event log', value: eventLogPath, tone: 'muted' },
     ]);
+
+    if (events.length > 0) {
+      ui.recordList(
+        'Run timeline',
+        events.map((event) => ({
+          title: event.type,
+          subtitle: event.timestamp,
+          lines: [JSON.stringify(event.data)],
+          tone: event.type === 'run_failed' ? 'error' : event.type === 'run_cancelled' ? 'warning' : 'info',
+        })),
+      );
+    }
   }
 }
 

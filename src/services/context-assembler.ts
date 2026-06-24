@@ -1,31 +1,93 @@
-import type { RepoFileSnippet, RepoMemory, RepoWorkspaceContext, TestResult } from '../types/index.js';
+import { getCurrentRunId } from '../infra/execution-context.js';
+import { logger } from '../infra/logger.js';
+import type {
+  ContextBudgetResult,
+  ContextSection,
+  RepoFileSnippet,
+  RepoMemory,
+  RepoWorkspaceContext,
+  TestResult,
+} from '../types/index.js';
+import { agentEventLogService } from './agent-event-log.js';
+import { agentHookService } from './agent-hooks.js';
+import { contextBudgetService } from './context-budget.js';
 
 export interface RepositoryContextOptions {
   repoFullName?: string;
   includeTopLevelFiles?: boolean;
   includeBaselineResults?: boolean;
   includeSnippets?: boolean;
+  maxEstimatedTokens?: number;
 }
 
 export class ContextAssemblerService {
   buildRepositoryContext(workspace: RepoWorkspaceContext, options: RepositoryContextOptions = {}): string {
-    return [
-      ...(options.repoFullName ? [`Repository: ${options.repoFullName}`] : []),
-      `Workspace Path: ${workspace.workspacePath}`,
-      `Default Branch: ${workspace.defaultBranch}`,
-      `Workspace Dirty: ${workspace.workspaceDirty}`,
-      ...(options.includeTopLevelFiles ? [`Top-Level Files: ${workspace.topLevelFiles.join(', ') || 'none'}`] : []),
-      `Candidate Files: ${workspace.candidateFiles.join(', ') || 'none'}`,
-      `Detected Test Commands: ${workspace.testCommands.map((item) => item.command).join(', ') || 'none'}`,
-      `Runnable Validation Commands: ${workspace.validationCommands.map((item) => item.command).join(', ') || 'none'}`,
-      `Validation Safety Notes: ${workspace.validationWarnings.join(' | ') || 'none'}`,
+    return this.buildRepositoryContextResult(workspace, options).content;
+  }
+
+  buildRepositoryContextResult(
+    workspace: RepoWorkspaceContext,
+    options: RepositoryContextOptions = {},
+  ): ContextBudgetResult {
+    const sections: ContextSection[] = [
+      ...(options.repoFullName
+        ? [{ id: 'repository', content: `Repository: ${options.repoFullName}`, priority: 100, required: true }]
+        : []),
+      { id: 'workspace_path', content: `Workspace Path: ${workspace.workspacePath}`, priority: 100, required: true },
+      { id: 'default_branch', content: `Default Branch: ${workspace.defaultBranch}`, priority: 95, required: true },
+      { id: 'workspace_dirty', content: `Workspace Dirty: ${workspace.workspaceDirty}`, priority: 100, required: true },
+      ...(options.includeTopLevelFiles
+        ? [
+            {
+              id: 'top_level_files',
+              content: `Top-Level Files: ${workspace.topLevelFiles.join(', ') || 'none'}`,
+              priority: 60,
+            },
+          ]
+        : []),
+      {
+        id: 'candidate_files',
+        content: `Candidate Files: ${workspace.candidateFiles.join(', ') || 'none'}`,
+        priority: 90,
+        required: true,
+      },
+      {
+        id: 'detected_test_commands',
+        content: `Detected Test Commands: ${workspace.testCommands.map((item) => item.command).join(', ') || 'none'}`,
+        priority: 80,
+      },
+      {
+        id: 'validation_commands',
+        content: `Runnable Validation Commands: ${workspace.validationCommands.map((item) => item.command).join(', ') || 'none'}`,
+        priority: 90,
+      },
+      {
+        id: 'validation_warnings',
+        content: `Validation Safety Notes: ${workspace.validationWarnings.join(' | ') || 'none'}`,
+        priority: 95,
+      },
       ...(options.includeBaselineResults
-        ? [`Baseline Results: ${this.formatValidationResults(workspace.testResults)}`]
+        ? [
+            {
+              id: 'baseline_results',
+              content: `Baseline Results: ${this.formatValidationResults(workspace.testResults)}`,
+              priority: 95,
+            },
+          ]
         : []),
       ...((options.includeSnippets ?? true)
-        ? ['Snippets:', ...workspace.snippets.map((snippet) => this.formatFileSnippet(snippet))]
+        ? [
+            { id: 'snippet_header', content: 'Snippets:', priority: 70 },
+            ...workspace.snippets.map((snippet, index) => ({
+              id: `snippet:${snippet.path || index}`,
+              content: this.formatFileSnippet(snippet),
+              priority: 70,
+            })),
+          ]
         : []),
-    ].join('\n\n');
+    ];
+
+    return this.recordAssembly('repository', contextBudgetService.assemble(sections, options.maxEstimatedTokens));
   }
 
   buildEditableFilesContext(snippets: RepoFileSnippet[], emptyFallback = 'No editable files were detected.'): string {
@@ -107,6 +169,27 @@ export class ContextAssemblerService {
           .map((result) => `${result.command} => ${result.passed ? 'passed' : `failed (${result.exitCode ?? 'n/a'})`}`)
           .join('; ')
       : 'not executed';
+  }
+
+  private recordAssembly(kind: string, result: ContextBudgetResult): ContextBudgetResult {
+    const data = {
+      kind,
+      estimatedTokens: result.estimatedTokens,
+      originalEstimatedTokens: result.originalEstimatedTokens,
+      truncatedSections: result.truncatedSections,
+    };
+    const runId = getCurrentRunId();
+    agentHookService.emit('context_assembled', data);
+
+    if (runId) {
+      try {
+        agentEventLogService.record(runId, 'context_assembled', data);
+      } catch (error) {
+        logger.debug(`Unable to append context assembly event for ${runId}`, error);
+      }
+    }
+
+    return result;
   }
 }
 

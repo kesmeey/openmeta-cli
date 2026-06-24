@@ -4,7 +4,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { AgentOrchestrator } from '../src/orchestration/agent.js';
 import { RunsOrchestrator } from '../src/orchestration/runs.js';
-import { inboxService, proofOfWorkService, runHistoryService } from '../src/services/index.js';
+import { agentEventLogService, inboxService, proofOfWorkService, runHistoryService } from '../src/services/index.js';
 import { createInboxItem, createProofRecord } from './helpers/factories.js';
 
 let tempRoot = '';
@@ -39,6 +39,22 @@ describe('machine state result builders', () => {
     expect(result.records.length).toBe(1);
     expect(result.totals.running).toBe(1);
     expect(result.ledgerPath).toContain('runs.json');
+  });
+
+  test('returns append-only events for one run', async () => {
+    const run = runHistoryService.start({
+      commandName: 'OpenMeta Agent',
+      args: ['agent', '--dry-run'],
+    });
+    agentEventLogService.record(run.id, 'run_started', { commandName: 'OpenMeta Agent' });
+    agentEventLogService.record(run.id, 'permission_decision', {
+      decision: { action: 'artifact.publish', outcome: 'review' },
+    });
+
+    const result = await new RunsOrchestrator().showMachine(run.id);
+
+    expect(result.events.map((event) => event.type)).toEqual(['run_started', 'permission_decision']);
+    expect(result.eventLogPath).toContain(`${run.id}.jsonl`);
   });
 
   test('returns inbox items ordered by score', async () => {
