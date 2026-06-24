@@ -14,6 +14,7 @@ import type {
   TestCommand,
   TestResult,
 } from '../types/index.js';
+import { agentCheckpointService } from './agent-checkpoints.js';
 import { permissionPolicyService } from './permission-policy.js';
 
 const EXCLUDED_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'coverage', 'target', 'vendor']);
@@ -69,6 +70,10 @@ export class WorkspaceService {
     executionMode: ExecutionMode = 'interactive',
     repoPath?: string,
   ): Promise<RepoWorkspaceContext> {
+    agentCheckpointService.record('target_selected', {
+      issue: `${issue.repoFullName}#${issue.number}`,
+      title: issue.title,
+    });
     const workspaceState = await this.prepareGitWorkspace(
       issue.repoFullName,
       (git) => this.createWorkspaceBranchName(git, issue),
@@ -80,7 +85,7 @@ export class WorkspaceService {
       this.discoverFiles(workspaceState.workspacePath),
     ).slice(0, 8);
 
-    return this.buildWorkspaceContext({
+    const workspace = this.buildWorkspaceContext({
       workspacePath: workspaceState.workspacePath,
       workspaceDirty: workspaceState.workspaceDirty,
       defaultBranch: workspaceState.defaultBranch,
@@ -89,6 +94,12 @@ export class WorkspaceService {
       runChecks,
       executionMode,
     });
+    agentCheckpointService.record('workspace_prepared', {
+      workspacePath: workspace.workspacePath,
+      branchName: workspace.branchName,
+      candidateFiles: workspace.candidateFiles,
+    });
+    return workspace;
   }
 
   async prepareRepositoryWorkspace(
@@ -108,7 +119,7 @@ export class WorkspaceService {
       this.discoverFiles(workspaceState.workspacePath),
     ).slice(0, 12);
 
-    return this.buildWorkspaceContext({
+    const workspace = this.buildWorkspaceContext({
       workspacePath: workspaceState.workspacePath,
       candidateFiles,
       workspaceDirty: workspaceState.workspaceDirty,
@@ -117,6 +128,13 @@ export class WorkspaceService {
       runChecks,
       executionMode,
     });
+    agentCheckpointService.record('workspace_prepared', {
+      repoFullName,
+      workspacePath: workspace.workspacePath,
+      branchName: workspace.branchName,
+      candidateFiles: workspace.candidateFiles,
+    });
+    return workspace;
   }
 
   applyGeneratedChanges(
@@ -199,17 +217,31 @@ export class WorkspaceService {
         file.reason.includes('exceeds'),
     );
 
-    return {
+    const result = {
       appliedFiles,
       skippedFiles,
       reviewRequired: unsafeSkipped.length > 0,
       reviewReason:
         unsafeSkipped.length > 0 ? unsafeSkipped.map((file) => `${file.path}: ${file.reason}`).join('; ') : undefined,
     };
+    if (appliedFiles.length > 0) {
+      agentCheckpointService.record('changes_applied', {
+        workspacePath,
+        appliedFiles,
+        reviewRequired: result.reviewRequired,
+      });
+    }
+    return result;
   }
 
   runValidationCommands(workspacePath: string, commands: TestCommand[]): TestResult[] {
-    return this.runTestCommands(workspacePath, commands);
+    const results = this.runTestCommands(workspacePath, commands);
+    agentCheckpointService.record('validation_completed', {
+      workspacePath,
+      commands: commands.map((command) => command.command),
+      passed: results.every((result) => result.passed),
+    });
+    return results;
   }
 
   readWorkspaceFiles(workspacePath: string, filePaths: string[]): RepoFileSnippet[] {

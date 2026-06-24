@@ -1,5 +1,7 @@
+export { AgentCheckpointService, agentCheckpointService } from './agent-checkpoints.js';
 export { AgentEventLogService, agentEventLogService } from './agent-event-log.js';
 export { AgentHookService, agentHookService } from './agent-hooks.js';
+export { AgentRolePipelineService, agentRolePipelineService } from './agent-role-pipeline.js';
 export { CapabilityRegistryService, capabilityRegistryService } from './capabilities.js';
 export { ContentService, contentService } from './content.js';
 export { ContextAssemblerService, contextAssemblerService } from './context-assembler.js';

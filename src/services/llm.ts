@@ -45,6 +45,7 @@ import type {
   TestResult,
   UserProfile,
 } from '../types/index.js';
+import { agentCheckpointService } from './agent-checkpoints.js';
 import { contextAssemblerService } from './context-assembler.js';
 import {
   LLM_VALIDATION_FALLBACK_HINTS,
@@ -201,11 +202,16 @@ Repo Stars: ${i.repoStars}`,
       repoMemory: contextAssemblerService.buildRepoMemoryContext(memory),
     });
 
-    return this.generateStructuredOutput({
+    const result = await this.generateStructuredOutput({
       prompt,
       parser: this.parsePatchDraft.bind(this),
       repairPrompt: PATCH_DRAFT_REPAIR_PROMPT,
     });
+    agentCheckpointService.record('patch_drafted', {
+      status: result.status,
+      targetFiles: result.data.targetFiles.map((file) => file.path),
+    });
+    return result;
   }
 
   async assessIssueFeasibility(
@@ -283,10 +289,15 @@ Repo Stars: ${i.repoStars}`,
       validationContext: contextAssemblerService.buildValidationContext(workspace),
     });
 
-    return this.generateStructuredOutput({
+    const result = await this.generateStructuredOutput({
       prompt,
       parser: this.parsePullRequestDraft.bind(this),
     });
+    agentCheckpointService.record('pr_drafted', {
+      status: result.status,
+      title: result.data.title,
+    });
+    return result;
   }
 
   async generateImplementationRepairDraft(

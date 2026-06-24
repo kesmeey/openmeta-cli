@@ -56,6 +56,15 @@ export class CapabilityRegistryService {
       inputSchemaName: 'ArtifactPublishInput',
       outputSchemaName: 'ArtifactPublishResult',
     },
+    {
+      name: 'agent.role_pipeline',
+      description: 'Execute research, patch, and independent verification roles through explicit handoffs.',
+      isReadOnly: false,
+      isConcurrencySafe: false,
+      riskLevel: 'medium',
+      inputSchemaName: 'AgentRolePipelineInput',
+      outputSchemaName: 'AgentRolePipelineResult',
+    },
   ];
 
   list(): AgentCapability[] {

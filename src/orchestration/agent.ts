@@ -23,6 +23,7 @@ import {
   ui,
 } from '../infra/index.js';
 import {
+  agentCheckpointService,
   contentService,
   contributionPrService,
   githubService,
@@ -2420,6 +2421,9 @@ export class AgentOrchestrator {
     writeFileSync(input.artifacts.memoryPath, input.memoryMarkdown, 'utf-8');
     writeFileSync(input.artifacts.inboxPath, input.inboxMarkdown, 'utf-8');
     writeFileSync(input.artifacts.proofOfWorkPath, input.proofMarkdown, 'utf-8');
+    agentCheckpointService.record('artifacts_written', {
+      artifactDir: input.artifacts.artifactDir,
+    });
   }
 
   private buildImplementationWorkspace(workspace: RepoWorkspaceContext, patchDraft: PatchDraft): RepoWorkspaceContext {
@@ -2875,6 +2879,10 @@ export class AgentOrchestrator {
       ],
       tone: 'success',
     });
+    agentCheckpointService.record('artifacts_published', {
+      branch: publishResult.branch,
+      fileNames: publishResult.fileNames,
+    });
 
     return { published: true };
   }
@@ -2965,6 +2973,11 @@ export class AgentOrchestrator {
           `Pull Request: ${contributionPullRequest.url}`,
         ],
         tone: 'success',
+      });
+      agentCheckpointService.record('pr_created', {
+        url: contributionPullRequest.url,
+        number: contributionPullRequest.number,
+        branchName: contributionPullRequest.branchName,
       });
 
       return {

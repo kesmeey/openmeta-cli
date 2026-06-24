@@ -1,5 +1,5 @@
 import { ui } from '../infra/index.js';
-import { agentEventLogService, runHistoryService } from '../services/index.js';
+import { agentCheckpointService, agentEventLogService, runHistoryService } from '../services/index.js';
 import type { AgentRunStatus } from '../types/index.js';
 
 export interface RunsListOptions {
@@ -53,6 +53,7 @@ export class RunsOrchestrator {
   async showMachine(id: string): Promise<{
     record: NonNullable<ReturnType<typeof runHistoryService.find>>;
     events: ReturnType<typeof agentEventLogService.load>;
+    resumePlan: ReturnType<typeof agentCheckpointService.buildResumePlan>;
     ledgerPath: string;
     eventLogPath: string;
   }> {
@@ -65,6 +66,7 @@ export class RunsOrchestrator {
     return {
       record,
       events: agentEventLogService.load(id),
+      resumePlan: agentCheckpointService.buildResumePlan(id, record),
       ledgerPath: runHistoryService.getPath(),
       eventLogPath: agentEventLogService.getPath(id),
     };
@@ -118,7 +120,7 @@ export class RunsOrchestrator {
 
   async show(id: string, options: { json?: boolean } = {}): Promise<void> {
     const result = await this.showMachine(id);
-    const { record, events, ledgerPath, eventLogPath } = result;
+    const { record, events, resumePlan, ledgerPath, eventLogPath } = result;
 
     if (options.json) {
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -144,6 +146,8 @@ export class RunsOrchestrator {
       { label: 'Error', value: record.error || '(none)', tone: record.error ? 'error' : 'muted' },
       { label: 'Ledger', value: ledgerPath, tone: 'muted' },
       { label: 'Event log', value: eventLogPath, tone: 'muted' },
+      { label: 'Resumable', value: resumePlan.resumable ? 'yes' : 'no', tone: resumePlan.resumable ? 'info' : 'muted' },
+      { label: 'Resume reason', value: resumePlan.reason, tone: 'muted' },
     ]);
 
     if (events.length > 0) {

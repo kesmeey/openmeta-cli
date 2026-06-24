@@ -228,7 +228,9 @@ export type AgentEventType =
   | 'run_cancelled'
   | 'run_failed'
   | 'permission_decision'
-  | 'context_assembled';
+  | 'context_assembled'
+  | 'agent_checkpoint'
+  | 'agent_role_completed';
 
 export interface AgentEventLogEntry {
   version: 1;
@@ -284,4 +286,42 @@ export interface ContextBudgetResult {
   estimatedTokens: number;
   originalEstimatedTokens: number;
   truncatedSections: string[];
+}
+
+export type AgentCheckpointStage =
+  | 'target_selected'
+  | 'workspace_prepared'
+  | 'patch_drafted'
+  | 'changes_applied'
+  | 'validation_completed'
+  | 'pr_drafted'
+  | 'pr_created'
+  | 'artifacts_written'
+  | 'artifacts_published';
+
+export interface AgentResumePlan {
+  runId: string;
+  resumable: boolean;
+  completedStages: AgentCheckpointStage[];
+  lastStage?: AgentCheckpointStage;
+  nextStage?: AgentCheckpointStage;
+  reason: string;
+  nextActions: string[];
+}
+
+export type AgentRole = 'research' | 'patch' | 'verify';
+
+export interface AgentRoleHandoff<T = unknown> {
+  from: AgentRole;
+  to: AgentRole;
+  createdAt: string;
+  runId?: string;
+  payload: T;
+}
+
+export interface AgentRolePipelineResult<Research, Patch, Verification> {
+  research: Research;
+  patch: Patch;
+  verification: Verification;
+  handoffs: [AgentRoleHandoff<Research>, AgentRoleHandoff<Patch>];
 }

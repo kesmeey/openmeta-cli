@@ -57,6 +57,21 @@ describe('machine state result builders', () => {
     expect(result.eventLogPath).toContain(`${run.id}.jsonl`);
   });
 
+  test('returns a resume plan from the latest checkpoint', async () => {
+    const run = runHistoryService.start({
+      commandName: 'OpenMeta Agent',
+      args: ['agent', '--repo', 'acme/demo'],
+    });
+    agentEventLogService.record(run.id, 'agent_checkpoint', { stage: 'workspace_prepared' });
+    runHistoryService.finish(run.id, 'failed', 'provider unavailable');
+
+    const result = await new RunsOrchestrator().showMachine(run.id);
+
+    expect(result.resumePlan.resumable).toBe(true);
+    expect(result.resumePlan.lastStage).toBe('workspace_prepared');
+    expect(result.resumePlan.nextStage).toBe('patch_drafted');
+  });
+
   test('returns inbox items ordered by score', async () => {
     inboxService.saveItem(createInboxItem({ id: 'low', overallScore: 55 }));
     inboxService.saveItem(createInboxItem({ id: 'high', overallScore: 88 }));
