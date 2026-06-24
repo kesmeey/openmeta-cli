@@ -11,6 +11,12 @@ interface GitHubServiceInternals {
     rest: {
       issues: {
         get: (params: { owner: string; repo: string; issue_number: number }) => Promise<{ data: unknown }>;
+        listEventsForTimeline: (params: {
+          owner: string;
+          repo: string;
+          issue_number: number;
+          per_page: number;
+        }) => Promise<{ data: unknown[] }>;
       };
       repos: {
         get: (params: {
@@ -275,6 +281,70 @@ describe('GitHubService internals', () => {
     } as unknown as GitHubServiceInternals['octokit'];
 
     await expect(service.fetchIssue('acme/demo', 44)).rejects.toThrow('cannot be handled automatically');
+  });
+
+  test('finds deduplicated open pull requests that cross-reference an issue', async () => {
+    const service = new GitHubService();
+    const internals = service as unknown as GitHubServiceInternals;
+    const requests: unknown[] = [];
+
+    internals.octokit = {
+      rest: {
+        issues: {
+          listEventsForTimeline: async (params: {
+            owner: string;
+            repo: string;
+            issue_number: number;
+            per_page: number;
+          }) => {
+            requests.push(params);
+            return {
+              data: [
+                {
+                  event: 'cross-referenced',
+                  source: {
+                    issue: {
+                      number: 19,
+                      state: 'open',
+                      html_url: 'https://github.com/acme/demo/pull/19',
+                      pull_request: { url: 'https://api.github.com/repos/acme/demo/pulls/19' },
+                    },
+                  },
+                },
+                {
+                  event: 'cross-referenced',
+                  source: {
+                    issue: {
+                      number: 19,
+                      state: 'open',
+                      html_url: 'https://github.com/acme/demo/pull/19',
+                      pull_request: { url: 'https://api.github.com/repos/acme/demo/pulls/19' },
+                    },
+                  },
+                },
+                {
+                  event: 'cross-referenced',
+                  source: {
+                    issue: {
+                      number: 20,
+                      state: 'closed',
+                      html_url: 'https://github.com/acme/demo/pull/20',
+                      pull_request: { url: 'https://api.github.com/repos/acme/demo/pulls/20' },
+                    },
+                  },
+                },
+                { event: 'commented' },
+              ],
+            };
+          },
+        },
+      },
+    } as unknown as GitHubServiceInternals['octokit'];
+
+    const references = await service.findOpenPullRequestsReferencingIssue('acme/demo', 18);
+
+    expect(requests).toEqual([{ owner: 'acme', repo: 'demo', issue_number: 18, per_page: 100 }]);
+    expect(references).toEqual([{ number: 19, url: 'https://github.com/acme/demo/pull/19' }]);
   });
 
   test('classifies search failures by rate limit and validation errors', () => {

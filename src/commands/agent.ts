@@ -7,7 +7,7 @@ export function registerAgentCommand(program: Command): void {
     .command('agent')
     .description('Run the autonomous contribution agent workflow')
     .option('--headless', 'Run unattended using saved automation defaults')
-    .option('--force', 'Reserved for compatibility with scheduled runs')
+    .option('--force', 'Skip the one-time confirmation for a manual headless run')
     .option('--run-checks', 'Execute detected baseline validation commands')
     .option('--draft-only', 'Generate dossier and PR draft artifacts without applying file edits or opening a PR')
     .option('--local-artifacts-only', 'Write local artifacts without publishing, committing, or pushing them')

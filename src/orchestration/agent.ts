@@ -245,7 +245,7 @@ export class AgentOrchestrator {
 
     issueRankingService.warmEnvironmentCache();
 
-    if (headless && !schedulerRun && !dryRun && !localArtifactsOnly) {
+    if (headless && !schedulerRun && !options.force && !dryRun && !localArtifactsOnly) {
       await this.confirmManualHeadlessRun(config);
     }
 
@@ -306,16 +306,20 @@ export class AgentOrchestrator {
       !issueTarget &&
       scope?.mode === 'preset' &&
       issueRankingService.getAdjustedOverallScore(rankedIssues[0]) >= config.automation.minMatchScore;
-    const presetQualifiedIssue = presetIssueFlowAllowed
-      ? issueRankingService.selectIssueForAutomation(rankedIssues, config.automation.minMatchScore)
-      : undefined;
-    const selectedIssue = issueTarget
-      ? rankedIssues[0]
-      : scope?.mode === 'preset'
-        ? presetQualifiedIssue
-        : headless
-          ? issueRankingService.selectIssueForAutomation(rankedIssues, config.automation.minMatchScore)
-          : await this.promptForIssue(issueRankingService.diversifyScoutIssues(rankedIssues, 5));
+    const selectedIssue = await this.selectIssueWithoutOpenPullRequest({
+      issues: rankedIssues,
+      explicitTarget: Boolean(issueTarget),
+      select: async (candidates) =>
+        issueTarget
+          ? candidates[0]
+          : scope?.mode === 'preset'
+            ? presetIssueFlowAllowed
+              ? issueRankingService.selectIssueForAutomation(candidates, config.automation.minMatchScore)
+              : undefined
+            : headless
+              ? issueRankingService.selectIssueForAutomation(candidates, config.automation.minMatchScore)
+              : await this.promptForIssue(issueRankingService.diversifyScoutIssues(candidates, 5)),
+    });
 
     if (!selectedIssue) {
       if (!issueTarget && scope?.mode === 'preset') {
@@ -352,6 +356,7 @@ export class AgentOrchestrator {
           async () => llmService.generatePatchDraft(syntheticIssue, selectedCandidate.workspace, memory),
         );
         const patchDraft = patchDraftResult.data;
+        const patchExecution = this.resolvePatchExecutionPolicy(feasibilityPolicy, patchDraft, runChecks);
         const implementationWorkspace = this.buildImplementationWorkspace(selectedCandidate.workspace, patchDraft);
         const implementation =
           patchDraftResult.status === 'success'
@@ -359,8 +364,8 @@ export class AgentOrchestrator {
                 syntheticIssue,
                 implementationWorkspace,
                 patchDraft,
-                runChecks,
-                feasibilityPolicy.effectiveDraftOnly,
+                patchExecution.runChecks,
+                patchExecution.draftOnly,
               )
             : {
                 changedFiles: [],
@@ -554,9 +559,9 @@ export class AgentOrchestrator {
           }),
           executionPolicy: {
             headless,
-            draftOnly: feasibilityPolicy.effectiveDraftOnly,
+            draftOnly: patchExecution.draftOnly,
             localArtifactsOnly: feasibilityPolicy.effectiveLocalArtifactsOnly,
-            runChecks,
+            runChecks: patchExecution.runChecks,
             dryRun,
             refresh,
           },
@@ -625,6 +630,7 @@ export class AgentOrchestrator {
       async () => llmService.generatePatchDraft(selectedIssue, workspace, memory),
     );
     const patchDraft = patchDraftResult.data;
+    const patchExecution = this.resolvePatchExecutionPolicy(feasibilityPolicy, patchDraft, runChecks);
     const implementationWorkspace = this.buildImplementationWorkspace(workspace, patchDraft);
     const implementation =
       patchDraftResult.status === 'success'
@@ -632,8 +638,8 @@ export class AgentOrchestrator {
             selectedIssue,
             implementationWorkspace,
             patchDraft,
-            runChecks,
-            feasibilityPolicy.effectiveDraftOnly,
+            patchExecution.runChecks,
+            patchExecution.draftOnly,
           )
         : {
             changedFiles: [],
@@ -831,9 +837,9 @@ export class AgentOrchestrator {
       }),
       executionPolicy: {
         headless,
-        draftOnly: feasibilityPolicy.effectiveDraftOnly,
+        draftOnly: patchExecution.draftOnly,
         localArtifactsOnly: feasibilityPolicy.effectiveLocalArtifactsOnly,
-        runChecks,
+        runChecks: patchExecution.runChecks,
         dryRun,
         refresh,
       },
@@ -912,7 +918,7 @@ export class AgentOrchestrator {
     // Kick off background environment detection early; do not block the main flow
     issueRankingService.warmEnvironmentCache();
 
-    if (headless && !schedulerRun && !localArtifactsOnly) {
+    if (headless && !schedulerRun && !options.force && !localArtifactsOnly) {
       await this.confirmManualHeadlessRun(config);
     }
 
@@ -974,20 +980,27 @@ export class AgentOrchestrator {
       !issueTarget &&
       scope?.mode === 'preset' &&
       issueRankingService.getAdjustedOverallScore(rankedIssues[0]) >= config.automation.minMatchScore;
-    const presetQualifiedIssue = presetIssueFlowAllowed
-      ? issueRankingService.selectIssueForAutomation(rankedIssues, config.automation.minMatchScore)
-      : undefined;
-    const selectedIssue = issueTarget
-      ? rankedIssues[0]
-      : scope?.mode === 'preset'
-        ? presetQualifiedIssue
-          ? headless
-            ? presetQualifiedIssue
-            : await this.promptForIssue(issueRankingService.diversifyScoutIssues(rankedIssues, 5))
-          : undefined
-        : headless
-          ? issueRankingService.selectIssueForAutomation(rankedIssues, config.automation.minMatchScore)
-          : await this.promptForIssue(issueRankingService.diversifyScoutIssues(rankedIssues, 5));
+    const selectedIssue = await this.selectIssueWithoutOpenPullRequest({
+      issues: rankedIssues,
+      explicitTarget: Boolean(issueTarget),
+      select: async (candidates) => {
+        if (issueTarget) {
+          return candidates[0];
+        }
+        if (scope?.mode === 'preset') {
+          if (!presetIssueFlowAllowed) {
+            return undefined;
+          }
+          const qualified = issueRankingService.selectIssueForAutomation(candidates, config.automation.minMatchScore);
+          return qualified && !headless
+            ? this.promptForIssue(issueRankingService.diversifyScoutIssues(candidates, 5))
+            : qualified;
+        }
+        return headless
+          ? issueRankingService.selectIssueForAutomation(candidates, config.automation.minMatchScore)
+          : this.promptForIssue(issueRankingService.diversifyScoutIssues(candidates, 5));
+      },
+    });
 
     if (!selectedIssue) {
       if (!issueTarget && scope?.mode === 'preset') {
@@ -1079,14 +1092,15 @@ export class AgentOrchestrator {
       });
     }
     const implementationWorkspace = this.buildImplementationWorkspace(workspace, patchDraft);
+    const patchExecution = this.resolvePatchExecutionPolicy(feasibilityPolicy, patchDraft, runChecks);
     const implementation =
       patchDraftResult.status === 'success'
         ? await this.generateConcretePatch(
             selectedIssue,
             implementationWorkspace,
             patchDraft,
-            runChecks,
-            feasibilityPolicy.effectiveDraftOnly,
+            patchExecution.runChecks,
+            patchExecution.draftOnly,
           )
         : {
             changedFiles: [],
@@ -1885,6 +1899,44 @@ export class AgentOrchestrator {
     }
   }
 
+  private async selectIssueWithoutOpenPullRequest(input: {
+    issues: RankedIssue[];
+    explicitTarget: boolean;
+    select: (candidates: RankedIssue[]) => Promise<RankedIssue | undefined>;
+  }): Promise<RankedIssue | undefined> {
+    let candidates = [...input.issues];
+
+    while (candidates.length > 0) {
+      const selected = await input.select(candidates);
+      if (!selected) {
+        return undefined;
+      }
+
+      let references: Awaited<ReturnType<typeof githubService.findOpenPullRequestsReferencingIssue>> = [];
+      try {
+        references = await githubService.findOpenPullRequestsReferencingIssue(selected.repoFullName, selected.number);
+      } catch (error) {
+        logger.debug(`Unable to check open pull requests for ${selected.repoFullName}#${selected.number}`, error);
+      }
+      if (references.length === 0) {
+        return selected;
+      }
+
+      const pullRequests = references.map((reference) => reference.url).join(', ');
+      const reason = `${selected.repoFullName}#${selected.number} is already referenced by open pull request(s): ${pullRequests}`;
+      if (input.explicitTarget) {
+        throw new Error(reason);
+      }
+
+      logger.warn(`Skipping contribution candidate because ${reason}`);
+      candidates = candidates.filter(
+        (candidate) => candidate.repoFullName !== selected.repoFullName || candidate.number !== selected.number,
+      );
+    }
+
+    return undefined;
+  }
+
   private async promptForIssue(issues: RankedIssue[]): Promise<RankedIssue> {
     const topIssues = issues.slice(0, 5);
 
@@ -2052,14 +2104,15 @@ export class AgentOrchestrator {
       });
     }
     const implementationWorkspace = this.buildImplementationWorkspace(selectedCandidate.workspace, patchDraft);
+    const patchExecution = this.resolvePatchExecutionPolicy(feasibilityPolicy, patchDraft, input.runChecks);
     const implementation =
       patchDraftResult.status === 'success'
         ? await this.generateConcretePatch(
             selectedIssue,
             implementationWorkspace,
             patchDraft,
-            input.runChecks,
-            feasibilityPolicy.effectiveDraftOnly,
+            patchExecution.runChecks,
+            patchExecution.draftOnly,
           )
         : {
             changedFiles: [],
@@ -2513,7 +2566,12 @@ export class AgentOrchestrator {
       assessment.decision === 'repair_then_proceed' ||
       assessment.decision === 'proceed_static_only' ||
       assessment.decision === 'proceed_partial_validation';
-    const effectiveDraftOnly = input.draftOnly || constrainedExecution;
+    const mutationBlocked =
+      assessmentResult.status !== 'success' ||
+      assessment.decision === 'repair_then_proceed' ||
+      assessment.decision === 'proceed_partial_validation' ||
+      shouldStop;
+    const effectiveDraftOnly = input.draftOnly || mutationBlocked;
     const effectiveLocalArtifactsOnly = input.localArtifactsOnly || constrainedExecution || shouldStop;
     const allowRealPr = !shouldStop && !constrainedExecution;
     const skipReasons = [
@@ -2538,6 +2596,37 @@ export class AgentOrchestrator {
       effectiveLocalArtifactsOnly,
       allowRealPr,
       skipReasons,
+    };
+  }
+
+  private resolvePatchExecutionPolicy(
+    feasibilityPolicy: FeasibilityPolicy,
+    patchDraft: PatchDraft,
+    runChecks: boolean,
+  ): { draftOnly: boolean; runChecks: boolean } {
+    if (feasibilityPolicy.effectiveDraftOnly) {
+      return { draftOnly: true, runChecks: false };
+    }
+
+    if (feasibilityPolicy.assessment.decision !== 'proceed_static_only') {
+      return { draftOnly: false, runChecks };
+    }
+
+    const staticTargets =
+      patchDraft.targetFiles.length > 0 &&
+      patchDraft.targetFiles.every((file) => {
+        const path = file.path.replace(/\\/g, '/').toLowerCase();
+        const fileName = path.split('/').pop() ?? '';
+        return (
+          path.startsWith('docs/') ||
+          /^(readme|changelog|contributing|code_of_conduct|security|license)(\.|$)/.test(fileName) ||
+          /\.(md|mdx|rst|adoc|txt)$/.test(fileName)
+        );
+      });
+
+    return {
+      draftOnly: !staticTargets,
+      runChecks: false,
     };
   }
 

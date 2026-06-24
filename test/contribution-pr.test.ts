@@ -17,6 +17,7 @@ interface ContributionPrInternals {
     url: string;
     number: number;
   }>;
+  normalizeContentForBase(content: string, baseContent: string | null): string;
 }
 
 const tempDirs: string[] = [];
@@ -52,6 +53,14 @@ describe('ContributionPrService', () => {
     expect(branchName).toMatch(/^openmeta\/agent-42-fix-keyboard-focus-in-icon-only-+\d+$/);
     expect(commitMessage).toStartWith('feat: address acme/widgets#42 Fix keyboard focus');
     expect(commitMessage.length).toBeLessThanOrEqual(120);
+  });
+
+  test('normalizes generated content to the base file line-ending style', () => {
+    const service = new ContributionPrService() as unknown as ContributionPrInternals;
+
+    expect(service.normalizeContentForBase('first\r\nsecond\r\n', 'first\nsecond\n')).toBe('first\nsecond\n');
+    expect(service.normalizeContentForBase('first\nsecond\n', 'first\r\nsecond\r\n')).toBe('first\r\nsecond\r\n');
+    expect(service.normalizeContentForBase('new\r\nfile\r\n', null)).toBe('new\nfile\n');
   });
 
   test('submits a draft PR against an existing fork and reuses an open PR when present', async () => {

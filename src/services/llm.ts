@@ -56,6 +56,9 @@ import {
 } from './llm.constants.js';
 
 const REPOSITORY_CONTEXT_TOKEN_BUDGET = 30_000;
+const STRICT_JSON_RETRY_SUFFIX = `
+
+The previous response could not be parsed. Return exactly one JSON object matching the requested schema. Do not use markdown fences or commentary.`;
 
 export class LLMService {
   private client: OpenAI | null = null;
@@ -321,7 +324,7 @@ Repo Stars: ${i.repoStars}`,
     });
   }
 
-  private async chat(prompt: string, options: { temperature?: number } = {}): Promise<string> {
+  private async chat(prompt: string, options: { temperature?: number; jsonOutput?: boolean } = {}): Promise<string> {
     if (!this.client) {
       throw new Error('LLM client not initialized');
     }
@@ -334,12 +337,18 @@ Repo Stars: ${i.repoStars}`,
           { role: 'user', content: prompt },
         ],
         temperature: options.temperature ?? 0.7,
+        ...(options.jsonOutput ? { response_format: { type: 'json_object' as const } } : {}),
         ...this.getStreamingRequestParams(),
         ...this.getReasoningRequestParams(),
       });
 
       return await this.extractChatContent(response);
     } catch (error) {
+      const status = this.extractStatusCode(error);
+      if (options.jsonOutput && this.provider === 'custom' && (status === 400 || status === 422)) {
+        logger.debug('Custom provider rejected JSON response format; retrying without response_format', error);
+        return this.chat(prompt, { ...options, jsonOutput: false });
+      }
       logger.debug('LLM chat failed', error);
       throw new Error('The LLM request failed. Please verify your provider, model, and API key.');
     }
@@ -348,12 +357,14 @@ Repo Stars: ${i.repoStars}`,
   private async extractChatContent(response: unknown): Promise<string> {
     if (this.isAsyncIterable(response)) {
       let content = '';
+      let reasoningContent = '';
 
       for await (const chunk of response) {
         content += this.extractStreamChunkContent(chunk);
+        reasoningContent += this.extractStreamChunkReasoningContent(chunk);
       }
 
-      return content;
+      return content.trim().length > 0 ? content : reasoningContent;
     }
 
     return this.extractNonStreamingContent(response);
@@ -386,6 +397,24 @@ Repo Stars: ${i.repoStars}`,
     return typeof delta.content === 'string' ? delta.content : '';
   }
 
+  private extractStreamChunkReasoningContent(chunk: unknown): string {
+    if (typeof chunk !== 'object' || chunk === null || !('choices' in chunk) || !Array.isArray(chunk.choices)) {
+      return '';
+    }
+
+    const [choice] = chunk.choices;
+    if (typeof choice !== 'object' || choice === null || !('delta' in choice)) {
+      return '';
+    }
+
+    const delta = choice.delta;
+    if (typeof delta !== 'object' || delta === null || !('reasoning_content' in delta)) {
+      return '';
+    }
+
+    return typeof delta.reasoning_content === 'string' ? delta.reasoning_content : '';
+  }
+
   private extractNonStreamingContent(response: unknown): string {
     if (
       typeof response !== 'object' ||
@@ -402,11 +431,18 @@ Repo Stars: ${i.repoStars}`,
     }
 
     const message = choice.message;
-    if (typeof message !== 'object' || message === null || !('content' in message)) {
+    if (typeof message !== 'object' || message === null) {
       return '';
     }
 
-    return typeof message.content === 'string' ? message.content : '';
+    const content = 'content' in message && typeof message.content === 'string' ? message.content : '';
+    if (content.trim().length > 0) {
+      return content;
+    }
+
+    return 'reasoning_content' in message && typeof message.reasoning_content === 'string'
+      ? message.reasoning_content
+      : '';
   }
 
   private async generateStructuredOutput<T>(input: {
@@ -415,25 +451,35 @@ Repo Stars: ${i.repoStars}`,
     repairPrompt?: string;
     temperature?: number;
   }): Promise<T> {
-    const content = await this.chat(input.prompt, { temperature: input.temperature });
+    const content = await this.chat(input.prompt, { temperature: input.temperature, jsonOutput: true });
 
     try {
       return input.parser(content);
     } catch (error) {
-      if (!input.repairPrompt) {
-        throw error;
-      }
+      logger.debug('Structured output parsing failed', error);
+    }
 
-      logger.debug('Structured output parsing failed, attempting repair', error);
+    if (input.repairPrompt) {
+      logger.debug('Attempting structured output repair');
       const repairedContent = await this.chat(
         fillPrompt(input.repairPrompt, {
           invalidResponse: content.slice(0, 12000),
         }),
-        { temperature: 0 },
+        { temperature: 0, jsonOutput: true },
       );
 
-      return input.parser(repairedContent);
+      try {
+        return input.parser(repairedContent);
+      } catch (error) {
+        logger.debug('Structured output repair failed; retrying the original request once', error);
+      }
     }
+
+    const retryContent = await this.chat(`${input.prompt}${STRICT_JSON_RETRY_SUFFIX}`, {
+      temperature: 0,
+      jsonOutput: true,
+    });
+    return input.parser(retryContent);
   }
 
   private parseLLMResponse(

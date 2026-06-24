@@ -288,6 +288,24 @@ describe('AgentOrchestrator run flow', () => {
     expect(confirmSpy).not.toHaveBeenCalled();
   });
 
+  test('uses force to skip manual headless confirmation', async () => {
+    const orchestrator = new AgentOrchestrator() as unknown as AgentRunInternals;
+    const confirmSpy = spyOn(
+      orchestrator as object as { confirmManualHeadlessRun: AgentRunInternals['confirmManualHeadlessRun'] },
+      'confirmManualHeadlessRun',
+    ).mockResolvedValue(undefined);
+    spyOn(infra.configService, 'get').mockResolvedValue(createConfig());
+    spyOn(
+      orchestrator as object as { initializeClients: AgentRunInternals['initializeClients'] },
+      'initializeClients',
+    ).mockResolvedValue(undefined);
+    spyOn(issueRankingService, 'loadRankedIssues').mockResolvedValue([]);
+
+    await orchestrator.run({ headless: true, force: true });
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
   test('returns early when automation cannot select an issue above the threshold', async () => {
     const orchestrator = new AgentOrchestrator() as unknown as AgentRunInternals;
     const issue = createRankedIssue();

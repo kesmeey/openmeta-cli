@@ -76,6 +76,11 @@ export interface RepositoryProbe {
   missingPaths: string[];
 }
 
+export interface OpenPullRequestReference {
+  number: number;
+  url: string;
+}
+
 export class GitHubService {
   private octokit: Octokit | null = null;
   private username: string = '';
@@ -312,6 +317,55 @@ export class GitHubService {
     };
   }
 
+  async findOpenPullRequestsReferencingIssue(
+    repoFullName: string,
+    issueNumber: number,
+  ): Promise<OpenPullRequestReference[]> {
+    if (!this.octokit) {
+      throw new Error('GitHub service not initialized');
+    }
+
+    const normalizedRepo = parseGitHubRepoFullName(repoFullName);
+    const [owner, repo] = normalizedRepo.split('/');
+    if (!owner || !repo) {
+      throw new Error(`Invalid GitHub repository reference: ${repoFullName}`);
+    }
+
+    try {
+      const response = await this.octokit.rest.issues.listEventsForTimeline({
+        owner,
+        repo,
+        issue_number: issueNumber,
+        per_page: 100,
+      });
+      const references = new Map<number, OpenPullRequestReference>();
+
+      for (const rawEvent of response.data) {
+        const event = rawEvent as Record<string, unknown>;
+        if (event['event'] !== 'cross-referenced') {
+          continue;
+        }
+
+        const source = this.asRecord(event['source']);
+        const sourceIssue = this.asRecord(source?.['issue']);
+        const pullRequest = this.asRecord(sourceIssue?.['pull_request']) ?? this.asRecord(source?.['pull_request']);
+        const state = sourceIssue?.['state'] ?? source?.['state'];
+        const number = sourceIssue?.['number'] ?? source?.['number'];
+        const url = sourceIssue?.['html_url'] ?? pullRequest?.['html_url'] ?? source?.['html_url'];
+
+        if (pullRequest && state === 'open' && typeof number === 'number' && typeof url === 'string') {
+          references.set(number, { number, url });
+        }
+      }
+
+      return [...references.values()];
+    } catch (error) {
+      logger.warn(`Unable to verify linked pull requests for ${normalizedRepo}#${issueNumber}; continuing cautiously.`);
+      logger.debug(`Linked pull request lookup failed for ${normalizedRepo}#${issueNumber}`, error);
+      return [];
+    }
+  }
+
   async fetchRepositoryProbe(repoFullName: string): Promise<RepositoryProbe> {
     if (!this.octokit) {
       throw new Error('GitHub service not initialized');
@@ -500,6 +554,10 @@ export class GitHubService {
 
   private normalizeLabel(label: string): string {
     return label.toLowerCase().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | undefined {
+    return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
   }
 
   private parseRepositoryUrl(repositoryUrl: string): RepoIdentifier {

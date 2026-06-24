@@ -934,12 +934,14 @@ describe('LLMService patch draft generation', () => {
   test('repairs a non-JSON first draft into a valid patch draft envelope', async () => {
     const service = new LLMService() as unknown as LLMServiceInternals;
     const prompts: string[] = [];
+    const payloads: Array<Record<string, unknown>> = [];
 
     service.client = {
       chat: {
         completions: {
           create: async (payload) => {
             prompts.push(payload.messages[1]?.content ?? '');
+            payloads.push(payload as unknown as Record<string, unknown>);
 
             if (prompts.length === 1) {
               return {
@@ -992,8 +994,97 @@ describe('LLMService patch draft generation', () => {
     expect(draft.status).toBe('success');
     expect(draft.data.goal).toBe('Add accessible labels to icon-only buttons');
     expect(prompts).toHaveLength(2);
+    expect(payloads[0]).toMatchObject({ response_format: { type: 'json_object' } });
     expect(prompts[1]).toContain('The previous patch draft response was not parseable');
     expect(prompts[1]).toContain('Plan: update the button component and tests.');
+  });
+
+  test('retries the original structured request after repair output is still invalid', async () => {
+    const service = new LLMService() as unknown as LLMServiceInternals;
+    const prompts: string[] = [];
+
+    service.client = {
+      chat: {
+        completions: {
+          create: async (payload) => {
+            prompts.push(payload.messages[1]?.content ?? '');
+            if (prompts.length < 3) {
+              return { choices: [{ message: { content: 'not-json' } }] };
+            }
+            return {
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      version: '1',
+                      kind: 'patch_draft',
+                      status: 'success',
+                      data: {
+                        goal: 'Update documentation',
+                        targetFiles: [{ path: 'README.md', reason: 'Document the option' }],
+                        proposedChanges: [
+                          { title: 'Update README', details: 'Add option usage.', files: ['README.md'] },
+                        ],
+                        risks: [],
+                        validationNotes: ['Review rendered Markdown'],
+                      },
+                    }),
+                  },
+                },
+              ],
+            };
+          },
+        },
+      },
+    };
+
+    const draft = await service.generatePatchDraft(createRankedIssue(), createWorkspace(), createMemory());
+
+    expect(draft.data.targetFiles[0]?.path).toBe('README.md');
+    expect(prompts).toHaveLength(3);
+    expect(prompts[2]).toContain('The previous response could not be parsed');
+  });
+
+  test('uses reasoning content when a reasoning model returns empty final content', async () => {
+    const service = new LLMService() as unknown as LLMServiceInternals;
+    let calls = 0;
+    service.client = {
+      chat: {
+        completions: {
+          create: async () => {
+            calls += 1;
+            return {
+              choices: [
+                {
+                  message: {
+                    content: '',
+                    reasoning_content: JSON.stringify({
+                      version: '1',
+                      kind: 'patch_draft',
+                      status: 'success',
+                      data: {
+                        goal: 'Update documentation',
+                        targetFiles: [{ path: 'README.md', reason: 'Document the option' }],
+                        proposedChanges: [
+                          { title: 'Update README', details: 'Add option usage.', files: ['README.md'] },
+                        ],
+                        risks: [],
+                        validationNotes: ['Review rendered Markdown'],
+                      },
+                    }),
+                  },
+                },
+              ],
+            };
+          },
+        },
+      },
+    };
+
+    const draft = await service.generatePatchDraft(createRankedIssue(), createWorkspace(), createMemory());
+
+    expect(draft.status).toBe('success');
+    expect(calls).toBe(1);
   });
 });
 

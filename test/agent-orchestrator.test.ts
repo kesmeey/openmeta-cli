@@ -37,6 +37,11 @@ interface AgentOrchestratorInternals {
   validateConfig(config: AppConfig, options?: { requireLlm?: boolean }): Promise<void>;
   initializeClients(config: AppConfig, options?: { validateLlm?: boolean }): Promise<void>;
   promptForIssue(issues: RankedIssue[]): Promise<RankedIssue>;
+  selectIssueWithoutOpenPullRequest(input: {
+    issues: RankedIssue[];
+    explicitTarget: boolean;
+    select: (candidates: RankedIssue[]) => Promise<RankedIssue | undefined>;
+  }): Promise<RankedIssue | undefined>;
   collectPatchDraftPaths(patchDraft: ReturnType<typeof createPatchDraft>): string[];
   normalizePatchPath(path: string): string | null;
   mergeSnippets(
@@ -44,6 +49,18 @@ interface AgentOrchestratorInternals {
     next: RepoWorkspaceContext['snippets'],
   ): RepoWorkspaceContext['snippets'];
   uniqueStrings(values: string[]): string[];
+  resolvePatchExecutionPolicy(
+    feasibilityPolicy: {
+      assessment: { decision: string };
+      shouldStop: boolean;
+      effectiveDraftOnly: boolean;
+      effectiveLocalArtifactsOnly: boolean;
+      allowRealPr: boolean;
+      skipReasons: string[];
+    },
+    patchDraft: ReturnType<typeof createPatchDraft>,
+    runChecks: boolean,
+  ): { draftOnly: boolean; runChecks: boolean };
   countValidationStates(results: TestResult[]): { passed: number; failed: number; unavailable: number };
   formatDate(value?: string): string;
   parseGitHubRepository(remoteUrl: string): { owner: string; repo: string };
@@ -433,6 +450,31 @@ describe('AgentOrchestrator support behavior', () => {
     await expect(orchestrator.promptForIssue(issues)).rejects.toBeInstanceOf(infra.UserCancelledError);
   });
 
+  test('skips issues with open pull request references and blocks explicit duplicates', async () => {
+    const orchestrator = new AgentOrchestrator() as unknown as AgentOrchestratorInternals;
+    const duplicate = createRankedIssue({ number: 18 });
+    const available = createRankedIssue({ number: 21 });
+    spyOn(githubService, 'findOpenPullRequestsReferencingIssue').mockImplementation(
+      async (_repoFullName, issueNumber) =>
+        issueNumber === 18 ? [{ number: 19, url: 'https://github.com/acme/demo/pull/19' }] : [],
+    );
+
+    const selected = await orchestrator.selectIssueWithoutOpenPullRequest({
+      issues: [duplicate, available],
+      explicitTarget: false,
+      select: async (candidates) => candidates[0],
+    });
+
+    expect(selected?.number).toBe(21);
+    await expect(
+      orchestrator.selectIssueWithoutOpenPullRequest({
+        issues: [duplicate],
+        explicitTarget: true,
+        select: async (candidates) => candidates[0],
+      }),
+    ).rejects.toThrow('already referenced by open pull request(s): https://github.com/acme/demo/pull/19');
+  });
+
   test('normalizes patch paths, deduplicates snippets, and trims unique strings', () => {
     const orchestrator = new AgentOrchestrator() as unknown as AgentOrchestratorInternals;
     const patchDraft = createPatchDraft({
@@ -466,6 +508,28 @@ describe('AgentOrchestrator support behavior', () => {
       { path: 'src/app.ts', content: 'old' },
       { path: 'src/utils.ts', content: 'util' },
     ]);
+  });
+
+  test('allows static-only documentation patches without repository validation', () => {
+    const orchestrator = new AgentOrchestrator() as unknown as AgentOrchestratorInternals;
+    const policy = {
+      assessment: { decision: 'proceed_static_only' },
+      shouldStop: false,
+      effectiveDraftOnly: false,
+      effectiveLocalArtifactsOnly: true,
+      allowRealPr: false,
+      skipReasons: ['feasibility_static_only'],
+    };
+
+    const documentation = orchestrator.resolvePatchExecutionPolicy(
+      policy,
+      createPatchDraft({ targetFiles: [{ path: 'README.md', reason: 'Add a badge' }] }),
+      true,
+    );
+    const sourceCode = orchestrator.resolvePatchExecutionPolicy(policy, createPatchDraft(), true);
+
+    expect(documentation).toEqual({ draftOnly: false, runChecks: false });
+    expect(sourceCode).toEqual({ draftOnly: true, runChecks: false });
   });
 
   test('formats dates, parses GitHub remotes, and counts validation states', () => {

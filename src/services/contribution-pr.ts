@@ -203,12 +203,23 @@ export class ContributionPrService {
     const baseCommitSha = branch.data.commit.sha;
     const baseTreeSha = branch.data.commit.commit.tree.sha;
 
-    const tree = input.changedFiles.map((filePath) => ({
-      path: filePath,
-      mode: '100644' as const,
-      type: 'blob' as const,
-      content: readFileSync(join(input.workspacePath, filePath), 'utf-8'),
-    }));
+    const tree = await Promise.all(
+      input.changedFiles.map(async (filePath) => {
+        const localContent = readFileSync(join(input.workspacePath, filePath), 'utf-8');
+        const baseContent = await this.readBaseFileContent(
+          input.forkRepo.owner,
+          input.forkRepo.repo,
+          filePath,
+          baseCommitSha,
+        );
+        return {
+          path: filePath,
+          mode: '100644' as const,
+          type: 'blob' as const,
+          content: this.normalizeContentForBase(localContent, baseContent),
+        };
+      }),
+    );
 
     const createdTree = await octokit.rest.git.createTree({
       owner: input.forkRepo.owner,
@@ -285,6 +296,33 @@ export class ContributionPrService {
       url: data.html_url,
       number: data.number,
     };
+  }
+
+  private async readBaseFileContent(
+    owner: string,
+    repo: string,
+    filePath: string,
+    ref: string,
+  ): Promise<string | null> {
+    try {
+      const response = await this.getOctokit().rest.repos.getContent({ owner, repo, path: filePath, ref });
+      const data = response.data;
+      if (Array.isArray(data) || data.type !== 'file' || typeof data.content !== 'string') {
+        return null;
+      }
+      return Buffer.from(data.content, 'base64').toString('utf-8');
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      if (status !== 404) {
+        logger.debug(`Unable to read base content for ${owner}/${repo}/${filePath}`, error);
+      }
+      return null;
+    }
+  }
+
+  private normalizeContentForBase(content: string, baseContent: string | null): string {
+    const normalized = content.replace(/\r\n?/g, '\n');
+    return baseContent?.includes('\r\n') ? normalized.replace(/\n/g, '\r\n') : normalized;
   }
 
   private async getGitHubRepositoryInfo(owner: string, repo: string) {
