@@ -27,7 +27,7 @@ const MAX_SEARCH_PAGES = 4;
 const SEARCH_PAGE_PACING_DELAY_MS = 3_000;
 const RATE_LIMIT_RETRY_FALLBACK_DELAY_MS = 10_000;
 const MAX_ISSUES_PER_REPO = 3;
-const MIN_REPO_STARS = 50;
+export const DEFAULT_MIN_REPO_STARS = 50;
 
 type SearchIssueItem = RestEndpointMethodTypes['search']['issuesAndPullRequests']['response']['data']['items'][number];
 
@@ -58,6 +58,13 @@ interface IssueDiscoveryOptions {
   repoFullName?: string;
   onStatus?: (message: string) => void;
   techStack?: string[];
+  minStars?: number;
+  maxStars?: number;
+}
+
+export interface RepositoryStarRange {
+  minStars: number;
+  maxStars?: number;
 }
 
 export interface RepositoryProbe {
@@ -115,12 +122,16 @@ export class GitHubService {
     }
 
     const repoFullName = options.repoFullName ? parseGitHubRepoFullName(options.repoFullName) : undefined;
+    const starRange = this.resolveRepositoryStarRange(options.minStars, options.maxStars);
 
     if (!options.refresh) {
       const cachedIssues = this.loadCachedIssues(repoFullName);
       if (cachedIssues) {
-        logger.info(`Using cached GitHub issues (${cachedIssues.length}) to avoid unnecessary Search API calls.`);
-        return cachedIssues;
+        const filteredIssues = this.filterIssuesByStarRange(cachedIssues, starRange);
+        logger.info(
+          `Using cached GitHub issues (${filteredIssues.length}/${cachedIssues.length} in the requested star range) to avoid unnecessary Search API calls.`,
+        );
+        return filteredIssues;
       }
     } else {
       logger.info('Refreshing GitHub issue discovery and ignoring the local search cache.');
@@ -229,12 +240,6 @@ export class GitHubService {
         const repoId = this.parseRepositoryUrl(item.repository_url);
         const repoData = await this.fetchRepoMetadata(repoId, repoCache);
 
-        // Post-fetch quality gate: GitHub issue search does not support the
-        // `stars:` qualifier, so we filter by repo stars after resolving metadata.
-        if (repoData.stars < MIN_REPO_STARS) {
-          continue;
-        }
-
         issues.push({
           id: item.id,
           number: item.number,
@@ -250,13 +255,6 @@ export class GitHubService {
           updatedAt: item.updated_at,
         });
       }
-
-      logger.success(
-        repoFullName
-          ? `Fetched ${issues.length} open issues from ${repoFullName}`
-          : `Fetched ${issues.length} trending issues from ${FILTER_LABEL_GROUPS.length} label searches`,
-      );
-      this.saveCachedIssues(issues, repoFullName);
     } catch (error) {
       if (error instanceof Error && error.message.startsWith('GitHub issue discovery')) {
         throw error;
@@ -266,7 +264,14 @@ export class GitHubService {
       throw new Error('GitHub issue discovery failed. Please try again in a moment.');
     }
 
-    return issues;
+    this.saveCachedIssues(issues, repoFullName);
+    const filteredIssues = this.filterIssuesByStarRange(issues, starRange);
+    logger.success(
+      repoFullName
+        ? `Fetched ${filteredIssues.length} open issues from ${repoFullName} in the requested star range`
+        : `Fetched ${filteredIssues.length} trending issues from ${FILTER_LABEL_GROUPS.length} label searches in the requested star range`,
+    );
+    return filteredIssues;
   }
 
   async fetchIssue(repoFullName: string, issueNumber: number): Promise<GitHubIssue> {
@@ -371,6 +376,28 @@ export class GitHubService {
 
   getUsername(): string {
     return this.username;
+  }
+
+  resolveRepositoryStarRange(minStars?: number, maxStars?: number): RepositoryStarRange {
+    const min = minStars ?? DEFAULT_MIN_REPO_STARS;
+    if (!Number.isSafeInteger(min) || min < 0) {
+      throw new Error('Minimum repository stars must be a non-negative integer.');
+    }
+    if (maxStars !== undefined && (!Number.isSafeInteger(maxStars) || maxStars < 0)) {
+      throw new Error('Maximum repository stars must be a non-negative integer.');
+    }
+    if (maxStars !== undefined && maxStars < min) {
+      throw new Error(`Maximum repository stars (${maxStars}) cannot be lower than minimum repository stars (${min}).`);
+    }
+
+    return maxStars === undefined ? { minStars: min } : { minStars: min, maxStars };
+  }
+
+  private filterIssuesByStarRange(issues: GitHubIssue[], range: RepositoryStarRange): GitHubIssue[] {
+    return issues.filter(
+      (issue) =>
+        issue.repoStars >= range.minStars && (range.maxStars === undefined || issue.repoStars <= range.maxStars),
+    );
   }
 
   private async fetchRepoTextFile(owner: string, repo: string, path: string): Promise<string | null> {

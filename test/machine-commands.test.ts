@@ -258,7 +258,7 @@ describe('machine commands', () => {
     registerMachineCommand(program);
     const issue = createRankedIssue();
 
-    spyOn(agentOrchestrator, 'scoutMachine').mockResolvedValue({
+    const scoutSpy = spyOn(agentOrchestrator, 'scoutMachine').mockResolvedValue({
       opportunities: [issue],
       mode: {
         limit: 10,
@@ -268,11 +268,17 @@ describe('machine commands', () => {
       nextActions: ['inspect_ranked_opportunities'],
     });
 
-    await program.parseAsync(['machine', 'scout'], { from: 'user' });
+    await program.parseAsync(['machine', 'scout', '--min-stars', '100', '--max-stars', '500'], { from: 'user' });
 
     const output = JSON.parse(writes.join(''));
     expect(output.command).toBe('machine scout');
     expect(output.data.opportunities[0].repoFullName).toBe(issue.repoFullName);
+    expect(scoutSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        minStars: 100,
+        maxStars: 500,
+      }),
+    );
   });
 
   test('machine analyze writes repository analysis output as JSON only', async () => {
@@ -481,6 +487,10 @@ describe('machine commands', () => {
         'https://github.com/acme/demo/issues/42',
         '--draft-only',
         '--local-artifacts-only',
+        '--min-stars',
+        '100',
+        '--max-stars',
+        '500',
       ],
       { from: 'user' },
     );
@@ -489,6 +499,8 @@ describe('machine commands', () => {
       expect.objectContaining({
         draftOnly: true,
         localArtifactsOnly: true,
+        minStars: 100,
+        maxStars: 500,
       }),
     );
   });

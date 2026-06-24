@@ -4,7 +4,9 @@ import { mapMachineError } from './errors.js';
 import { buildMachineEnvelope, writeMachinePayload, writeMachinePlan } from './runtime.js';
 
 export class MachineScoutOrchestrator {
-  async execute(options: { limit?: string; refresh?: boolean; repo?: string } = {}): Promise<void> {
+  async execute(
+    options: { limit?: string; refresh?: boolean; minStars?: number; maxStars?: number; repo?: string } = {},
+  ): Promise<void> {
     try {
       writeMachinePlan('machine scout', [
         'Validate GitHub access',
@@ -16,6 +18,8 @@ export class MachineScoutOrchestrator {
         agentOrchestrator.scoutMachine({
           limit: Number.parseInt(options.limit || '10', 10) || 10,
           refresh: options.refresh,
+          minStars: options.minStars,
+          maxStars: options.maxStars,
           repo: options.repo,
         }),
       );
