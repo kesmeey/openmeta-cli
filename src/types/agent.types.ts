@@ -96,6 +96,7 @@ export interface RepoWorkspaceContext {
   candidateFiles: string[];
   snippets: RepoFileSnippet[];
   testCommands: TestCommand[];
+  formatterCommands: TestCommand[];
   validationCommands: TestCommand[];
   validationWarnings: string[];
   testResults: TestResult[];

@@ -94,6 +94,7 @@ export function createWorkspace(overrides: Partial<RepoWorkspaceContext> = {}): 
       { command: 'bun test', reason: 'Detected Bun tests', source: 'repo-script' },
       { command: 'bun run lint', reason: 'Detected lint script', source: 'repo-script' },
     ],
+    formatterCommands: [],
     validationCommands: [],
     validationWarnings: [
       'Skipped bun test during headless validation because it comes from repository-defined scripts.',

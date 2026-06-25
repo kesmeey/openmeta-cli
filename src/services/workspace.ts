@@ -504,8 +504,13 @@ export class WorkspaceService {
       content: this.readSnippet(join(input.workspacePath, path)),
     }));
     const testCommands = this.detectTestCommands(input.workspacePath);
+    const formatterCommands = this.detectFormatterCommands(input.workspacePath);
     const { commands: validationCommands, warnings: validationWarnings } = this.selectValidationCommands(
       testCommands,
+      input.executionMode,
+    );
+    const { commands: runnableFormatterCommands, warnings: formatterWarnings } = this.selectValidationCommands(
+      formatterCommands,
       input.executionMode,
     );
     const testResults = input.runChecks
@@ -521,8 +526,9 @@ export class WorkspaceService {
       candidateFiles: input.candidateFiles,
       snippets,
       testCommands,
+      formatterCommands: runnableFormatterCommands,
       validationCommands,
-      validationWarnings,
+      validationWarnings: [...formatterWarnings, ...validationWarnings],
       testResults,
       executionMode: input.executionMode,
     };
@@ -797,6 +803,76 @@ export class WorkspaceService {
     );
   }
 
+  private detectFormatterCommands(workspacePath: string): TestCommand[] {
+    const commands: TestCommand[] = [];
+    const packageJsonPath = join(workspacePath, 'package.json');
+    const cargoPath = join(workspacePath, 'Cargo.toml');
+    const goModPath = join(workspacePath, 'go.mod');
+    const pyprojectPath = join(workspacePath, 'pyproject.toml');
+    const prettierConfigPaths = [
+      '.prettierrc',
+      '.prettierrc.json',
+      '.prettierrc.yml',
+      '.prettierrc.yaml',
+      '.prettierrc.js',
+      '.prettierrc.cjs',
+      'prettier.config.js',
+      'prettier.config.cjs',
+      'prettier.config.mjs',
+    ];
+
+    if (existsSync(packageJsonPath)) {
+      try {
+        const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as {
+          scripts?: Record<string, string>;
+          packageManager?: string;
+        };
+        const scripts = packageJson.scripts ?? {};
+        const scriptRunner = this.detectPackageScriptRunner(workspacePath, packageJson.packageManager);
+
+        for (const scriptName of ['format', 'fmt']) {
+          if (scripts[scriptName]) {
+            commands.push({
+              command: this.buildPackageScriptCommand(scriptRunner, scriptName),
+              reason: `Detected package.json ${scriptName} script (${scriptRunner})`,
+              source: 'repo-script',
+            });
+            break;
+          }
+        }
+      } catch (error) {
+        logger.debug('Unable to parse package.json for formatter command detection', error);
+      }
+    }
+
+    if (existsSync(cargoPath)) {
+      commands.push({ command: 'cargo fmt', reason: 'Detected Cargo.toml', source: 'tool-default' });
+    }
+
+    if (existsSync(goModPath)) {
+      commands.push({ command: 'gofmt -w .', reason: 'Detected go.mod', source: 'tool-default' });
+    }
+
+    if (existsSync(pyprojectPath)) {
+      const pyproject = readFileSync(pyprojectPath, 'utf-8');
+      if (/\[tool\.black\]/.test(pyproject)) {
+        commands.push({ command: 'black .', reason: 'Detected pyproject.toml [tool.black]', source: 'tool-default' });
+      }
+    }
+
+    if (prettierConfigPaths.some((path) => existsSync(join(workspacePath, path)))) {
+      commands.push({
+        command: 'npx prettier --write .',
+        reason: 'Detected Prettier configuration',
+        source: 'tool-default',
+      });
+    }
+
+    return commands.filter(
+      (item, index, list) => list.findIndex((candidate) => candidate.command === item.command) === index,
+    );
+  }
+
   private selectValidationCommands(
     commands: TestCommand[],
     executionMode: ExecutionMode,
@@ -888,10 +964,18 @@ export class WorkspaceService {
     switch (command.command) {
       case 'cargo test':
         return { command: 'cargo', args: ['test'] };
+      case 'cargo fmt':
+        return { command: 'cargo', args: ['fmt'] };
       case 'go test ./...':
         return { command: 'go', args: ['test', './...'] };
+      case 'gofmt -w .':
+        return { command: 'gofmt', args: ['-w', '.'] };
       case 'pytest':
         return { command: 'pytest', args: [] };
+      case 'black .':
+        return { command: 'black', args: ['.'] };
+      case 'npx prettier --write .':
+        return { command: 'npx', args: ['prettier', '--write', '.'] };
       default:
         return null;
     }

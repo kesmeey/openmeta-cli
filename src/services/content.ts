@@ -296,6 +296,12 @@ export class ContentService {
         ? workspace.testCommands.map((item) => `- \`${item.command}\` | ${item.reason} | ${item.source}`)
         : ['- None detected']),
       '',
+      '## Runnable Formatter Commands',
+      '',
+      ...(workspace.formatterCommands.length > 0
+        ? workspace.formatterCommands.map((item) => `- \`${item.command}\` | ${item.reason} | ${item.source}`)
+        : ['- None selected']),
+      '',
       '## Runnable Validation Commands',
       '',
       ...(workspace.validationCommands.length > 0

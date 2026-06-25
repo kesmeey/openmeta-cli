@@ -394,6 +394,38 @@ describe('workspaceService.detectTestCommands', () => {
     expect(commands.map((command) => command.command)).toContain('bun run build');
   });
 
+  test('detects formatter commands from package scripts and language defaults', () => {
+    const workspacePath = makeWorkspace();
+    writeFileSync(
+      join(workspacePath, 'package.json'),
+      JSON.stringify({
+        packageManager: 'pnpm@10.0.0',
+        scripts: {
+          format: 'prettier --write .',
+        },
+      }),
+      'utf-8',
+    );
+    writeFileSync(join(workspacePath, 'Cargo.toml'), '[package]\nname = "demo"\nversion = "0.1.0"\n', 'utf-8');
+    writeFileSync(join(workspacePath, 'go.mod'), 'module example.com/demo\n', 'utf-8');
+    writeFileSync(join(workspacePath, 'pyproject.toml'), '[tool.black]\nline-length = 100\n', 'utf-8');
+    writeFileSync(join(workspacePath, '.prettierrc'), '{}\n', 'utf-8');
+
+    const commands = (
+      workspaceService as unknown as {
+        detectFormatterCommands(path: string): Array<{ command: string; source: 'tool-default' | 'repo-script' }>;
+      }
+    ).detectFormatterCommands(workspacePath);
+
+    expect(commands.map((command) => command.command)).toEqual([
+      'pnpm run format',
+      'cargo fmt',
+      'gofmt -w .',
+      'black .',
+      'npx prettier --write .',
+    ]);
+  });
+
   test('skips repository-defined validation scripts in headless mode', () => {
     const commands = [
       { command: 'bun run test', reason: 'Detected package.json test script (bun)', source: 'repo-script' as const },
@@ -415,6 +447,29 @@ describe('workspaceService.detectTestCommands', () => {
       'allow',
       'deny',
     ]);
+  });
+
+  test('skips repository-defined formatter scripts in headless mode while allowing tool defaults', () => {
+    const commands = [
+      {
+        command: 'bun run format',
+        reason: 'Detected package.json format script (bun)',
+        source: 'repo-script' as const,
+      },
+      { command: 'cargo fmt', reason: 'Detected Cargo.toml', source: 'tool-default' as const },
+    ];
+
+    const selected = (
+      workspaceService as unknown as {
+        selectValidationCommands: (
+          commands: Array<{ command: string; reason: string; source: 'tool-default' | 'repo-script' }>,
+          mode: 'interactive' | 'headless',
+        ) => { commands: Array<{ command: string }>; warnings: string[] };
+      }
+    ).selectValidationCommands(commands, 'headless');
+
+    expect(selected.commands.map((command) => command.command)).toEqual(['cargo fmt']);
+    expect(selected.warnings[0]).toContain('Skipped bun run format during headless validation');
   });
 
   test('reads workspace files safely and ignores paths outside the repository root', () => {

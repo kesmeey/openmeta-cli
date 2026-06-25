@@ -1746,6 +1746,11 @@ export class AgentOrchestrator {
         tone: workspace.validationCommands.length > 0 ? 'accent' : 'muted',
       },
       {
+        label: 'Formatters',
+        value: String(workspace.formatterCommands.length),
+        tone: workspace.formatterCommands.length > 0 ? 'accent' : 'muted',
+      },
+      {
         label: 'Dirty workspace',
         value: workspace.workspaceDirty ? 'YES' : 'NO',
         tone: workspace.workspaceDirty ? 'warning' : 'success',
@@ -1786,6 +1791,15 @@ export class AgentOrchestrator {
             ? workspace.validationCommands.slice(0, 5).map((command) => `${command.command} (${command.source})`)
             : ['No validation command is eligible to run in this mode.'],
         tone: workspace.validationCommands.length > 0 ? 'success' : 'warning',
+      },
+      {
+        title: 'Runnable formatter commands',
+        meta: [`${workspace.formatterCommands.length} command(s)`],
+        lines:
+          workspace.formatterCommands.length > 0
+            ? workspace.formatterCommands.slice(0, 5).map((command) => `${command.command} (${command.source})`)
+            : ['No formatter command is eligible to run in this mode.'],
+        tone: workspace.formatterCommands.length > 0 ? 'success' : 'warning',
       },
     ]);
 
@@ -2891,6 +2905,23 @@ export class AgentOrchestrator {
 
       logger.success(`Applied ${changedFiles.appliedFiles.length} workspace file updates`);
 
+      const formatterResults =
+        runChecks && workspace.formatterCommands.length > 0
+          ? await ui.task(
+              {
+                title: 'Running formatter commands',
+                doneMessage: 'Formatter commands complete',
+                failedMessage: 'Formatter commands finished with issues',
+                tone: 'info',
+              },
+              async () =>
+                this.executeValidationTool(
+                  workspace.workspacePath,
+                  workspace.formatterCommands.slice(0, 2),
+                  workspace.executionMode,
+                ),
+            )
+          : [];
       const validationResults =
         runChecks && workspace.validationCommands.length > 0
           ? await ui.task(
@@ -2908,14 +2939,19 @@ export class AgentOrchestrator {
                 ),
             )
           : workspace.testResults;
+      const combinedValidationResults = [...formatterResults, ...validationResults];
 
-      if (runChecks && changedFiles.appliedFiles.length > 0 && this.hasBlockingValidationFailures(validationResults)) {
+      if (
+        runChecks &&
+        changedFiles.appliedFiles.length > 0 &&
+        this.hasBlockingValidationFailures(combinedValidationResults)
+      ) {
         const repaired = await this.attemptValidationRepair({
           issue,
           workspace,
           patchDraft,
           changedFiles: changedFiles.appliedFiles,
-          validationResults,
+          validationResults: combinedValidationResults,
         });
 
         if (repaired) {
@@ -2925,7 +2961,7 @@ export class AgentOrchestrator {
 
       return {
         changedFiles: changedFiles.appliedFiles,
-        validationResults,
+        validationResults: combinedValidationResults,
         reviewRequired: false,
       };
     } catch (error) {
@@ -3486,6 +3522,23 @@ export class AgentOrchestrator {
       return null;
     }
 
+    const formatterResults =
+      input.workspace.formatterCommands.length > 0
+        ? await ui.task(
+            {
+              title: 'Re-running formatter after repair',
+              doneMessage: 'Repair formatter complete',
+              failedMessage: 'Repair formatter finished with issues',
+              tone: 'info',
+            },
+            async () =>
+              this.executeValidationTool(
+                input.workspace.workspacePath,
+                input.workspace.formatterCommands.slice(0, 2),
+                input.workspace.executionMode,
+              ),
+          )
+        : [];
     const validationResults = await ui.task(
       {
         title: 'Re-running validation after repair',
@@ -3503,7 +3556,7 @@ export class AgentOrchestrator {
 
     return {
       changedFiles: [...new Set([...input.changedFiles, ...repairedFiles.appliedFiles])],
-      validationResults,
+      validationResults: [...formatterResults, ...validationResults],
       reviewRequired: false,
     };
   }

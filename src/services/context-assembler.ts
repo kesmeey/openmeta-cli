@@ -62,6 +62,11 @@ export class ContextAssemblerService {
         priority: 90,
       },
       {
+        id: 'formatter_commands',
+        content: `Runnable Formatter Commands: ${workspace.formatterCommands.map((item) => item.command).join(', ') || 'none'}`,
+        priority: 90,
+      },
+      {
         id: 'validation_warnings',
         content: `Validation Safety Notes: ${workspace.validationWarnings.join(' | ') || 'none'}`,
         priority: 95,
@@ -99,6 +104,7 @@ export class ContextAssemblerService {
   buildValidationContext(workspace: RepoWorkspaceContext): string {
     return [
       `Detected Commands: ${workspace.testCommands.map((item) => item.command).join(', ') || 'none'}`,
+      `Runnable Formatters: ${workspace.formatterCommands.map((item) => item.command).join(', ') || 'none'}`,
       `Runnable Commands: ${workspace.validationCommands.map((item) => item.command).join(', ') || 'none'}`,
       `Baseline Results: ${this.formatValidationResults(workspace.testResults)}`,
     ].join('\n');
