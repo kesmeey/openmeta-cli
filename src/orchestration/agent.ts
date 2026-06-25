@@ -1650,6 +1650,9 @@ export class AgentOrchestrator {
             ...(issue.claimAssessment?.status && issue.claimAssessment.status !== 'none'
               ? [`claim ${issue.claimAssessment.status}`]
               : []),
+            ...(issue.discussionDifficultyAssessment?.status && issue.discussionDifficultyAssessment.status !== 'none'
+              ? [`difficulty ${issue.discussionDifficultyAssessment.status}`]
+              : []),
             ...(hint ? [`feasibility ${hint.level}`] : []),
             `stars ${issue.repoStars}`,
           ],
@@ -1658,6 +1661,9 @@ export class AgentOrchestrator {
             `Tech: ${issue.analysis.techRequirements.join(', ') || 'n/a'}`,
             `Workload: ${issue.analysis.estimatedWorkload || 'n/a'}`,
             ...(issue.claimAssessment?.evidence[0] ? [`Claim evidence: ${issue.claimAssessment.evidence[0]}`] : []),
+            ...(issue.discussionDifficultyAssessment?.evidence[0]
+              ? [`Difficulty evidence: ${issue.discussionDifficultyAssessment.evidence[0]}`]
+              : []),
             ...(hint
               ? [
                   `Feasibility: ${hint.level} (${hint.issueScope}, ${hint.scoreAdjustment >= 0 ? '+' : ''}${hint.scoreAdjustment})`,
@@ -1687,6 +1693,14 @@ export class AgentOrchestrator {
           ? [
               `Claim risk: ${issue.claimAssessment.status}`,
               ...(issue.claimAssessment.evidence[0] ? [`Claim evidence: ${issue.claimAssessment.evidence[0]}`] : []),
+            ]
+          : []),
+        ...(issue.discussionDifficultyAssessment
+          ? [
+              `Discussion difficulty: ${issue.discussionDifficultyAssessment.status}`,
+              ...(issue.discussionDifficultyAssessment.evidence[0]
+                ? [`Difficulty evidence: ${issue.discussionDifficultyAssessment.evidence[0]}`]
+                : []),
             ]
           : []),
         ...(issue.scoutFeasibility

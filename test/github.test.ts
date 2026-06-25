@@ -381,6 +381,20 @@ describe('GitHubService internals', () => {
                 html_url: 'https://github.com/acme/demo/issues/18#issuecomment-2',
               },
               {
+                body: 'This is not a simple fix and needs a design discussion before changing behavior.',
+                user: { login: 'maintainer', type: 'User' },
+                author_association: 'MEMBER',
+                created_at: recent,
+                html_url: 'https://github.com/acme/demo/issues/18#issuecomment-5',
+              },
+              {
+                body: 'I tried to patch this before but failed because the edge cases are tricky.',
+                user: { login: 'bob', type: 'User' },
+                author_association: 'CONTRIBUTOR',
+                created_at: recent,
+                html_url: 'https://github.com/acme/demo/issues/18#issuecomment-6',
+              },
+              {
                 body: "I'll work on this.",
                 user: { login: 'old-contributor', type: 'User' },
                 author_association: 'CONTRIBUTOR',
@@ -404,8 +418,10 @@ describe('GitHubService internals', () => {
 
     expect(context.claimAssessment.status).toBe('claimed');
     expect(context.claimAssessment.evidence).toHaveLength(2);
+    expect(context.discussionDifficultyAssessment.status).toBe('high');
+    expect(context.discussionDifficultyAssessment.evidence[0]).toContain('not a simple fix');
     expect(context.recentComments.map((comment) => comment.author)).not.toContain('triage-bot[bot]');
-    expect(context.recentComments.map((comment) => comment.author)).not.toContain('old-contributor');
+    expect(context.claimAssessment.evidence.some((evidence) => evidence.includes('old-contributor'))).toBe(false);
   });
 
   test('classifies search failures by rate limit and validation errors', () => {

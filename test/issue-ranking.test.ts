@@ -95,6 +95,46 @@ describe('IssueRankingService', () => {
     expect(ranked[0]?.repoFullName).toBe('acme/react-ui');
   });
 
+  test('pre-ranks high-difficulty discussion issues below approachable matches', () => {
+    const now = new Date().toISOString();
+    const profile = {
+      techStack: ['TypeScript', 'React'],
+      proficiency: 'intermediate' as const,
+      focusAreas: ['web-dev'],
+    };
+
+    const ranked = issueRankingService.rankIssuesForProfile(
+      [
+        createIssue({
+          repoFullName: 'acme/hard-react',
+          repoName: 'hard-react',
+          number: 1,
+          title: 'Fix React spy thisValue behavior',
+          body: 'Steps to reproduce are listed in the issue.',
+          repoDescription: 'TypeScript React testing utilities',
+          updatedAt: now,
+          discussionDifficultyAssessment: {
+            status: 'high',
+            evidence: ['maintainer: This is not a simple fix and needs design discussion.'],
+            checkedAt: now,
+          },
+        }),
+        createIssue({
+          repoFullName: 'acme/approachable-react',
+          repoName: 'approachable-react',
+          number: 2,
+          title: 'Fix React keyboard focus in dropdown',
+          body: 'The issue is in `src/components/Dropdown.tsx`. Steps to reproduce: tab into the menu.',
+          repoDescription: 'TypeScript React components',
+          updatedAt: now,
+        }),
+      ],
+      profile,
+    );
+
+    expect(ranked[0]?.repoFullName).toBe('acme/approachable-react');
+  });
+
   test('scores all candidate batches instead of stopping after the first matching batch', async () => {
     const originalScoreIssues = llmService.scoreIssues;
     const batches: number[][] = [];
@@ -214,6 +254,11 @@ describe('IssueRankingService', () => {
             evidence: ["alice: I'd like to work on this."],
             checkedAt: new Date().toISOString(),
           },
+          discussionDifficultyAssessment: {
+            status: 'none',
+            evidence: [],
+            checkedAt: new Date().toISOString(),
+          },
         };
       };
       githubService.fetchRepositoryProbe = async (repoFullName) => ({
@@ -310,6 +355,7 @@ describe('IssueRankingService', () => {
       expect(ranked?.number).toBe(3014);
       expect(ranked?.matchScore).toBe(77);
       expect(ranked?.claimAssessment?.status).toBe('likely');
+      expect(ranked?.discussionDifficultyAssessment?.status).toBe('none');
       expect(ranked?.opportunity.overallScore).toBeGreaterThan(0);
     } finally {
       rankingServiceState.cachedEnvironment = originalCachedEnvironment;

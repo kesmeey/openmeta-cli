@@ -37,6 +37,8 @@ import type {
   ImplementationDraft,
   IssueClaimAssessment,
   IssueClaimStatus,
+  IssueDiscussionDifficultyAssessment,
+  IssueDiscussionDifficultyStatus,
   LLMProvider,
   LLMReasoningEffort,
   MatchedIssue,
@@ -163,6 +165,7 @@ Labels: ${i.labels.join(', ')}
 Repo Description: ${i.repoDescription}
 Repo Stars: ${i.repoStars}
 Rule-based Claim Signal: ${i.claimAssessment?.status ?? 'not_checked'}
+Rule-based Discussion Difficulty Signal: ${i.discussionDifficultyAssessment?.status ?? 'not_checked'}
 Recent Comments:
 ${
   i.recentComments
@@ -519,6 +522,11 @@ ${
               ...issue,
               matchScore: match.score,
               claimAssessment: this.mergeClaimAssessment(issue.claimAssessment, match.claimStatus, match.claimEvidence),
+              discussionDifficultyAssessment: this.mergeDiscussionDifficultyAssessment(
+                issue.discussionDifficultyAssessment,
+                match.difficultyStatus,
+                match.difficultyEvidence,
+              ),
               analysis: {
                 coreDemand: match.coreDemand,
                 techRequirements: match.techRequirements,
@@ -537,6 +545,24 @@ ${
     llmEvidence: string,
   ): IssueClaimAssessment {
     const priority: Record<IssueClaimStatus, number> = { none: 0, possible: 1, likely: 2, claimed: 3 };
+    const evidencedLlmStatus = llmEvidence.trim() ? llmStatus : 'none';
+    const status =
+      existing && priority[existing.status] >= priority[evidencedLlmStatus] ? existing.status : evidencedLlmStatus;
+    const evidence = [...(existing?.evidence ?? []), ...(llmEvidence.trim() ? [`LLM: ${llmEvidence.trim()}`] : [])];
+
+    return {
+      status,
+      evidence: [...new Set(evidence)].slice(0, 4),
+      checkedAt: existing?.checkedAt ?? new Date().toISOString(),
+    };
+  }
+
+  private mergeDiscussionDifficultyAssessment(
+    existing: IssueDiscussionDifficultyAssessment | undefined,
+    llmStatus: IssueDiscussionDifficultyStatus,
+    llmEvidence: string,
+  ): IssueDiscussionDifficultyAssessment {
+    const priority: Record<IssueDiscussionDifficultyStatus, number> = { none: 0, possible: 1, likely: 2, high: 3 };
     const evidencedLlmStatus = llmEvidence.trim() ? llmStatus : 'none';
     const status =
       existing && priority[existing.status] >= priority[evidencedLlmStatus] ? existing.status : evidencedLlmStatus;

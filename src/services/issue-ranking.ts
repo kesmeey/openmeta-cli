@@ -385,7 +385,14 @@ export class IssueRankingService {
       score += 5;
     }
 
+    score -= this.computeDiscussionDifficultyPreRankPenalty(issue);
+
     return score;
+  }
+
+  private computeDiscussionDifficultyPreRankPenalty(issue: GitHubIssue): number {
+    const status = issue.discussionDifficultyAssessment?.status ?? 'none';
+    return { none: 0, possible: 8, likely: 18, high: 32 }[status];
   }
 
   private getProfileTerms(userProfile: AppConfig['userProfile']): string[] {

@@ -4,7 +4,14 @@ import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { ensureDirectory, getOpenMetaStateDir, parseGitHubRepoFullName } from '../infra/index.js';
 import { logger } from '../infra/logger.js';
-import type { GitHubIssue, GitHubIssueComment, IssueClaimAssessment, IssueClaimStatus } from '../types/index.js';
+import type {
+  GitHubIssue,
+  GitHubIssueComment,
+  IssueClaimAssessment,
+  IssueClaimStatus,
+  IssueDiscussionDifficultyAssessment,
+  IssueDiscussionDifficultyStatus,
+} from '../types/index.js';
 
 const FILTER_LABEL_GROUPS = [
   ['good first issue', 'good-first-issue'],
@@ -47,6 +54,23 @@ const MAINTAINER_CLAIM_PATTERNS = [
   /@[a-z0-9-]+[^\n]{0,80}\b(?:go ahead|you can (?:work on|take|handle) this)\b/i,
 ];
 const MAINTAINER_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+const DIFFICULTY_HIGH_PATTERNS = [
+  /\b(not|isn't|is not|won't be)\s+(?:a\s+)?(?:simple|easy|straightforward|trivial)\b/i,
+  /\b(?:very|really|extremely|quite)\s+(?:hard|difficult|complex|tricky)\b/i,
+  /\b(?:hard|difficult|complex|tricky)\s+(?:to|because|since|without)\b/i,
+  /\b(?:i|we)\s+(?:tried|attempted)\b[^\n]{0,80}\b(?:failed|couldn't|could not|no luck|unsuccessful)\b/i,
+  /\b(?:blocked by|depends on|requires?)\s+(?:a\s+)?(?:major|large|big|substantial)\b/i,
+  /\b(?:breaking change|major refactor|large refactor|architecture change|design decision)\b/i,
+  /\b(?:needs?|requires?)\s+(?:more\s+)?(?:design|discussion|consensus|investigation)\b/i,
+];
+const DIFFICULTY_POSSIBLE_PATTERNS = [
+  /\b(?:edge case|subtle|non-obvious|not obvious|needs investigation|needs reproduction)\b/i,
+  /\b(?:hard|difficult|complex|tricky)\b/i,
+  /\b(?:can't reproduce|cannot reproduce|unable to reproduce)\b/i,
+];
+const DIFFICULTY_DEESCALATION_PATTERNS = [
+  /\b(?:fixed by|solved by|workaround|work around|simple fix|easy fix|straightforward fix)\b/i,
+];
 
 type SearchIssueItem = RestEndpointMethodTypes['search']['issuesAndPullRequests']['response']['data']['items'][number];
 
@@ -89,6 +113,7 @@ export interface RepositoryStarRange {
 export interface IssueClaimContext {
   recentComments: GitHubIssueComment[];
   claimAssessment: IssueClaimAssessment;
+  discussionDifficultyAssessment: IssueDiscussionDifficultyAssessment;
 }
 
 export interface RepositoryProbe {
@@ -432,17 +457,21 @@ export class GitHubService {
           },
         ];
       });
-      const activeComments = comments.filter((comment) => this.isWithinClaimLookback(comment.createdAt, checkedAt));
+      const activeClaimComments = comments.filter((comment) =>
+        this.isWithinClaimLookback(comment.createdAt, checkedAt),
+      );
 
       return {
-        recentComments: activeComments.slice(0, MAX_RECENT_ISSUE_COMMENTS),
-        claimAssessment: this.assessClaimSignals(activeComments, checkedAt),
+        recentComments: comments.slice(0, MAX_RECENT_ISSUE_COMMENTS),
+        claimAssessment: this.assessClaimSignals(activeClaimComments, checkedAt),
+        discussionDifficultyAssessment: this.assessDiscussionDifficulty(comments, checkedAt),
       };
     } catch (error) {
       logger.debug(`Unable to load issue comments for ${normalizedRepo}#${issueNumber}`, error);
       return {
         recentComments: [],
         claimAssessment: { status: 'none', evidence: [], checkedAt },
+        discussionDifficultyAssessment: { status: 'none', evidence: [], checkedAt },
       };
     }
   }
@@ -559,6 +588,51 @@ export class GitHubService {
 
   private claimStatusPriority(status: IssueClaimStatus): number {
     return { none: 0, possible: 1, likely: 2, claimed: 3 }[status];
+  }
+
+  private assessDiscussionDifficulty(
+    comments: GitHubIssueComment[],
+    checkedAt: string,
+  ): IssueDiscussionDifficultyAssessment {
+    let status: IssueDiscussionDifficultyStatus = 'none';
+    const evidence: string[] = [];
+    let matchingCommentCount = 0;
+    let maintainerMatchCount = 0;
+
+    for (const comment of comments) {
+      const highSignal = DIFFICULTY_HIGH_PATTERNS.some((pattern) => pattern.test(comment.body));
+      if (!highSignal && DIFFICULTY_DEESCALATION_PATTERNS.some((pattern) => pattern.test(comment.body))) {
+        continue;
+      }
+
+      const possibleSignal = highSignal || DIFFICULTY_POSSIBLE_PATTERNS.some((pattern) => pattern.test(comment.body));
+      if (!possibleSignal) {
+        continue;
+      }
+
+      matchingCommentCount += 1;
+      if (MAINTAINER_ASSOCIATIONS.has(comment.authorAssociation.toUpperCase())) {
+        maintainerMatchCount += 1;
+      }
+
+      const candidateStatus: IssueDiscussionDifficultyStatus = highSignal
+        ? MAINTAINER_ASSOCIATIONS.has(comment.authorAssociation.toUpperCase()) || matchingCommentCount >= 2
+          ? 'high'
+          : 'likely'
+        : matchingCommentCount >= 2 || maintainerMatchCount >= 1
+          ? 'likely'
+          : 'possible';
+      if (this.discussionDifficultyStatusPriority(candidateStatus) > this.discussionDifficultyStatusPriority(status)) {
+        status = candidateStatus;
+      }
+      evidence.push(`${comment.author}: ${comment.body.replace(/\s+/g, ' ').slice(0, 180)}`);
+    }
+
+    return { status, evidence: evidence.slice(0, 3), checkedAt };
+  }
+
+  private discussionDifficultyStatusPriority(status: IssueDiscussionDifficultyStatus): number {
+    return { none: 0, possible: 1, likely: 2, high: 3 }[status];
   }
 
   private isWithinClaimLookback(createdAt: string, checkedAt: string): boolean {

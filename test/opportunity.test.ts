@@ -91,4 +91,29 @@ describe('opportunityService', () => {
     expect(ranked[1]?.opportunity.summary).toContain('Claim risk: claimed');
     expect(ranked[0]?.opportunity.overallScore).toBeGreaterThan(ranked[1]?.opportunity.overallScore ?? 0);
   });
+
+  test('penalizes issues whose discussion indicates high implementation difficulty', () => {
+    const approachable = createMatchedIssue({
+      number: 30,
+      updatedAt: new Date().toISOString(),
+      repoStars: 200,
+      matchScore: 84,
+    });
+    const difficult = createMatchedIssue({
+      ...approachable,
+      number: 31,
+      matchScore: 92,
+      discussionDifficultyAssessment: {
+        status: 'high',
+        evidence: ['maintainer: This is not a simple fix and needs design discussion.'],
+        checkedAt: new Date().toISOString(),
+      },
+    });
+
+    const ranked = opportunityService.rankIssues([difficult, approachable]);
+
+    expect(ranked[0]?.number).toBe(30);
+    expect(ranked[1]?.opportunity.summary).toContain('Discussion risk: high');
+    expect(ranked[0]?.opportunity.overallScore).toBeGreaterThan(ranked[1]?.opportunity.overallScore ?? 0);
+  });
 });

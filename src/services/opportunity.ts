@@ -26,6 +26,12 @@ const CLAIM_RISK_PENALTIES = {
   likely: 25,
   claimed: 40,
 } as const;
+const DISCUSSION_DIFFICULTY_RISK_PENALTIES = {
+  none: 0,
+  possible: 10,
+  likely: 22,
+  high: 38,
+} as const;
 
 function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
@@ -103,7 +109,9 @@ function summarizeOpportunity(opportunity: OpportunityAnalysis, issue: MatchedIs
 
   const claimRisk = issue.claimAssessment?.status;
   const claimSummary = claimRisk && claimRisk !== 'none' ? ` Claim risk: ${claimRisk}.` : '';
-  return `Strongest signal: ${strongest[0]} (${strongest[1]}). Main risk: ${weakest[0]} (${weakest[1]}).${claimSummary}`;
+  const discussionRisk = issue.discussionDifficultyAssessment?.status;
+  const discussionSummary = discussionRisk && discussionRisk !== 'none' ? ` Discussion risk: ${discussionRisk}.` : '';
+  return `Strongest signal: ${strongest[0]} (${strongest[1]}). Main risk: ${weakest[0]} (${weakest[1]}).${claimSummary}${discussionSummary}`;
 }
 
 function normalizeLabel(label: string): string {
@@ -148,6 +156,7 @@ function computeRiskPenalty(issue: MatchedIssue): number {
   }
 
   penalty += CLAIM_RISK_PENALTIES[issue.claimAssessment?.status ?? 'none'];
+  penalty += DISCUSSION_DIFFICULTY_RISK_PENALTIES[issue.discussionDifficultyAssessment?.status ?? 'none'];
 
   return Math.min(60, penalty);
 }

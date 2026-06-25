@@ -1,4 +1,5 @@
 export type IssueClaimStatus = 'none' | 'possible' | 'likely' | 'claimed';
+export type IssueDiscussionDifficultyStatus = 'none' | 'possible' | 'likely' | 'high';
 
 export interface GitHubIssueComment {
   author: string;
@@ -10,6 +11,12 @@ export interface GitHubIssueComment {
 
 export interface IssueClaimAssessment {
   status: IssueClaimStatus;
+  evidence: string[];
+  checkedAt: string;
+}
+
+export interface IssueDiscussionDifficultyAssessment {
+  status: IssueDiscussionDifficultyStatus;
   evidence: string[];
   checkedAt: string;
 }
@@ -29,6 +36,7 @@ export interface GitHubIssue {
   updatedAt: string;
   recentComments?: GitHubIssueComment[];
   claimAssessment?: IssueClaimAssessment;
+  discussionDifficultyAssessment?: IssueDiscussionDifficultyAssessment;
 }
 
 export interface MatchedIssue extends GitHubIssue {

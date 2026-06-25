@@ -28,6 +28,8 @@ export const IssueMatchSchema = z.object({
   estimatedWorkload: nonEmptyTrimmedString,
   claimStatus: z.enum(['none', 'possible', 'likely', 'claimed']).default('none'),
   claimEvidence: trimmedString.default(''),
+  difficultyStatus: z.enum(['none', 'possible', 'likely', 'high']).default('none'),
+  difficultyEvidence: trimmedString.default(''),
 });
 
 export const IssueMatchListSchema = z.object({

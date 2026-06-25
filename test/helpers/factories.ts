@@ -24,6 +24,9 @@ export function createIssue(overrides: Partial<GitHubIssue> = {}): GitHubIssue {
     labels: issue.labels,
     createdAt: issue.createdAt,
     updatedAt: issue.updatedAt,
+    recentComments: issue.recentComments,
+    claimAssessment: issue.claimAssessment,
+    discussionDifficultyAssessment: issue.discussionDifficultyAssessment,
   };
 }
 

@@ -12,7 +12,9 @@ Requirements:
 7. Do not invent issues or references that are not in the input
 8. Inspect recent issue comments for evidence that someone has claimed or started the work
 9. claimStatus must be none, possible, likely, or claimed; cite one concise comment-based reason in claimEvidence
-10. Return one valid JSON object only. No markdown. No commentary.
+10. Inspect recent issue comments for evidence that maintainers/contributors consider the issue hard, controversial, blocked, or repeatedly attempted without success
+11. difficultyStatus must be none, possible, likely, or high; cite one concise comment-based reason in difficultyEvidence
+12. Return one valid JSON object only. No markdown. No commentary.
 
 Output schema:
 {
@@ -28,7 +30,9 @@ Output schema:
         "techRequirements": ["typescript", "react"],
         "estimatedWorkload": "1-2 hours",
         "claimStatus": "none",
-        "claimEvidence": ""
+        "claimEvidence": "",
+        "difficultyStatus": "none",
+        "difficultyEvidence": ""
       }
     ]
   }
@@ -54,7 +58,9 @@ Required schema:
         "techRequirements": ["typescript", "react"],
         "estimatedWorkload": "1-2 hours",
         "claimStatus": "none" | "possible" | "likely" | "claimed",
-        "claimEvidence": "one concise reason or empty string"
+        "claimEvidence": "one concise reason or empty string",
+        "difficultyStatus": "none" | "possible" | "likely" | "high",
+        "difficultyEvidence": "one concise reason or empty string"
       }
     ]
   }

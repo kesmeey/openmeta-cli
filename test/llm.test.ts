@@ -842,7 +842,9 @@ describe('LLMService issue scoring response parsing', () => {
               "techRequirements": ["react", "typescript", "accessibility"],
               "estimatedWorkload": "1-2 hours",
               "claimStatus": "claimed",
-              "claimEvidence": ""
+              "claimEvidence": "",
+              "difficultyStatus": "high",
+              "difficultyEvidence": ""
             },
             {
               "issueReference": "acme/web#7",
@@ -851,7 +853,9 @@ describe('LLMService issue scoring response parsing', () => {
               "techRequirements": ["markdown", "docs"],
               "estimatedWorkload": "30 minutes",
               "claimStatus": "likely",
-              "claimEvidence": "alice said she is working on this"
+              "claimEvidence": "alice said she is working on this",
+              "difficultyStatus": "likely",
+              "difficultyEvidence": "maintainer said the fix is not trivial"
             },
             {
               "issueReference": "acme/ignored#11",
@@ -877,6 +881,9 @@ describe('LLMService issue scoring response parsing', () => {
     expect(parsed.data[1]?.analysis.estimatedWorkload).toBe('30 minutes');
     expect(parsed.data[1]?.claimAssessment?.status).toBe('likely');
     expect(parsed.data[1]?.claimAssessment?.evidence[0]).toContain('alice said she is working on this');
+    expect(parsed.data[0]?.discussionDifficultyAssessment?.status).toBe('none');
+    expect(parsed.data[1]?.discussionDifficultyAssessment?.status).toBe('likely');
+    expect(parsed.data[1]?.discussionDifficultyAssessment?.evidence[0]).toContain('not trivial');
   });
 });
 

@@ -260,6 +260,10 @@ export class ContentService {
       `- Summary: ${issue.opportunity.summary}`,
       `- Claim Risk: ${issue.claimAssessment?.status ?? 'not checked'}`,
       ...(issue.claimAssessment?.evidence.map((evidence) => `- Claim Evidence: ${evidence}`) ?? []),
+      `- Discussion Difficulty Risk: ${issue.discussionDifficultyAssessment?.status ?? 'not checked'}`,
+      ...(issue.discussionDifficultyAssessment?.evidence.map(
+        (evidence) => `- Discussion Difficulty Evidence: ${evidence}`,
+      ) ?? []),
       '',
       '## Breakdown',
       '',
