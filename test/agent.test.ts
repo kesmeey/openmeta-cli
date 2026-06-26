@@ -42,6 +42,9 @@ interface AgentInternals {
       output: string;
     }>;
     reviewRequired: boolean;
+    implementationAttempts?: number;
+    implementationStopReason?: string;
+    implementationContextFilesAdded?: number;
   }>;
 }
 
@@ -284,6 +287,107 @@ describe('AgentOrchestrator patch workflow', () => {
     }
   });
 
+  test('retries concrete patch generation after expanding implementation context', async () => {
+    const workspacePath = mkdtempSync(join(tmpdir(), 'openmeta-agent-retry-'));
+    tempDirs.push(workspacePath);
+    mkdirSync(join(workspacePath, 'src', 'components'), { recursive: true });
+    writeFileSync(
+      join(workspacePath, 'src', 'components', 'IconButton.tsx'),
+      'export function IconButton() { return <button />; }\n',
+      'utf-8',
+    );
+    writeFileSync(
+      join(workspacePath, 'src', 'components', 'IconButton.test.tsx'),
+      'test("icon button", () => {});\n',
+      'utf-8',
+    );
+
+    const originalGenerateImplementationDraft = llmService.generateImplementationDraft;
+    let implementationRequests = 0;
+
+    try {
+      llmService.generateImplementationDraft = async (_issue, workspace) => {
+        implementationRequests += 1;
+        const snippetPaths = workspace.snippets.map((snippet) => snippet.path);
+
+        if (!snippetPaths.includes('src/components/IconButton.test.tsx')) {
+          return {
+            version: '1',
+            kind: 'implementation_draft',
+            status: 'success',
+            data: {
+              summary: 'Need adjacent test context before editing safely.',
+              fileChanges: [],
+            },
+          };
+        }
+
+        return {
+          version: '1',
+          kind: 'implementation_draft',
+          status: 'success',
+          data: {
+            summary: 'Patch with adjacent context.',
+            fileChanges: [
+              {
+                path: 'src/components/IconButton.tsx',
+                reason: 'Add an accessible label fallback',
+                content: 'export function IconButton() { return <button aria-label="icon" />; }\n',
+              },
+            ],
+          },
+        };
+      };
+
+      const orchestrator = new AgentOrchestrator() as unknown as AgentInternals;
+      const result = await orchestrator.generateConcretePatch(
+        createRankedIssue(),
+        createWorkspace({
+          workspacePath,
+          candidateFiles: ['src/components/IconButton.tsx'],
+          snippets: [
+            {
+              path: 'src/components/IconButton.tsx',
+              content: 'export function IconButton() { return <button />; }\n',
+            },
+          ],
+          testCommands: [],
+          validationCommands: [],
+          validationWarnings: [],
+          testResults: [],
+        }),
+        createPatchDraft({
+          targetFiles: [
+            {
+              path: 'src/components/IconButton.tsx',
+              reason: 'Primary component logic',
+            },
+          ],
+          proposedChanges: [
+            {
+              title: 'Update button coverage',
+              details: 'Use adjacent tests to guide the safe implementation.',
+              files: [],
+            },
+          ],
+        }),
+        true,
+      );
+
+      expect(implementationRequests).toBe(2);
+      expect(result.changedFiles).toEqual(['src/components/IconButton.tsx']);
+      expect(result.reviewRequired).toBe(false);
+      expect(result.implementationAttempts).toBe(2);
+      expect(result.implementationStopReason).toBe('applied');
+      expect(result.implementationContextFilesAdded).toBe(1);
+      expect(readFileSync(join(workspacePath, 'src', 'components', 'IconButton.tsx'), 'utf-8')).toBe(
+        'export function IconButton() { return <button aria-label="icon" />; }\n',
+      );
+    } finally {
+      llmService.generateImplementationDraft = originalGenerateImplementationDraft;
+    }
+  });
+
   test('skips generated file edits in draft-only mode', async () => {
     const workspacePath = mkdtempSync(join(tmpdir(), 'openmeta-agent-draft-only-'));
     tempDirs.push(workspacePath);
@@ -332,6 +436,9 @@ describe('AgentOrchestrator patch workflow', () => {
       expect(implementationRequested).toBe(false);
       expect(result.changedFiles).toEqual([]);
       expect(result.reviewRequired).toBe(false);
+      expect(result.implementationAttempts).toBe(0);
+      expect(result.implementationStopReason).toBe('draft_only');
+      expect(result.implementationContextFilesAdded).toBe(0);
       expect(readFileSync(join(workspacePath, 'src', 'app.ts'), 'utf-8')).toBe('export const version = 0;\n');
     } finally {
       llmService.generateImplementationDraft = originalGenerateImplementationDraft;

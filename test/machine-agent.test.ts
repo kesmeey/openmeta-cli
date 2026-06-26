@@ -37,6 +37,9 @@ interface AgentMachineInternals {
     changedFiles: string[];
     validationResults: unknown[];
     reviewRequired: boolean;
+    implementationAttempts?: number;
+    implementationStopReason?: string;
+    implementationContextFilesAdded?: number;
   }>;
   submitContributionPullRequestIfPossible(input: unknown): Promise<{
     changedFiles: string[];
@@ -383,6 +386,9 @@ describe('machine flow result builders', () => {
       changedFiles: [],
       validationResults: [],
       reviewRequired: false,
+      implementationAttempts: 0,
+      implementationStopReason: 'draft_only',
+      implementationContextFilesAdded: 0,
     });
     spyOn(llmService, 'generatePrDraft').mockResolvedValue({
       version: '1',
@@ -410,23 +416,28 @@ describe('machine flow result builders', () => {
     spyOn(memoryService, 'renderMarkdown').mockReturnValue('# Memory');
     const recordOutcomeSpy = spyOn(memoryService, 'recordOutcome').mockReturnValue(memory);
 
-    const result = await orchestrator.runMachine({
-      issue: 'https://github.com/acme/demo/issues/42',
-      draftOnly: true,
-      dryRun: true,
-    });
+    const result = await runInMachineContext(() =>
+      orchestrator.runMachine({
+        issue: 'https://github.com/acme/demo/issues/42',
+        draftOnly: true,
+        dryRun: true,
+      }),
+    );
 
     expect(result.executionOutcome).toBe('draft_only');
     expect(result.repoMutated).toBe(false);
     expect(result.prCreated).toBe(false);
     expect(result.artifactsWritten).toBe(false);
     expect(result.executionPolicy.headless).toBe(true);
+    expect(result.implementationAttempts).toBe(0);
+    expect(result.implementationStopReason).toBe('draft_only');
+    expect(result.implementationContextFilesAdded).toBe(0);
     expect(writeArtifactsSpy).not.toHaveBeenCalled();
     expect(publishSpy).not.toHaveBeenCalled();
     expect(saveInboxSpy).not.toHaveBeenCalled();
     expect(recordProofSpy).not.toHaveBeenCalled();
     expect(recordOutcomeSpy).not.toHaveBeenCalled();
-  });
+  }, 10000);
 
   test('machine agent preset flow honors feasibility-adjusted threshold scores', async () => {
     const config = {
@@ -503,6 +514,9 @@ describe('machine flow result builders', () => {
       changedFiles: ['packages/react/src/docs.ts'],
       validationResults: [],
       reviewRequired: false,
+      implementationAttempts: 2,
+      implementationStopReason: 'applied',
+      implementationContextFilesAdded: 3,
     });
     spyOn(llmService, 'generatePrDraft').mockResolvedValue({
       version: '1',
@@ -522,6 +536,9 @@ describe('machine flow result builders', () => {
 
     expect(result.issue).toBe(issue);
     expect(result.executionOutcome).toBe('changes_applied');
+    expect(result.implementationAttempts).toBe(2);
+    expect(result.implementationStopReason).toBe('applied');
+    expect(result.implementationContextFilesAdded).toBe(3);
     expect(result.executionPolicy.headless).toBe(true);
     expect(prepareWorkspaceSpy).toHaveBeenCalledWith(issue, memory, false, 'headless', undefined);
     expect(prepareRepositoryWorkspaceSpy).not.toHaveBeenCalled();
