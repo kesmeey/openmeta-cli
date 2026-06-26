@@ -285,6 +285,29 @@ openmeta machine scout --limit 10
 openmeta machine analyze --repo owner/name --dry-run
 ```
 
+### 接入 Codex
+
+OpenMeta 也内置 Codex skill bundle，可以直接安装到 Codex 的个人技能目录。
+
+```bash
+# 1. 确保 openmeta 已安装并可执行
+openmeta --version
+
+# 2. 安装 OpenMeta 的 Codex skill
+openmeta skill install --host codex
+
+# 3. 检查接入状态
+openmeta skill doctor --host codex
+```
+
+默认安装路径：
+
+```text
+~/.agents/skills/openmeta/SKILL.md
+```
+
+如果 `doctor` 返回 `supported: true` 且 `skillFileExists: true`，说明 Codex 已能发现这套 OpenMeta skill。Codex 也支持仓库级 `.agents/skills`，但 `install` 命令默认写入个人目录，便于跨项目复用。
+
 ### 命令一览
 
 | 命令 | 说明 |
@@ -630,6 +653,29 @@ openmeta machine doctor
 openmeta machine scout --limit 10
 openmeta machine analyze --repo owner/name --dry-run
 ```
+
+### Connect Codex
+
+OpenMeta also ships with a Codex skill bundle that can be installed directly into Codex's personal skill directory.
+
+```bash
+# 1. Make sure openmeta is installed and on PATH
+openmeta --version
+
+# 2. Install the OpenMeta Codex skill bundle
+openmeta skill install --host codex
+
+# 3. Verify the integration
+openmeta skill doctor --host codex
+```
+
+Default install path:
+
+```text
+~/.agents/skills/openmeta/SKILL.md
+```
+
+If `doctor` reports `supported: true` and `skillFileExists: true`, Codex should be able to discover the OpenMeta skill bundle. Codex also supports repository-scoped `.agents/skills`, but `install` writes to the personal directory by default for reuse across projects.
 
 ### Command Surface
 

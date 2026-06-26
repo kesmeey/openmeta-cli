@@ -22,14 +22,14 @@ function resolveSkillsRoot(): string {
 
 const SKILLS_ROOT = resolveSkillsRoot();
 
-export type SkillHost = 'claude-code' | 'openclaw';
+export type SkillHost = 'claude-code' | 'codex' | 'openclaw';
 
 export function getSkillsRoot(): string {
   return SKILLS_ROOT;
 }
 
 export function getSupportedSkillHosts(): SkillHost[] {
-  return ['claude-code', 'openclaw'];
+  return ['claude-code', 'codex', 'openclaw'];
 }
 
 export function loadCoreSkill(): string {

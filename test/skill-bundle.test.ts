@@ -51,13 +51,15 @@ describe('skill bundle rendering', () => {
     }
   });
 
-  test('renders claude-code and openclaw bundles from one canonical spec', async () => {
-    expect(getSupportedSkillHosts()).toEqual(['claude-code', 'openclaw']);
+  test('renders claude-code, codex, and openclaw bundles from one canonical spec', async () => {
+    expect(getSupportedSkillHosts()).toEqual(['claude-code', 'codex', 'openclaw']);
 
     const claude = await renderSkillBundle('claude-code', tempRoot);
+    const codex = await renderSkillBundle('codex', tempRoot);
     const openclaw = await renderSkillBundle('openclaw', tempRoot);
 
     const claudeSkill = readFileSync(claude.files[0]!, 'utf-8');
+    const codexSkill = readFileSync(codex.files[0]!, 'utf-8');
     const openclawSkill = readFileSync(openclaw.files[0]!, 'utf-8');
 
     expect(claude.files[0]).toBe(join(tempRoot, 'claude-code', 'SKILL.md'));
@@ -70,6 +72,14 @@ describe('skill bundle rendering', () => {
     expect(claudeSkill).toContain('`executionOutcome`');
     expect(claudeSkill).toContain('"errorCodes"');
     expect(claudeSkill).toContain('openmeta machine agent');
+
+    expect(codex.files[0]).toBe(join(tempRoot, 'codex', 'SKILL.md'));
+    expect(codexSkill).toStartWith('---\nname: openmeta\n');
+    expect(codexSkill).toContain('Install target: `~/.agents/skills/openmeta`');
+    expect(codexSkill).toContain('personal skill directory');
+    expect(codexSkill).toContain('## What OpenMeta Can Do');
+    expect(codexSkill).toContain('Codex default personal install path: `~/.agents/skills/openmeta`');
+    expect(codexSkill).toContain('openmeta machine doctor');
 
     expect(openclaw.files[0]).toBe(join(tempRoot, 'openclaw', 'skill.md'));
     expect(openclawSkill).toContain('Install target: `~/.openclaw/skills/openmeta`');
@@ -145,6 +155,24 @@ describe('skill bundle rendering', () => {
     expect(installedSkill).toStartWith('---\nname: openmeta\n');
     expect(installedSkill).toContain('description: Use when');
     expect(installedSkill).toContain('## What OpenMeta Can Do');
+    expect(installedSkill).toContain('openmeta machine doctor');
+  });
+
+  test('installs codex bundle at the Codex personal skill discovery entrypoint', async () => {
+    const homeRoot = join(tempRoot, 'home');
+
+    const result = await installSkillBundle('codex', { homeDir: homeRoot });
+    const skillPath = join(homeRoot, '.agents', 'skills', 'openmeta', 'SKILL.md');
+
+    expect(result.installed).toBe(true);
+    expect(result.installPath).toBe(join(homeRoot, '.agents', 'skills', 'openmeta'));
+    expect(result.exportedFiles).toEqual([skillPath]);
+    expect(existsSync(skillPath)).toBe(true);
+
+    const installedSkill = readFileSync(skillPath, 'utf-8');
+    expect(installedSkill).toStartWith('---\nname: openmeta\n');
+    expect(installedSkill).toContain('description: Use when');
+    expect(installedSkill).toContain('Host: Codex');
     expect(installedSkill).toContain('openmeta machine doctor');
   });
 });

@@ -9,7 +9,7 @@ import {
 } from '../orchestration/skill/index.js';
 
 function parseHost(value: string): SkillHost {
-  if (value === 'claude-code' || value === 'openclaw') {
+  if (value === 'claude-code' || value === 'codex' || value === 'openclaw') {
     return value;
   }
 

@@ -21,6 +21,10 @@ function resolveDefaultInstallPath(host: SkillHost, homeDir = homedir()): string
     return join(homeDir, '.claude', 'skills', 'openmeta');
   }
 
+  if (host === 'codex') {
+    return join(homeDir, '.agents', 'skills', 'openmeta');
+  }
+
   if (host === 'openclaw') {
     return join(homeDir, '.openclaw', 'skills', 'openmeta');
   }
