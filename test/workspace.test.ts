@@ -411,6 +411,10 @@ describe('workspaceService.detectTestCommands', () => {
 
     expect(selected.commands.map((command) => command.command)).toEqual(['pytest']);
     expect(selected.warnings[0]).toContain('Skipped bun run test during headless validation');
+    expect(workspaceService.getLastPermissionDecisions().map((decision) => decision.outcome)).toEqual([
+      'allow',
+      'deny',
+    ]);
   });
 
   test('reads workspace files safely and ignores paths outside the repository root', () => {

@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { ConfigService } from '../src/infra/config.js';
+import { agentEventLogService } from '../src/services/agent-event-log.js';
 import { inboxService } from '../src/services/inbox.js';
 import { memoryService } from '../src/services/memory.js';
 import { proofOfWorkService } from '../src/services/proof-of-work.js';
@@ -259,6 +260,19 @@ describe('stateful services', () => {
     expect(finished?.error).toBe('LLM validation failed');
     expect(state.records[0]?.id).toBe(run.id);
     expect(runHistoryService.find(run.id)?.args).toEqual(['scout', '--refresh']);
+  });
+
+  test('agent event log appends and reloads run events as jsonl', () => {
+    const started = agentEventLogService.record('run_test', 'run_started', {
+      commandName: 'OpenMeta Agent',
+    });
+    const finished = agentEventLogService.record('run_test', 'run_finished', { status: 'success' });
+    const events = agentEventLogService.load('run_test');
+
+    expect(events.map((event) => event.type)).toEqual(['run_started', 'run_finished']);
+    expect(events[0]?.id).toBe(started.id);
+    expect(events[1]?.id).toBe(finished.id);
+    expect(events[0]?.data['commandName']).toBe('OpenMeta Agent');
   });
 
   test('run history service returns undefined for unknown runs', () => {

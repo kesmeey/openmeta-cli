@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { StructuredOutputStatus } from '../src/contracts/index.js';
+import { contextAssemblerService } from '../src/services/context-assembler.js';
 import { LLMService } from '../src/services/llm.js';
 import type { ImplementationDraft, MatchedIssue } from '../src/types/index.js';
 import { createIssue, createMemory, createRankedIssue, createWorkspace } from './helpers/factories.js';
@@ -133,7 +134,6 @@ interface LLMServiceInternals {
     status: StructuredOutputStatus;
     data: MatchedIssue[];
   };
-  formatRepoMemory(memory: ReturnType<typeof createMemory>): string;
 }
 
 describe('LLMService repository suggestion parsing', () => {
@@ -997,10 +997,9 @@ describe('LLMService patch draft generation', () => {
   });
 });
 
-describe('LLMService repo memory formatting', () => {
+describe('ContextAssemblerService repo memory formatting', () => {
   test('includes run stats, path history, validation failures, and recent outcomes', () => {
-    const service = new LLMService() as unknown as LLMServiceInternals;
-    const formatted = service.formatRepoMemory(createMemory());
+    const formatted = contextAssemblerService.buildRepoMemoryContext(createMemory());
 
     expect(formatted).toContain('Run Stats: total=2, published=1, real_pr=1');
     expect(formatted).toContain('Top Path Signals:');

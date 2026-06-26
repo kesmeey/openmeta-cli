@@ -221,3 +221,36 @@ export interface AgentRunRecord {
   durationMs?: number;
   error?: string;
 }
+
+export type AgentEventType = 'run_started' | 'run_finished' | 'run_cancelled' | 'run_failed' | 'permission_decision';
+
+export interface AgentEventLogEntry {
+  version: 1;
+  id: string;
+  runId: string;
+  type: AgentEventType;
+  timestamp: string;
+  data: Record<string, unknown>;
+}
+
+export type PermissionDecisionOutcome = 'allow' | 'deny' | 'ask' | 'review';
+export type PermissionRiskLevel = 'low' | 'medium' | 'high';
+
+export interface PermissionDecision {
+  outcome: PermissionDecisionOutcome;
+  action: string;
+  riskLevel: PermissionRiskLevel;
+  reason: string;
+  details?: Record<string, unknown>;
+}
+
+export interface AgentCapability<Input = unknown, Output = unknown> {
+  name: string;
+  description: string;
+  isReadOnly: boolean;
+  isConcurrencySafe: boolean;
+  riskLevel: PermissionRiskLevel;
+  inputSchemaName: string;
+  outputSchemaName: string;
+  execute?: (input: Input) => Promise<Output> | Output;
+}

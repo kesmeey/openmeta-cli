@@ -6,6 +6,7 @@ import { ensureDirectory, getOpenMetaWorkspaceRoot, logger } from '../infra/inde
 import type {
   GeneratedChangeApplyResult,
   GeneratedFileChange,
+  PermissionDecision,
   RankedIssue,
   RepoFileSnippet,
   RepoMemory,
@@ -13,6 +14,7 @@ import type {
   TestCommand,
   TestResult,
 } from '../types/index.js';
+import { permissionPolicyService } from './permission-policy.js';
 
 const EXCLUDED_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'coverage', 'target', 'vendor']);
 
@@ -46,6 +48,12 @@ function slugify(input: string): string {
 }
 
 export class WorkspaceService {
+  private lastPermissionDecisions: PermissionDecision[] = [];
+
+  getLastPermissionDecisions(): PermissionDecision[] {
+    return this.lastPermissionDecisions;
+  }
+
   private getWorkspacePath(repoFullName: string): string {
     return join(ensureDirectory(getOpenMetaWorkspaceRoot()), sanitizeRepoName(repoFullName));
   }
@@ -122,16 +130,24 @@ export class WorkspaceService {
     );
     const appliedFiles: string[] = [];
     const skippedFiles: GeneratedChangeApplyResult['skippedFiles'] = [];
+    const permission = permissionPolicyService.evaluateGeneratedFileChanges({
+      workspacePath,
+      fileChanges,
+      allowedPaths: options.allowedPaths,
+      maxFiles: MAX_GENERATED_FILES,
+      maxFileChars: MAX_GENERATED_FILE_CHARS,
+    });
+    this.lastPermissionDecisions = [permission];
 
-    if (fileChanges.length > MAX_GENERATED_FILES) {
+    if (permission.outcome === 'review' && fileChanges.length > MAX_GENERATED_FILES) {
       return {
         appliedFiles: [],
         skippedFiles: fileChanges.map((change) => ({
           path: change.path,
-          reason: `Generated patch touches ${fileChanges.length} files; automatic apply limit is ${MAX_GENERATED_FILES}.`,
+          reason: permission.reason,
         })),
         reviewRequired: true,
-        reviewReason: `Generated patch touches ${fileChanges.length} files, which exceeds the automatic apply limit of ${MAX_GENERATED_FILES}.`,
+        reviewReason: permission.reason,
       };
     }
 
@@ -749,24 +765,11 @@ export class WorkspaceService {
     commands: TestCommand[],
     executionMode: ExecutionMode,
   ): { commands: TestCommand[]; warnings: string[] } {
-    if (executionMode !== 'headless') {
-      return {
-        commands: commands.slice(0, 3),
-        warnings: [],
-      };
-    }
-
-    const selected = commands.filter((command) => command.source === 'tool-default').slice(0, 3);
-    const warnings = commands
-      .filter((command) => command.source === 'repo-script')
-      .map(
-        (command) =>
-          `Skipped ${command.command} during headless validation because it comes from repository-defined scripts.`,
-      );
-
+    const result = permissionPolicyService.selectValidationCommands(commands, executionMode);
+    this.lastPermissionDecisions = result.decisions;
     return {
-      commands: selected,
-      warnings,
+      commands: result.commands,
+      warnings: result.warnings,
     };
   }
 
