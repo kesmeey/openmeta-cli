@@ -82,6 +82,8 @@ export class IssueRankingService {
       refresh?: boolean;
       repoFullName?: string;
       onStatus?: (message: string) => void;
+      minStars?: number;
+      maxStars?: number;
     } = {},
   ): Promise<RankedIssue[]> {
     const issues = await githubService.fetchTrendingIssues({
@@ -89,6 +91,8 @@ export class IssueRankingService {
       repoFullName: options.repoFullName,
       onStatus: options.onStatus,
       techStack: config.userProfile.techStack,
+      minStars: options.minStars,
+      maxStars: options.maxStars,
     });
     const rankedCandidates = this.rankIssuesForProfile(issues, config.userProfile);
     const matched = await this.scoreIssuesInBatches(config.userProfile, rankedCandidates);
