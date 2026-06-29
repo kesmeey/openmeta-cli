@@ -1623,6 +1623,59 @@ tbody tr:last-child td {
     compounding: "pr_open",
   };
 
+  const htmlEscapeMap = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  };
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => htmlEscapeMap[char] || char);
+  }
+
+  function escapeAttribute(value) {
+    return escapeHtml(value).replace(/`/g, "&#96;");
+  }
+
+  function toFiniteNumber(value, fallback = 0) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : fallback;
+  }
+
+  function clampNumber(value, min, max) {
+    return Math.min(Math.max(toFiniteNumber(value, min), min), max);
+  }
+
+  function formatPercent(value) {
+    return `${clampNumber(value, 0, 100)}%`;
+  }
+
+  function formatPixels(value, minimum = 0) {
+    return `${Math.max(minimum, toFiniteNumber(value, minimum))}px`;
+  }
+
+  function sanitizeUrl(value) {
+    if (!value) {
+      return null;
+    }
+
+    try {
+      const parsed = new URL(String(value), window.location.href);
+      if (!["http:", "https:", "file:"].includes(parsed.protocol)) {
+        return null;
+      }
+      return parsed.href;
+    } catch {
+      return null;
+    }
+  }
+
+  function renderSignalSummary(signals) {
+    return `Revisit ${toFiniteNumber(signals.revisit)} | Landing ${toFiniteNumber(signals.landing)} | Memory ${toFiniteNumber(signals.memory)}`;
+  }
+
   function formatRepoLabel(repo) {
     return repo === "all" ? "All repositories" : repo;
   }
@@ -1894,8 +1947,8 @@ tbody tr:last-child td {
       const block = document.createElement("div");
       block.className = "meta-block";
       block.innerHTML = `
-        <p class="meta-label">${item.label}</p>
-        <p class="meta-value">${item.value}</p>
+        <p class="meta-label">${escapeHtml(item.label)}</p>
+        <p class="meta-value">${escapeHtml(item.value)}</p>
       `;
       container.appendChild(block);
     });
@@ -1903,7 +1956,7 @@ tbody tr:last-child td {
     document.getElementById("toolbar-note").textContent = data.meta.windowLabel;
     document.getElementById("overview-badge").textContent = data.summary.callout;
     document.getElementById("focus-badge").textContent =
-      `${data.focus.deepen.length} deepen | ${data.focus.watch.length} watch | ${data.focus.pause.length} pause`;
+      `${data.focus.deepen.length} next up | ${data.focus.watch.length} monitor | ${data.focus.pause.length} on hold`;
     document.getElementById("projects-badge").textContent = `${data.projects.length} tracked projects`;
     document.getElementById("activity-badge").textContent = `${Math.min(filteredActivity().length, 5)} recent items`;
     document.getElementById("archive-badge").textContent = `${data.archive.length} archive records`;
@@ -1929,7 +1982,7 @@ tbody tr:last-child td {
         label: "Real PRs",
         value: data.summary.realPrRuns,
         meta: [
-          `${data.summary.ledgerPublishedRuns} ledger publications`,
+          `${data.summary.ledgerPublishedRuns} published locally`,
           `${data.summary.realPrRuns} upstream PRs`,
           `${data.summary.mergedRuns || 0} merged`,
           `${data.summary.stalePublishedBacklogTotal} waiting PR`,
@@ -1944,9 +1997,9 @@ tbody tr:last-child td {
           `${data.assets.dossiers} dossiers`,
           `${data.assets.patchDrafts} patch drafts`,
           `${data.assets.memoryFiles} memory files`,
-          `${data.summary.reposWithReturnMotion} repos with return motion`,
+          `${data.summary.reposWithReturnMotion} repos revisited`,
         ],
-        foot: `${(data.summary.topAreas || []).slice(0, 2).join(", ") || "asset trail retained"}`,
+        foot: `${(data.summary.topAreas || []).slice(0, 2).join(", ") || "saved context available"}`,
         accent: "var(--slate)",
       },
     ];
@@ -1959,16 +2012,16 @@ tbody tr:last-child td {
       block.className = "stat";
       block.innerHTML = `
         <div>
-          <div class="stat-label">${item.label}</div>
-          <p class="stat-value">${item.value}</p>
+          <div class="stat-label">${escapeHtml(item.label)}</div>
+          <p class="stat-value">${escapeHtml(item.value)}</p>
         </div>
         <div class="stat-meta">
           <div class="stat-meta-row">
-            ${item.meta.map((entry) => `<span class="stat-tag">${entry}</span>`).join("")}
+            ${item.meta.map((entry) => `<span class="stat-tag">${escapeHtml(entry)}</span>`).join("")}
           </div>
           <div class="stat-foot">
-            <span>${item.foot}</span>
-            <span class="stat-accent" style="background:${item.accent};"></span>
+            <span>${escapeHtml(item.foot)}</span>
+            <span class="stat-accent" style="background:${escapeAttribute(item.accent)};"></span>
           </div>
         </div>
       `;
@@ -1993,7 +2046,7 @@ tbody tr:last-child td {
     container.innerHTML = `
       <div class="funnel-head">
         <h3>Outcome Funnel</h3>
-        <div class="funnel-caption">${published}/${totalAttempts} ledger published | ${merged}/${prOpen || 0} merged</div>
+        <div class="funnel-caption">${escapeHtml(`${published}/${totalAttempts} published locally | ${merged}/${prOpen || 0} merged`)}</div>
       </div>
       <div class="funnel-list">
         ${stages
@@ -2003,11 +2056,11 @@ tbody tr:last-child td {
             return `
               <div class="funnel-item">
                 <div class="funnel-top">
-                  <div class="funnel-label">${item.label}</div>
-                  <div class="funnel-meta">${item.value} <span>${index === 0 ? "base" : `${ratio}% from prev`}</span></div>
+                  <div class="funnel-label">${escapeHtml(item.label)}</div>
+                  <div class="funnel-meta">${escapeHtml(item.value)} <span>${escapeHtml(index === 0 ? "base" : `${ratio}% from prev`)}</span></div>
                 </div>
                 <div class="funnel-bar">
-                  <span data-tone="${item.tone}" style="width:${(item.value / max) * 100}%;"></span>
+                  <span data-tone="${escapeAttribute(item.tone)}" style="width:${formatPercent((item.value / max) * 100)};"></span>
                 </div>
               </div>
             `;
@@ -2044,15 +2097,15 @@ tbody tr:last-child td {
           ? `Recommendation: keep ${top.repoFullName} warm and look for one cleaner landing`
           : `Recommendation: keep ${top.repoFullName} archived, but do not deepen yet`;
     container.innerHTML = `
-      <p class="decision-title">${recommendationLead}</p>
-      <p class="decision-copy">${top.summary}</p>
+      <p class="decision-title">${escapeHtml(recommendationLead)}</p>
+      <p class="decision-copy">${escapeHtml(top.summary)}</p>
       <div class="decision-strength">
         <div class="decision-meter">
-          <span data-kind="revisit" style="width:${signals.revisit}%;"></span>
-          <span data-kind="landing" style="width:${signals.landing}%;"></span>
-          <span data-kind="memory" style="width:${signals.memory}%;"></span>
+          <span data-kind="revisit" style="width:${formatPercent(signals.revisit)};"></span>
+          <span data-kind="landing" style="width:${formatPercent(signals.landing)};"></span>
+          <span data-kind="memory" style="width:${formatPercent(signals.memory)};"></span>
         </div>
-        <span class="decision-strength-meta">R ${signals.revisit} | L ${signals.landing} | M ${signals.memory}</span>
+        <span class="decision-strength-meta">${escapeHtml(renderSignalSummary(signals))}</span>
       </div>
     `;
   }
@@ -2081,17 +2134,17 @@ tbody tr:last-child td {
       row.className = "decision-item";
       row.innerHTML = `
         <div class="decision-top">
-          <div class="decision-repo">${item.repoFullName}</div>
-          <span class="pill" data-tone="${item.decision}">${formatDecisionLabel(item.decision)}</span>
+          <div class="decision-repo">${escapeHtml(item.repoFullName)}</div>
+          <span class="pill" data-tone="${escapeAttribute(item.decision)}">${escapeHtml(formatDecisionLabel(item.decision))}</span>
         </div>
-        <div class="decision-reason">${(item.reasons || []).slice(0, 1).join("")}</div>
+        <div class="decision-reason">${escapeHtml((item.reasons || []).slice(0, 1).join(""))}</div>
         <div class="decision-strength">
           <div class="decision-meter">
-            <span data-kind="revisit" style="width:${signals.revisit}%;"></span>
-            <span data-kind="landing" style="width:${signals.landing}%;"></span>
-            <span data-kind="memory" style="width:${signals.memory}%;"></span>
+            <span data-kind="revisit" style="width:${formatPercent(signals.revisit)};"></span>
+            <span data-kind="landing" style="width:${formatPercent(signals.landing)};"></span>
+            <span data-kind="memory" style="width:${formatPercent(signals.memory)};"></span>
           </div>
-          <span class="decision-strength-meta">R ${signals.revisit} | L ${signals.landing} | M ${signals.memory}</span>
+          <span class="decision-strength-meta">${escapeHtml(renderSignalSummary(signals))}</span>
         </div>
       `;
       container.appendChild(row);
@@ -2134,12 +2187,12 @@ tbody tr:last-child td {
           ${segments
             .map((item) => {
               const width = total > 0 ? (item.value / total) * 100 : 0;
-              return `<span data-source="${item.key}" style="width:${width}%;"></span>`;
+              return `<span data-source="${escapeAttribute(item.key)}" style="width:${formatPercent(width)};"></span>`;
             })
             .join("")}
         </div>
         <div class="source-mix-meta">
-          ${segments.map((item) => `<span>${item.short} ${item.value}</span>`).join("")}
+          ${segments.map((item) => `<span>${escapeHtml(`${item.short} ${item.value}`)}</span>`).join("")}
         </div>
       </div>
     `;
@@ -2148,13 +2201,17 @@ tbody tr:last-child td {
   function formatOpenTargetAction(openTarget) {
     const label = openTarget?.label || "Open";
     if (label === "Open") {
-      return "Open Trail";
+      return "Open Details";
     }
     return `Open ${label}`;
   }
 
   function renderOpenAction(url, label) {
-    if (!url) {
+    const safeUrl = sanitizeUrl(url);
+    const safeLabel = escapeHtml(label);
+    const safeAttributeLabel = escapeAttribute(label);
+
+    if (!safeUrl) {
       return `
         <span class="link-button link-button-inline link-button-disabled" aria-disabled="true" title="No linked trail yet">
           <span>No Trail</span>
@@ -2163,8 +2220,8 @@ tbody tr:last-child td {
     }
 
     return `
-      <a class="link-button link-button-inline" href="${url}" target="_blank" rel="noreferrer" aria-label="${label}" title="${label}">
-        <span>${label}</span>
+      <a class="link-button link-button-inline" href="${escapeAttribute(safeUrl)}" target="_blank" rel="noreferrer" aria-label="${safeAttributeLabel}" title="${safeAttributeLabel}">
+        <span>${safeLabel}</span>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
           <path d="M5.25 2H12V8.75" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M12 2L2 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
@@ -2189,7 +2246,7 @@ tbody tr:last-child td {
 
     if (rows.length === 0) {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="5">No projects match the current filter state.</td>`;
+      tr.innerHTML = `<td colspan="5">${escapeHtml("No projects match the current filter state.")}</td>`;
       table.appendChild(tr);
       return;
     }
@@ -2198,41 +2255,41 @@ tbody tr:last-child td {
       const signals = getProjectSignals(item.repoFullName);
       const latestOutcome = `${formatOutcomeLabel(item.lastOutcome)} (${item.lastActiveAt})`;
       const sourceMix = item.sourceMix || { proof: 0, memory: 0, inbox: 0, artifact: 0 };
-      const projectActionLabel = "Open Trail";
+      const projectActionLabel = "Open Details";
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td data-label="Project">
           <div class="project-cell">
-            <div class="repo-title">${item.repoFullName}</div>
-            <div class="repo-sub">${item.representativeTitle || item.repoFullName}</div>
-            <div class="repo-sub">${item.note}</div>
-            <div class="repo-sub">${formatWorkType(item.dominantWorkType)} | ${(item.topAreas || []).join(", ") || "no area hints yet"}</div>
-            <div class="repo-sub">${item.returnSessions ?? 0} return sessions | ${item.consecutiveActiveWindows ?? 0} consecutive windows | span ${item.activeWindowSpanDays ?? 0}d</div>
+            <div class="repo-title">${escapeHtml(item.repoFullName)}</div>
+            <div class="repo-sub">${escapeHtml(item.representativeTitle || item.repoFullName)}</div>
+            <div class="repo-sub">${escapeHtml(item.note)}</div>
+            <div class="repo-sub">${escapeHtml(`${formatWorkType(item.dominantWorkType)} | ${(item.topAreas || []).join(", ") || "no area hints yet"}`)}</div>
+            <div class="repo-sub">${escapeHtml(`${item.returnSessions ?? 0} return visits | ${item.consecutiveActiveWindows ?? 0} consecutive windows | span ${item.activeWindowSpanDays ?? 0}d`)}</div>
             ${renderSourceMix(sourceMix)}
           </div>
         </td>
         <td data-label="State">
-          <span class="status-dot" data-tone="${item.decision}"></span>
-          <span class="pill" data-tone="${item.decision}">${formatDecisionLabel(item.decision)}</span>
+          <span class="status-dot" data-tone="${escapeAttribute(item.decision)}"></span>
+          <span class="pill" data-tone="${escapeAttribute(item.decision)}">${escapeHtml(formatDecisionLabel(item.decision))}</span>
         </td>
         <td data-label="Contribution">
           <div class="project-cell">
-            <div>${item.contributionCount} attempts | ${item.ledgerPublishedCount ?? item.publishedCount ?? 0} ledger published</div>
-            <div class="repo-sub">${item.conversionNote || `${item.attemptToPublishedRate ?? 0}% to pub | ${item.attemptToPrRate ?? 0}% to pr | ${item.attemptToMergedRate ?? 0}% to merge`}</div>
-            <div class="repo-sub">${item.reopenableAttemptCount ?? 0} reopenable | ${item.highLeverageAttemptCount ?? 0} high leverage | ${item.stalePublishedWithoutPrCount ?? 0} published waiting PR</div>
+            <div>${escapeHtml(`${item.contributionCount} attempts | ${item.ledgerPublishedCount ?? item.publishedCount ?? 0} published locally`)}</div>
+            <div class="repo-sub">${escapeHtml(item.conversionNote || `${item.attemptToPublishedRate ?? 0}% to publish | ${item.attemptToPrRate ?? 0}% to PR | ${item.attemptToMergedRate ?? 0}% to merge`)}</div>
+            <div class="repo-sub">${escapeHtml(`${item.reopenableAttemptCount ?? 0} reopenable | ${item.highLeverageAttemptCount ?? 0} high leverage | ${item.stalePublishedWithoutPrCount ?? 0} published waiting for PR`)}</div>
             <div class="repo-sub">${renderSparkline(signals.trend)}</div>
           </div>
         </td>
         <td data-label="Latest Outcome">
           <div class="project-cell">
-            <div>${latestOutcome}</div>
-            <div class="repo-sub">${item.prOpenCount ?? 0} PR open | ${item.mergedCount} merged | landed ${item.lastMeaningfulLandingAt || item.lastSuccessfulLandingAt || "n/a"}</div>
-            <div class="repo-sub">${item.blockageNote || `${item.reviewRequiredCount ?? 0} review | ${item.validationFailedCount ?? 0} validation fail | ${item.openAttemptCount ?? 0} open`}</div>
+            <div>${escapeHtml(latestOutcome)}</div>
+            <div class="repo-sub">${escapeHtml(`${item.prOpenCount ?? 0} PR open | ${item.mergedCount} merged | landed ${item.lastMeaningfulLandingAt || item.lastSuccessfulLandingAt || "n/a"}`)}</div>
+            <div class="repo-sub">${escapeHtml(item.blockageNote || `${item.reviewRequiredCount ?? 0} review | ${item.validationFailedCount ?? 0} validation fail | ${item.openAttemptCount ?? 0} open`)}</div>
           </div>
         </td>
         <td data-label="Score">
           <div class="project-cell">
-            <div>${item.score}</div>
+            <div>${escapeHtml(item.score)}</div>
             <div class="repo-sub">
               ${renderOpenAction(item.detailLink, projectActionLabel)}
             </div>
@@ -2256,7 +2313,7 @@ tbody tr:last-child td {
 
     if (rows.length === 0) {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="5">No contribution attempts match the current filter state.</td>`;
+      tr.innerHTML = `<td colspan="5">${escapeHtml("No contribution attempts match the current filter state.")}</td>`;
       table.appendChild(tr);
       return;
     }
@@ -2268,31 +2325,31 @@ tbody tr:last-child td {
         <td data-label="Attempt">
           <div class="project-cell">
             <div class="attempt-head">
-            <div class="repo-title">${item.title}</div>
-              <span class="pill source-pill" data-source="${item.source}">${item.sourceLabel}</span>
+            <div class="repo-title">${escapeHtml(item.title)}</div>
+              <span class="pill source-pill" data-source="${escapeAttribute(item.source)}">${escapeHtml(item.sourceLabel)}</span>
             </div>
-            <div class="repo-sub">${formatAttemptReference(item)}</div>
-            <div class="repo-sub">${formatAttemptWorkSummary(item)}</div>
-            <div class="repo-sub">${formatValidationLabel(item.validationState, item.validationSummary)}</div>
-            <div class="repo-sub">${item.ageDays ?? 0}d age | ${item.isReopenable ? "reopenable" : "not reopenable"} | ${item.highLeverage ? "high leverage" : "normal leverage"}</div>
+            <div class="repo-sub">${escapeHtml(formatAttemptReference(item))}</div>
+            <div class="repo-sub">${escapeHtml(formatAttemptWorkSummary(item))}</div>
+            <div class="repo-sub">${escapeHtml(formatValidationLabel(item.validationState, item.validationSummary))}</div>
+            <div class="repo-sub">${escapeHtml(`${item.ageDays ?? 0}d age | ${item.isReopenable ? "reopenable" : "not reopenable"} | ${item.highLeverage ? "high leverage" : "normal leverage"}`)}</div>
           </div>
         </td>
         <td data-label="Outcome">
           <div class="project-cell">
-            <span class="pill" data-tone="${item.outcome}">${formatOutcomeLabel(item.outcome)}</span>
-            <div class="repo-sub">${item.assetCompletenessLabel || "0/4 assets"}</div>
-            <div class="repo-sub">${item.reopenHint || "no follow-up hint"}</div>
+            <span class="pill" data-tone="${escapeAttribute(item.outcome)}">${escapeHtml(formatOutcomeLabel(item.outcome))}</span>
+            <div class="repo-sub">${escapeHtml(item.assetCompletenessLabel || "0/4 assets")}</div>
+            <div class="repo-sub">${escapeHtml(item.reopenHint || "no follow-up hint")}</div>
           </div>
         </td>
         <td data-label="Ledger Trace">
           <div class="trace-cell">
-            ${item.ledgerTrace.map((entry) => `<span class="trace-tag">${entry}</span>`).join("")}
+            ${item.ledgerTrace.map((entry) => `<span class="trace-tag">${escapeHtml(entry)}</span>`).join("")}
           </div>
         </td>
         <td data-label="Last Update">
           <div class="project-cell">
-            <div>${item.lastUpdatedAt}</div>
-            <div class="repo-sub">${formatDecisionLabel(item.decision)}</div>
+            <div>${escapeHtml(item.lastUpdatedAt)}</div>
+            <div class="repo-sub">${escapeHtml(formatDecisionLabel(item.decision))}</div>
           </div>
         </td>
         <td data-label="Open">
@@ -2319,9 +2376,9 @@ tbody tr:last-child td {
       .map(
         (item) => `
           <div class="trend-summary-item">
-            <div class="trend-summary-label">${item.label}</div>
-            <div class="trend-summary-value">${item.value}</div>
-            <div class="trend-summary-note">${item.note}</div>
+            <div class="trend-summary-label">${escapeHtml(item.label)}</div>
+            <div class="trend-summary-value">${escapeHtml(item.value)}</div>
+            <div class="trend-summary-note">${escapeHtml(item.note)}</div>
           </div>
         `,
       )
@@ -2348,15 +2405,15 @@ tbody tr:last-child td {
       col.className = "trend-col";
       col.innerHTML = `
         <div class="trend-stack">
-          <div class="trend-bar" data-kind="drafted" style="height:${Math.max(8, draftedHeight)}px;"></div>
-          <div class="trend-bar" data-kind="published" style="height:${Math.max(8, publishedHeight)}px;"></div>
-          <div class="trend-bar" data-kind="pr_open" style="height:${Math.max(8, prOpenHeight)}px;"></div>
-          <div class="trend-bar" data-kind="merged" style="height:${Math.max(8, mergedHeight)}px;"></div>
+          <div class="trend-bar" data-kind="drafted" style="height:${formatPixels(draftedHeight, 8)};"></div>
+          <div class="trend-bar" data-kind="published" style="height:${formatPixels(publishedHeight, 8)};"></div>
+          <div class="trend-bar" data-kind="pr_open" style="height:${formatPixels(prOpenHeight, 8)};"></div>
+          <div class="trend-bar" data-kind="merged" style="height:${formatPixels(mergedHeight, 8)};"></div>
         </div>
         <div class="trend-meta">
-          <div class="trend-period">${item.period}</div>
-          <div class="trend-total">${item.drafted}/${item.ledgerPublished ?? item.published ?? 0}/${item.prOpen ?? 0}/${item.merged}</div>
-          <div class="trend-source">P ${item.sourceBreakdown?.proof ?? 0} | M ${item.sourceBreakdown?.memory ?? 0} | A ${item.sourceBreakdown?.artifact ?? 0}</div>
+          <div class="trend-period">${escapeHtml(item.period)}</div>
+          <div class="trend-total">${escapeHtml(`${item.drafted}/${item.ledgerPublished ?? item.published ?? 0}/${item.prOpen ?? 0}/${item.merged}`)}</div>
+          <div class="trend-source">${escapeHtml(`P ${item.sourceBreakdown?.proof ?? 0} | M ${item.sourceBreakdown?.memory ?? 0} | A ${item.sourceBreakdown?.artifact ?? 0}`)}</div>
         </div>
       `;
       container.appendChild(col);
@@ -2386,11 +2443,11 @@ tbody tr:last-child td {
       block.className = "activity-item";
       block.innerHTML = `
         <div class="activity-top">
-          <div class="activity-title">${item.title}</div>
-          <span class="pill" data-tone="${item.type}">${formatOutcomeLabel(item.type)}</span>
+          <div class="activity-title">${escapeHtml(item.title)}</div>
+          <span class="pill" data-tone="${escapeAttribute(item.type)}">${escapeHtml(formatOutcomeLabel(item.type))}</span>
         </div>
-        <div class="activity-meta">${item.repoFullName} | ${item.date}</div>
-        <div class="activity-sub">${item.description}</div>
+        <div class="activity-meta">${escapeHtml(`${item.repoFullName} | ${item.date}`)}</div>
+        <div class="activity-sub">${escapeHtml(item.description)}</div>
       `;
       container.appendChild(block);
     });
@@ -2404,7 +2461,7 @@ tbody tr:last-child td {
     Object.entries(data.assets).forEach(([key, value]) => {
       const span = document.createElement("span");
       span.dataset.kind = key;
-      span.style.width = `${(value / total) * 100}%`;
+      span.style.width = formatPercent((value / total) * 100);
       container.appendChild(span);
     });
   }
@@ -2417,7 +2474,7 @@ tbody tr:last-child td {
         items: data.archive.filter((item) => item.status === "ready" || item.status === "compounding"),
       },
       {
-        title: "Needs Revisit",
+        title: "Needs Follow-up",
         tone: "watch",
         items: data.archive.filter((item) => item.status === "review" || item.status === "hold"),
       },
@@ -2431,8 +2488,8 @@ tbody tr:last-child td {
       section.className = "archive-column";
       section.innerHTML = `
         <div class="archive-column-head">
-          <h3>${group.title}</h3>
-          <span class="pill" data-tone="${group.tone}">${group.items.length}</span>
+          <h3>${escapeHtml(group.title)}</h3>
+          <span class="pill" data-tone="${escapeAttribute(group.tone)}">${escapeHtml(group.items.length)}</span>
         </div>
         ${
           group.items.length > 0
@@ -2442,15 +2499,15 @@ tbody tr:last-child td {
                     <article class="archive-item">
                       <div class="archive-top">
                         <div class="archive-cell">
-                          <div class="archive-title">${item.label}</div>
-                          <div class="archive-sub">${item.repoFullName} | ${item.title}</div>
+                          <div class="archive-title">${escapeHtml(item.label)}</div>
+                          <div class="archive-sub">${escapeHtml(`${item.repoFullName} | ${item.title}`)}</div>
                         </div>
-                        <span class="pill" data-tone="${archiveToneMap[item.status]}">${item.status}</span>
+                        <span class="pill" data-tone="${escapeAttribute(archiveToneMap[item.status])}">${escapeHtml(item.status)}</span>
                       </div>
-                      <div class="archive-evidence">${item.evidenceLevel} | ${item.assetCompletenessLabel || "0/4 assets"} | ${item.reuseLabel}</div>
+                      <div class="archive-evidence">${escapeHtml(`${item.evidenceLevel} | ${item.assetCompletenessLabel || "0/4 assets"} | ${item.reuseLabel}`)}</div>
                       <div class="archive-lines">
-                        <div class="archive-line archive-line-strong">${item.followThroughLabel} | revisit ${item.lastRevisitedAt}</div>
-                        ${item.lines.map((line) => `<div class="archive-line">${line}</div>`).join("")}
+                        <div class="archive-line archive-line-strong">${escapeHtml(`${item.followThroughLabel} | revisit ${item.lastRevisitedAt}`)}</div>
+                        ${item.lines.map((line) => `<div class="archive-line">${escapeHtml(line)}</div>`).join("")}
                       </div>
                     </article>
                   `,

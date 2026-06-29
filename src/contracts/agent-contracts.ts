@@ -108,6 +108,42 @@ export const RepositoryImprovementSuggestionSchema = z.object({
   prPotentialScore: z.coerce.number().int().min(0).max(100),
 });
 
+export const EnvironmentGapSchema = z.object({
+  code: z.enum([
+    'missing_dependency',
+    'missing_tool',
+    'version_mismatch',
+    'missing_service',
+    'unsupported_os',
+    'insufficient_memory',
+    'insufficient_gpu',
+    'missing_external_account',
+    'unknown',
+  ]),
+  description: nonEmptyTrimmedString,
+  severity: z.enum(['info', 'warning', 'blocking']),
+  recoverability: z.enum(['auto_fixable', 'user_fixable', 'manual_required', 'not_practical_local']),
+  suggestedAction: trimmedString.default(''),
+});
+
+export const IssueFeasibilityAssessmentSchema = z.object({
+  decision: z.enum([
+    'proceed',
+    'repair_then_proceed',
+    'proceed_static_only',
+    'proceed_partial_validation',
+    'stop_hard_blocked',
+    'stop_user_action_required',
+  ]),
+  executionMode: z.enum(['full', 'partial', 'static_only', 'blocked']),
+  confidence: z.enum(['low', 'medium', 'high']),
+  summary: nonEmptyTrimmedString,
+  requiredCapabilities: z.array(trimmedString).default([]).transform(dedupeStrings),
+  gaps: z.array(EnvironmentGapSchema).default([]),
+  validationPlan: z.array(trimmedString).default([]).transform(dedupeStrings),
+  rationale: nonEmptyTrimmedString,
+});
+
 export const RepositorySuggestionListSchema = z.object({
   suggestions: z
     .array(RepositoryImprovementSuggestionSchema)
@@ -143,6 +179,10 @@ export const RepositorySuggestionListEnvelopeSchema = createStructuredOutputEnve
   'repository_suggestion_list',
   RepositorySuggestionListSchema,
 );
+export const IssueFeasibilityAssessmentEnvelopeSchema = createStructuredOutputEnvelopeSchema(
+  'issue_feasibility_assessment',
+  IssueFeasibilityAssessmentSchema,
+);
 
 export type IssueMatch = z.infer<typeof IssueMatchSchema>;
 export type IssueMatchList = z.infer<typeof IssueMatchListSchema>;
@@ -154,6 +194,8 @@ export type ImplementationDraft = z.infer<typeof ImplementationDraftSchema>;
 export type PullRequestDraft = z.infer<typeof PullRequestDraftSchema>;
 export type RepositoryImprovementSuggestion = z.infer<typeof RepositoryImprovementSuggestionSchema>;
 export type RepositorySuggestionList = z.infer<typeof RepositorySuggestionListSchema>;
+export type EnvironmentGap = z.infer<typeof EnvironmentGapSchema>;
+export type IssueFeasibilityAssessment = z.infer<typeof IssueFeasibilityAssessmentSchema>;
 export type StructuredOutputStatus = z.infer<typeof StructuredOutputStatusSchema>;
 export interface StructuredOutputResult<TKind extends string, TData> {
   version: '1';
@@ -166,3 +208,4 @@ export type PatchDraftEnvelope = z.infer<typeof PatchDraftEnvelopeSchema>;
 export type ImplementationDraftEnvelope = z.infer<typeof ImplementationDraftEnvelopeSchema>;
 export type PullRequestDraftEnvelope = z.infer<typeof PullRequestDraftEnvelopeSchema>;
 export type RepositorySuggestionListEnvelope = z.infer<typeof RepositorySuggestionListEnvelopeSchema>;
+export type IssueFeasibilityAssessmentEnvelope = z.infer<typeof IssueFeasibilityAssessmentEnvelopeSchema>;

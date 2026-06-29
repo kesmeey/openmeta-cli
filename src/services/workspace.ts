@@ -6,6 +6,7 @@ import { ensureDirectory, getOpenMetaWorkspaceRoot, logger } from '../infra/inde
 import type {
   GeneratedChangeApplyResult,
   GeneratedFileChange,
+  PermissionDecision,
   RankedIssue,
   RepoFileSnippet,
   RepoMemory,
@@ -13,6 +14,7 @@ import type {
   TestCommand,
   TestResult,
 } from '../types/index.js';
+import { permissionPolicyService } from './permission-policy.js';
 
 const EXCLUDED_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', '.next', 'coverage', 'target', 'vendor']);
 
@@ -20,7 +22,12 @@ const MAX_DISCOVERED_FILES = 250;
 const MAX_SNIPPET_CHARS = 8000;
 const MAX_GENERATED_FILES = 6;
 const MAX_GENERATED_FILE_CHARS = 60_000;
+const DEFAULT_EXPANSION_LIMIT = 8;
 type ExecutionMode = 'interactive' | 'headless';
+
+function normalizeRepoRelativePath(path: string): string {
+  return path.replace(/\\/g, '/').replace(/^\/+/, '').trim();
+}
 
 interface PreparedWorkspaceState {
   workspacePath: string;
@@ -42,6 +49,12 @@ function slugify(input: string): string {
 }
 
 export class WorkspaceService {
+  private lastPermissionDecisions: PermissionDecision[] = [];
+
+  getLastPermissionDecisions(): PermissionDecision[] {
+    return this.lastPermissionDecisions;
+  }
+
   private getWorkspacePath(repoFullName: string): string {
     return join(ensureDirectory(getOpenMetaWorkspaceRoot()), sanitizeRepoName(repoFullName));
   }
@@ -114,25 +127,33 @@ export class WorkspaceService {
   ): GeneratedChangeApplyResult {
     const rootPath = resolve(workspacePath);
     const allowedPaths = new Set(
-      (options.allowedPaths ?? []).map((path) => path.replace(/^\/+/, '').trim()).filter(Boolean),
+      (options.allowedPaths ?? []).map((path) => normalizeRepoRelativePath(path)).filter(Boolean),
     );
     const appliedFiles: string[] = [];
     const skippedFiles: GeneratedChangeApplyResult['skippedFiles'] = [];
+    const permission = permissionPolicyService.evaluateGeneratedFileChanges({
+      workspacePath,
+      fileChanges,
+      allowedPaths: options.allowedPaths,
+      maxFiles: MAX_GENERATED_FILES,
+      maxFileChars: MAX_GENERATED_FILE_CHARS,
+    });
+    this.lastPermissionDecisions = [permission];
 
-    if (fileChanges.length > MAX_GENERATED_FILES) {
+    if (permission.outcome === 'review' && fileChanges.length > MAX_GENERATED_FILES) {
       return {
         appliedFiles: [],
         skippedFiles: fileChanges.map((change) => ({
           path: change.path,
-          reason: `Generated patch touches ${fileChanges.length} files; automatic apply limit is ${MAX_GENERATED_FILES}.`,
+          reason: permission.reason,
         })),
         reviewRequired: true,
-        reviewReason: `Generated patch touches ${fileChanges.length} files, which exceeds the automatic apply limit of ${MAX_GENERATED_FILES}.`,
+        reviewReason: permission.reason,
       };
     }
 
     for (const change of fileChanges) {
-      const relativePath = change.path.replace(/^\/+/, '').trim();
+      const relativePath = normalizeRepoRelativePath(change.path);
       if (!relativePath) {
         skippedFiles.push({ path: change.path, reason: 'Generated path is empty.' });
         continue;
@@ -196,7 +217,7 @@ export class WorkspaceService {
     const rootPath = resolve(workspacePath);
 
     return filePaths.flatMap((filePath) => {
-      const relativePath = filePath.replace(/^\/+/, '').trim();
+      const relativePath = normalizeRepoRelativePath(filePath);
       if (!relativePath) {
         return [];
       }
@@ -214,6 +235,43 @@ export class WorkspaceService {
         },
       ];
     });
+  }
+
+  expandImplementationContext(
+    workspace: RepoWorkspaceContext,
+    options: { maxFiles?: number } = {},
+  ): { workspace: RepoWorkspaceContext; addedFiles: string[] } {
+    const existingPaths = new Set([
+      ...workspace.candidateFiles.map((path) => normalizeRepoRelativePath(path)),
+      ...workspace.snippets.map((snippet) => normalizeRepoRelativePath(snippet.path)),
+    ]);
+    const currentSnippetPaths = workspace.snippets.map((snippet) => normalizeRepoRelativePath(snippet.path));
+    const discoveredFiles = this.discoverFiles(workspace.workspacePath);
+    const maxFiles = options.maxFiles ?? DEFAULT_EXPANSION_LIMIT;
+    const candidates = discoveredFiles
+      .filter((path) => !existingPaths.has(path))
+      .map((path) => ({ path, score: this.scoreImplementationExpansionPath(path, currentSnippetPaths) }))
+      .filter((candidate) => candidate.score > 0)
+      .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path))
+      .slice(0, maxFiles)
+      .map((candidate) => candidate.path);
+    const snippets = this.readWorkspaceFiles(workspace.workspacePath, candidates).filter(
+      (snippet) => snippet.content.trim().length > 0,
+    );
+    const addedFiles = snippets.map((snippet) => snippet.path);
+
+    if (addedFiles.length === 0) {
+      return { workspace, addedFiles: [] };
+    }
+
+    return {
+      workspace: {
+        ...workspace,
+        candidateFiles: [...new Set([...workspace.candidateFiles, ...addedFiles])],
+        snippets: [...workspace.snippets, ...snippets],
+      },
+      addedFiles,
+    };
   }
 
   private async detectDefaultBranch(git: SimpleGit): Promise<string> {
@@ -514,7 +572,7 @@ export class WorkspaceService {
           continue;
         }
 
-        files.push(relative(root, join(current, entry.name)));
+        files.push(normalizeRepoRelativePath(relative(root, join(current, entry.name))));
         if (files.length >= MAX_DISCOVERED_FILES) {
           break;
         }
@@ -656,6 +714,63 @@ export class WorkspaceService {
     return score;
   }
 
+  private scoreImplementationExpansionPath(path: string, currentSnippetPaths: string[]): number {
+    const lowerPath = path.toLowerCase();
+    const fileName = basename(lowerPath);
+    let score = 0;
+
+    if (this.isLowSignalImplementationPath(lowerPath)) {
+      score -= 50;
+    }
+
+    if (/(^|\/)(__tests__|test|tests)\/|\.test\.|\.spec\./.test(lowerPath)) {
+      score += 16;
+    }
+
+    if (/(^|\/)(src|api|services?)\//.test(lowerPath)) {
+      score += 8;
+    }
+
+    if (/(route|service|validator|query-config)\.(ts|tsx|js|jsx|py|go|rs|java|kt)$/.test(fileName)) {
+      score += 8;
+    }
+
+    for (const currentPath of currentSnippetPaths) {
+      const currentLowerPath = currentPath.toLowerCase();
+      const currentDir = dirname(currentLowerPath).replace(/\\/g, '/');
+      const currentBase = basename(currentLowerPath).replace(/\.(test|spec)?\.(ts|tsx|js|jsx|py|go|rs|java|kt)$/, '');
+
+      if (dirname(lowerPath).replace(/\\/g, '/') === currentDir) {
+        score += 24;
+      }
+
+      if (basename(lowerPath).startsWith(currentBase)) {
+        score += 18;
+      }
+
+      if (currentDir !== '.' && lowerPath.startsWith(`${currentDir}/`)) {
+        score += 10;
+      }
+    }
+
+    if (!/\.(ts|tsx|js|jsx|py|go|rs|java|kt)$/.test(fileName)) {
+      score -= 20;
+    }
+
+    return score;
+  }
+
+  private isLowSignalImplementationPath(lowerPath: string): boolean {
+    const fileName = basename(lowerPath);
+    return (
+      lowerPath.startsWith('.github/workflows/') ||
+      fileName === 'readme.md' ||
+      fileName.endsWith('.config.dev.ts') ||
+      fileName.startsWith('ormconfig') ||
+      lowerPath.includes('typedoc-config/')
+    );
+  }
+
   private readSnippet(path: string): string {
     try {
       const content = readFileSync(path, 'utf-8');
@@ -745,24 +860,11 @@ export class WorkspaceService {
     commands: TestCommand[],
     executionMode: ExecutionMode,
   ): { commands: TestCommand[]; warnings: string[] } {
-    if (executionMode !== 'headless') {
-      return {
-        commands: commands.slice(0, 3),
-        warnings: [],
-      };
-    }
-
-    const selected = commands.filter((command) => command.source === 'tool-default').slice(0, 3);
-    const warnings = commands
-      .filter((command) => command.source === 'repo-script')
-      .map(
-        (command) =>
-          `Skipped ${command.command} during headless validation because it comes from repository-defined scripts.`,
-      );
-
+    const result = permissionPolicyService.selectValidationCommands(commands, executionMode);
+    this.lastPermissionDecisions = result.decisions;
     return {
-      commands: selected,
-      warnings,
+      commands: result.commands,
+      warnings: result.warnings,
     };
   }
 

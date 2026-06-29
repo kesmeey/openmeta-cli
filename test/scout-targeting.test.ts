@@ -67,6 +67,18 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       ...base.automation,
       ...overrides.automation,
     },
+    scoring: {
+      ...base.scoring,
+      ...overrides.scoring,
+      weights: {
+        ...base.scoring.weights,
+        ...overrides.scoring?.weights,
+      },
+      overallWeights: {
+        ...base.scoring.overallWeights,
+        ...overrides.scoring?.overallWeights,
+      },
+    },
   };
 }
 

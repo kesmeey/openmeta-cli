@@ -1,7 +1,9 @@
 import OpenAI from 'openai';
-import { z } from 'zod';
+import type { z } from 'zod';
 import {
   ImplementationDraftEnvelopeSchema,
+  type IssueFeasibilityAssessment,
+  IssueFeasibilityAssessmentEnvelopeSchema,
   IssueMatchListEnvelopeSchema,
   type PatchDraft,
   PatchDraftEnvelopeSchema,
@@ -18,6 +20,8 @@ import {
   DAILY_DIARY_GENERATE_PROMPT,
   DAILY_REPORT_GENERATE_PROMPT,
   fillPrompt,
+  ISSUE_FEASIBILITY_PROMPT,
+  ISSUE_FEASIBILITY_REPAIR_PROMPT,
   ISSUE_MATCH_PROMPT,
   ISSUE_MATCH_REPAIR_PROMPT,
   PATCH_DRAFT_PROMPT,
@@ -28,6 +32,7 @@ import {
   VALIDATION_REPAIR_PROMPT,
 } from '../infra/prompt-templates.js';
 import type {
+  EnvironmentInfo,
   GitHubIssue,
   ImplementationDraft,
   LLMProvider,
@@ -40,6 +45,7 @@ import type {
   TestResult,
   UserProfile,
 } from '../types/index.js';
+import { contextAssemblerService } from './context-assembler.js';
 import {
   LLM_VALIDATION_FALLBACK_HINTS,
   LLM_VALIDATION_PROMPT,
@@ -185,24 +191,10 @@ Repo Stars: ${i.repoStars}`,
     workspace: RepoWorkspaceContext,
     memory: RepoMemory,
   ): Promise<StructuredOutputResult<'patch_draft', PatchDraft>> {
-    const repoContext = [
-      `Workspace Path: ${workspace.workspacePath}`,
-      `Default Branch: ${workspace.defaultBranch}`,
-      `Workspace Dirty: ${workspace.workspaceDirty}`,
-      `Candidate Files: ${workspace.candidateFiles.join(', ') || 'none'}`,
-      `Detected Test Commands: ${workspace.testCommands.map((item) => item.command).join(', ') || 'none'}`,
-      `Runnable Validation Commands: ${workspace.validationCommands.map((item) => item.command).join(', ') || 'none'}`,
-      `Validation Safety Notes: ${workspace.validationWarnings.join(' | ') || 'none'}`,
-      'Snippets:',
-      ...workspace.snippets.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`),
-    ].join('\n\n');
-
-    const repoMemory = this.formatRepoMemory(memory);
-
     const prompt = fillPrompt(PATCH_DRAFT_PROMPT, {
       issueContext: this.formatRankedIssue(issue),
-      repoContext,
-      repoMemory,
+      repoContext: contextAssemblerService.buildRepositoryContext(workspace),
+      repoMemory: contextAssemblerService.buildRepoMemoryContext(memory),
     });
 
     return this.generateStructuredOutput({
@@ -212,28 +204,39 @@ Repo Stars: ${i.repoStars}`,
     });
   }
 
+  async assessIssueFeasibility(
+    issue: RankedIssue,
+    workspace: RepoWorkspaceContext,
+    environment: EnvironmentInfo,
+  ): Promise<StructuredOutputResult<'issue_feasibility_assessment', IssueFeasibilityAssessment>> {
+    const prompt = fillPrompt(ISSUE_FEASIBILITY_PROMPT, {
+      issueContext: this.formatRankedIssue(issue),
+      repoContext: contextAssemblerService.buildRepositoryContext(workspace, {
+        includeTopLevelFiles: true,
+        includeBaselineResults: true,
+      }),
+      environmentContext: this.formatEnvironment(environment),
+    });
+
+    return this.generateStructuredOutput({
+      prompt,
+      parser: this.parseIssueFeasibilityAssessment.bind(this),
+      repairPrompt: ISSUE_FEASIBILITY_REPAIR_PROMPT,
+      temperature: 0.1,
+    });
+  }
+
   async analyzeRepository(
     repoFullName: string,
     workspace: RepoWorkspaceContext,
     memory: RepoMemory,
   ): Promise<StructuredOutputResult<'repository_suggestion_list', RepositoryImprovementSuggestion[]>> {
-    const repoContext = [
-      `Repository: ${repoFullName}`,
-      `Workspace Path: ${workspace.workspacePath}`,
-      `Default Branch: ${workspace.defaultBranch}`,
-      `Workspace Dirty: ${workspace.workspaceDirty}`,
-      `Top-Level Files: ${workspace.topLevelFiles.join(', ') || 'none'}`,
-      `Candidate Files: ${workspace.candidateFiles.join(', ') || 'none'}`,
-      `Detected Test Commands: ${workspace.testCommands.map((item) => item.command).join(', ') || 'none'}`,
-      `Runnable Validation Commands: ${workspace.validationCommands.map((item) => item.command).join(', ') || 'none'}`,
-      `Validation Safety Notes: ${workspace.validationWarnings.join(' | ') || 'none'}`,
-      'Snippets:',
-      ...workspace.snippets.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`),
-    ].join('\n\n');
-
     const prompt = fillPrompt(REPOSITORY_ANALYSIS_PROMPT, {
-      repoContext,
-      repoMemory: this.formatRepoMemory(memory),
+      repoContext: contextAssemblerService.buildRepositoryContext(workspace, {
+        repoFullName,
+        includeTopLevelFiles: true,
+      }),
+      repoMemory: contextAssemblerService.buildRepoMemoryContext(memory),
     });
 
     return this.generateStructuredOutput({
@@ -249,15 +252,10 @@ Repo Stars: ${i.repoStars}`,
     workspace: RepoWorkspaceContext,
     patchDraft: PatchDraft,
   ): Promise<StructuredOutputResult<'implementation_draft', ImplementationDraft>> {
-    const editableFiles =
-      workspace.snippets.length > 0
-        ? workspace.snippets.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`).join('\n\n')
-        : 'No editable files were detected.';
-
     const prompt = fillPrompt(CODE_CHANGE_PROMPT, {
       issueContext: this.formatRankedIssue(issue),
       patchDraft: JSON.stringify(patchDraft, null, 2),
-      editableFiles,
+      editableFiles: contextAssemblerService.buildEditableFilesContext(workspace.snippets),
     });
 
     return this.generateStructuredOutput({
@@ -273,16 +271,10 @@ Repo Stars: ${i.repoStars}`,
     patchDraft: PatchDraft,
     workspace: RepoWorkspaceContext,
   ): Promise<StructuredOutputResult<'pull_request_draft', PullRequestDraft>> {
-    const validationContext = [
-      `Detected Commands: ${workspace.testCommands.map((item) => item.command).join(', ') || 'none'}`,
-      `Runnable Commands: ${workspace.validationCommands.map((item) => item.command).join(', ') || 'none'}`,
-      `Baseline Results: ${workspace.testResults.length > 0 ? workspace.testResults.map((result) => `${result.command} => ${result.passed ? 'passed' : `failed (${result.exitCode ?? 'n/a'})`}`).join('; ') : 'not executed'}`,
-    ].join('\n');
-
     const prompt = fillPrompt(PR_DRAFT_PROMPT, {
       issueContext: this.formatRankedIssue(issue),
       patchDraft: JSON.stringify(patchDraft, null, 2),
-      validationContext,
+      validationContext: contextAssemblerService.buildValidationContext(workspace),
     });
 
     return this.generateStructuredOutput({
@@ -297,22 +289,11 @@ Repo Stars: ${i.repoStars}`,
     validationResults: TestResult[],
     currentFiles: RepoFileSnippet[],
   ): Promise<StructuredOutputResult<'implementation_draft', ImplementationDraft>> {
-    const validationFailures =
-      validationResults.length > 0
-        ? validationResults
-            .filter((result) => !result.passed)
-            .map((result) => `${result.command} | exit=${result.exitCode ?? 'n/a'}\n${result.output}`.trim())
-            .join('\n\n---\n\n')
-        : 'No validation failures were provided.';
-
     const prompt = fillPrompt(VALIDATION_REPAIR_PROMPT, {
       issueContext: this.formatRankedIssue(issue),
       patchDraft: JSON.stringify(patchDraft, null, 2),
-      validationFailures,
-      currentFiles:
-        currentFiles.length > 0
-          ? currentFiles.map((snippet) => `FILE: ${snippet.path}\n${snippet.content}`).join('\n\n')
-          : 'No current files were provided.',
+      validationFailures: contextAssemblerService.buildValidationFailureContext(validationResults),
+      currentFiles: contextAssemblerService.buildEditableFilesContext(currentFiles, 'No current files were provided.'),
     });
 
     return this.generateStructuredOutput({
@@ -519,6 +500,12 @@ Repo Stars: ${i.repoStars}`,
     return this.parseStructuredJson(content, PullRequestDraftEnvelopeSchema);
   }
 
+  private parseIssueFeasibilityAssessment(
+    content: string,
+  ): StructuredOutputResult<'issue_feasibility_assessment', IssueFeasibilityAssessment> {
+    return this.parseStructuredJson(content, IssueFeasibilityAssessmentEnvelopeSchema);
+  }
+
   private parseRepositorySuggestions(
     content: string,
   ): StructuredOutputResult<'repository_suggestion_list', RepositoryImprovementSuggestion[]> {
@@ -588,47 +575,40 @@ Repo Stars: ${i.repoStars}`,
     ].join('\n');
   }
 
-  private formatRepoMemory(memory: RepoMemory): string {
-    const topPathSignals =
-      memory.pathSignals.length > 0
-        ? memory.pathSignals
-            .slice(0, 5)
-            .map(
-              (signal) =>
-                `- ${signal.path} | candidate ${signal.candidateCount} | changed ${signal.changedCount} | validation ${signal.successfulValidationCount} | published ${signal.publishedCount}`,
+  private formatEnvironment(environment: EnvironmentInfo): string {
+    const availableTools = environment.tools
+      .filter((tool) => tool.available)
+      .map((tool) => `${tool.name}${tool.version ? ` (${tool.version})` : ''}`)
+      .join(', ');
+    const missingTools = environment.tools
+      .filter((tool) => !tool.available)
+      .map((tool) => tool.name)
+      .join(', ');
+    const gpus =
+      environment.gpu.length > 0
+        ? environment.gpu
+            .map((gpu) =>
+              [
+                gpu.model,
+                gpu.vramMB > 0 ? `${gpu.vramMB}MB VRAM` : '',
+                gpu.cudaVersion ? `CUDA ${gpu.cudaVersion}` : '',
+              ]
+                .filter(Boolean)
+                .join(' | '),
             )
-        : ['- none'];
-    const validationSignals =
-      memory.validationSignals.length > 0
-        ? memory.validationSignals
-            .slice(0, 5)
-            .map(
-              (signal) =>
-                `- ${signal.command} | failures ${signal.failureCount} | last exit ${signal.lastExitCode ?? 'n/a'}${signal.sampleOutput ? ` | sample ${signal.sampleOutput}` : ''}`,
-            )
-        : ['- none'];
-    const recentOutcomes =
-      memory.recentIssues.length > 0
-        ? memory.recentIssues
-            .slice(0, 5)
-            .map(
-              (issue) =>
-                `- ${issue.reference} | status ${issue.status} | changed ${issue.changedFiles.join(', ') || 'none'} | validation ${issue.validationSummary}`,
-            )
-        : ['- none'];
+            .join('; ')
+        : 'none detected';
 
     return [
-      `Last Selected Issue: ${memory.lastSelectedIssue || 'n/a'}`,
-      `Generated Dossiers: ${memory.generatedDossiers}`,
-      `Preferred Paths: ${memory.preferredPaths.join(', ') || 'none'}`,
-      `Known Test Commands: ${memory.detectedTestCommands.join(', ') || 'none'}`,
-      `Run Stats: total=${memory.runStats.totalRuns}, published=${memory.runStats.publishedRuns}, real_pr=${memory.runStats.realPrRuns}, review_required=${memory.runStats.reviewRequiredRuns}, validation_ok=${memory.runStats.successfulValidationRuns}, validation_failed=${memory.runStats.failedValidationRuns}`,
-      'Top Path Signals:',
-      ...topPathSignals,
-      'Recent Validation Failure Signals:',
-      ...validationSignals,
-      'Recent Issue Outcomes:',
-      ...recentOutcomes,
+      `OS: ${environment.os.platform} ${environment.os.arch} ${environment.os.distro} ${environment.os.version}`.trim(),
+      `WSL: ${environment.os.isWSL ? `yes (${environment.os.wslDistros.join(', ') || 'no distro listed'})` : 'no'}`,
+      `Virtualization: vm=${environment.os.hypervisor.isVM ? 'yes' : 'no'}, type=${environment.os.hypervisor.type}, container=${environment.os.hypervisor.isContainer ? 'yes' : 'no'}, ci=${environment.os.hypervisor.isCI ? environment.os.hypervisor.ciName || 'yes' : 'no'}`,
+      `CPU: ${environment.cpu.model}, cores=${environment.cpu.cores}, threads=${environment.cpu.threads}`,
+      `RAM: ${environment.totalRAMGB}GB`,
+      `GPU: ${gpus}`,
+      `Disks: ${environment.disks.map((disk) => `${disk.mountPoint} ${disk.freeGB}GB free/${disk.totalGB}GB total`).join(', ') || 'unknown'}`,
+      `Available Tools: ${availableTools || 'none detected'}`,
+      `Missing Tools: ${missingTools || 'none detected'}`,
     ].join('\n');
   }
 

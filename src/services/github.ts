@@ -60,6 +60,22 @@ interface IssueDiscoveryOptions {
   techStack?: string[];
 }
 
+export interface RepositoryProbe {
+  repoFullName: string;
+  files: {
+    packageJson?: string;
+    pyprojectToml?: string;
+    requirementsTxt?: string;
+    cargoToml?: string;
+    goMod?: string;
+    dockerCompose?: string;
+    dockerfile?: string;
+    readme?: string;
+    workflows: Array<{ path: string; content: string }>;
+  };
+  missingPaths: string[];
+}
+
 export class GitHubService {
   private octokit: Octokit | null = null;
   private username: string = '';
@@ -296,6 +312,52 @@ export class GitHubService {
     };
   }
 
+  async fetchRepositoryProbe(repoFullName: string): Promise<RepositoryProbe> {
+    if (!this.octokit) {
+      throw new Error('GitHub service not initialized');
+    }
+
+    const normalizedRepo = parseGitHubRepoFullName(repoFullName);
+    const [owner, repo] = normalizedRepo.split('/');
+    if (!owner || !repo) {
+      throw new Error(`Invalid GitHub repository reference: ${repoFullName}`);
+    }
+
+    const missingPaths: string[] = [];
+    const files: RepositoryProbe['files'] = {
+      workflows: [],
+    };
+    const assignIfPresent = async (field: keyof Omit<RepositoryProbe['files'], 'workflows'>, paths: string[]) => {
+      for (const path of paths) {
+        const content = await this.fetchRepoTextFile(owner, repo, path);
+        if (content !== null) {
+          files[field] = content;
+          return;
+        }
+      }
+      missingPaths.push(...paths);
+    };
+
+    await Promise.all([
+      assignIfPresent('packageJson', ['package.json']),
+      assignIfPresent('pyprojectToml', ['pyproject.toml']),
+      assignIfPresent('requirementsTxt', ['requirements.txt']),
+      assignIfPresent('cargoToml', ['Cargo.toml']),
+      assignIfPresent('goMod', ['go.mod']),
+      assignIfPresent('dockerCompose', ['docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml']),
+      assignIfPresent('dockerfile', ['Dockerfile']),
+      assignIfPresent('readme', ['README.md', 'readme.md', 'README.rst']),
+    ]);
+
+    files.workflows = await this.fetchWorkflowProbeFiles(owner, repo);
+
+    return {
+      repoFullName: normalizedRepo,
+      files,
+      missingPaths,
+    };
+  }
+
   async validateTargetRepo(path: string): Promise<boolean> {
     try {
       const { simpleGit } = await import('simple-git');
@@ -309,6 +371,69 @@ export class GitHubService {
 
   getUsername(): string {
     return this.username;
+  }
+
+  private async fetchRepoTextFile(owner: string, repo: string, path: string): Promise<string | null> {
+    if (!this.octokit) {
+      throw new Error('GitHub service not initialized');
+    }
+
+    try {
+      const response = await this.octokit.rest.repos.getContent({
+        owner,
+        repo,
+        path,
+      });
+      const data = response.data;
+      if (Array.isArray(data) || data.type !== 'file' || typeof data.content !== 'string') {
+        return null;
+      }
+
+      return Buffer.from(data.content, 'base64').toString('utf-8').slice(0, 20_000);
+    } catch (error) {
+      const err = error as { status?: number };
+      if (err.status !== 404) {
+        logger.debug(`Unable to fetch ${owner}/${repo}/${path} for repository probe`, error);
+      }
+      return null;
+    }
+  }
+
+  private async fetchWorkflowProbeFiles(
+    owner: string,
+    repo: string,
+  ): Promise<Array<{ path: string; content: string }>> {
+    if (!this.octokit) {
+      throw new Error('GitHub service not initialized');
+    }
+
+    try {
+      const response = await this.octokit.rest.repos.getContent({
+        owner,
+        repo,
+        path: '.github/workflows',
+      });
+      const data = response.data;
+      if (!Array.isArray(data)) {
+        return [];
+      }
+
+      const workflowFiles = data.filter((item) => item.type === 'file' && /\.(ya?ml)$/i.test(item.name)).slice(0, 5);
+      const loaded = await Promise.all(
+        workflowFiles.map(async (item) => ({
+          path: item.path,
+          content: (await this.fetchRepoTextFile(owner, repo, item.path)) ?? '',
+        })),
+      );
+
+      return loaded.filter((item) => item.content.trim().length > 0);
+    } catch (error) {
+      const err = error as { status?: number };
+      if (err.status !== 404) {
+        logger.debug(`Unable to fetch ${owner}/${repo}/.github/workflows for repository probe`, error);
+      }
+      return [];
+    }
   }
 
   private buildSearchQuery(labels: readonly string[], repoFullName?: string): string {

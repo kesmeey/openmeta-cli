@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import * as simpleGitModule from 'simple-git';
 import * as infra from '../src/infra/index.js';
 import { AgentOrchestrator } from '../src/orchestration/agent.js';
@@ -195,6 +195,10 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   return {
     ...base,
     ...overrides,
+    userProfile: {
+      ...base.userProfile,
+      ...overrides.userProfile,
+    },
     github: {
       ...base.github,
       ...overrides.github,
@@ -252,7 +256,7 @@ function createPublishInput(
 beforeEach(() => {
   const tempHome = mkdtempSync(join(tmpdir(), 'openmeta-agent-orchestrator-'));
   tempDirs.push(tempHome);
-  process.env['HOME'] = tempHome;
+  Object.assign(process.env, { HOME: tempHome });
 });
 
 afterEach(() => {

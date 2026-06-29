@@ -1,5 +1,5 @@
-import { mkdirSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { PatchDraft, PullRequestDraft, RepositoryImprovementSuggestion } from '../contracts/index.js';
 import {
   configService,
@@ -91,21 +91,28 @@ export class AnalyzeOrchestrator {
     this.showLocalRepositoryHint(repoPath);
 
     const totalSteps = 7;
-    const groups =
-      scope.mode === 'single'
-        ? [
-            await this.collectSingleAnalysisGroup(scope.repo!, {
-              headless,
-              runChecks,
-              repoPath,
-              totalSteps,
-            }),
-          ]
-        : await this.collectAnalysisGroups(scope.repos, {
-            headless,
-            runChecks,
-            totalSteps,
-          });
+    const groups = await (async (): Promise<PresetAnalyzeGroup[]> => {
+      if (scope.mode !== 'single') {
+        return this.collectAnalysisGroups(scope.repos, {
+          headless,
+          runChecks,
+          totalSteps,
+        });
+      }
+
+      if (!scope.repo) {
+        throw new Error('Repository analysis requires --repo, for example: openmeta analyze --repo owner/name.');
+      }
+
+      return [
+        await this.collectSingleAnalysisGroup(scope.repo, {
+          headless,
+          runChecks,
+          repoPath,
+          totalSteps,
+        }),
+      ];
+    })();
     const candidates = groups.flatMap((group) =>
       group.suggestions.map(
         (suggestion) =>
@@ -221,7 +228,7 @@ export class AnalyzeOrchestrator {
     });
     const scopeLabel =
       scope.mode === 'single'
-        ? scope.repo!
+        ? scope.repo || 'selected repository'
         : scope.presetName
           ? `preset ${scope.presetName}`
           : `${scope.repos.length} repositories`;
@@ -433,8 +440,9 @@ export class AnalyzeOrchestrator {
   }
 
   private async promptForCandidate(candidates: PresetAnalyzeCandidate[]): Promise<PresetAnalyzeCandidate> {
-    if (candidates.length === 1) {
-      return candidates[0]!;
+    const [onlyCandidate] = candidates;
+    if (onlyCandidate && candidates.length === 1) {
+      return onlyCandidate;
     }
 
     return selectPrompt<PresetAnalyzeCandidate>({

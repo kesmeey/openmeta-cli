@@ -1,4 +1,4 @@
-import { Command, Option } from 'commander';
+import { type Command, Option } from 'commander';
 import { agentOrchestrator } from '../orchestration/index.js';
 import { runCommand } from './run-command.js';
 

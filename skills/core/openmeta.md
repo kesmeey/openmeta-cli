@@ -30,6 +30,7 @@ OpenMeta is built for contribution-oriented open source work.
 ## Host Paths
 
 - Claude Code default install path: `~/.claude/skills/openmeta`
+- Codex default personal install path: `~/.agents/skills/openmeta`
 - OpenClaw default install path: `~/.openclaw/skills/openmeta`
 
 ## Non-Negotiable Rules

@@ -175,7 +175,7 @@ describe('dashboard data adapter', () => {
     expect(data.projects[0]?.dominantWorkType).toBe('tests');
     expect(data.projects[0]?.topAreas).toEqual(['src/components']);
     expect(data.projects[0]?.highLeverageAttemptCount).toBe(1);
-    expect(data.projects[0]?.blockageNote).toContain('0 stale PR');
+    expect(data.projects[0]?.blockageNote).toContain('0 published waiting PR');
 
     expect(data.summary.highLeverageAttemptTotal).toBe(1);
     expect(data.summary.dominantWorkType).toBe('tests');

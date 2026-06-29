@@ -1,4 +1,4 @@
-import { Command } from 'commander';
+import type { Command } from 'commander';
 import { automationOrchestrator } from '../orchestration/index.js';
 import { runCommand } from './run-command.js';
 

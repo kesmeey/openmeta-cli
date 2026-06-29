@@ -171,6 +171,100 @@ Previous response:
 {{invalidResponse}}
 `;
 
+export const ISSUE_FEASIBILITY_PROMPT = `You are OpenMeta's execution feasibility gate.
+
+Decide whether the selected issue can be executed on the local machine before generating any patch.
+
+Important distinction:
+- Repository-level requirements do NOT automatically block an issue.
+- Only block when the selected issue itself likely requires capabilities the local machine cannot realistically provide.
+- Documentation, README, config text, type-only, and small static changes can remain feasible even when the full project cannot run.
+- Hardware, OS, device, account, or cloud requirements that are central to the issue should block execution.
+- Missing project dependencies or installable tools are usually fixable or user-action-required, not hard-blocked.
+
+Return one valid JSON object only. No markdown. No commentary.
+
+Decision guide:
+- proceed: local machine can reasonably run or validate the issue.
+- repair_then_proceed: missing software dependencies can be installed or prepared before execution.
+- proceed_static_only: issue can be handled as static/docs/config/text-only work without full runtime validation.
+- proceed_partial_validation: useful work is possible, but only partial validation is realistic.
+- stop_hard_blocked: core issue requires hardware/platform/resources not practical on this machine.
+- stop_user_action_required: user must install system tools, services, credentials, or accounts before this issue should run.
+
+Output schema:
+{
+  "version": "1",
+  "kind": "issue_feasibility_assessment",
+  "status": "success",
+  "data": {
+    "decision": "proceed",
+    "executionMode": "full",
+    "confidence": "medium",
+    "summary": "one sentence decision summary",
+    "requiredCapabilities": ["node", "browser tests"],
+    "gaps": [
+      {
+        "code": "missing_tool",
+        "description": "Docker is required for the integration test path.",
+        "severity": "warning",
+        "recoverability": "user_fixable",
+        "suggestedAction": "Install Docker Desktop and rerun doctor."
+      }
+    ],
+    "validationPlan": ["Run the detected unit test command"],
+    "rationale": "concise reasoning grounded in the issue, repository context, and local environment"
+  }
+}
+
+Issue:
+{{issueContext}}
+
+Repository Context:
+{{repoContext}}
+
+Local Environment:
+{{environmentContext}}
+`;
+
+export const ISSUE_FEASIBILITY_REPAIR_PROMPT = `You are OpenMeta's execution feasibility gate.
+
+The previous feasibility response was not parseable or did not match the required schema. Reformat it into strict JSON.
+
+Required schema:
+{
+  "version": "1",
+  "kind": "issue_feasibility_assessment",
+  "status": "success" | "needs_review",
+  "data": {
+    "decision": "proceed" | "repair_then_proceed" | "proceed_static_only" | "proceed_partial_validation" | "stop_hard_blocked" | "stop_user_action_required",
+    "executionMode": "full" | "partial" | "static_only" | "blocked",
+    "confidence": "low" | "medium" | "high",
+    "summary": "one sentence",
+    "requiredCapabilities": ["capability"],
+    "gaps": [
+      {
+        "code": "missing_dependency" | "missing_tool" | "version_mismatch" | "missing_service" | "unsupported_os" | "insufficient_memory" | "insufficient_gpu" | "missing_external_account" | "unknown",
+        "description": "concrete gap",
+        "severity": "info" | "warning" | "blocking",
+        "recoverability": "auto_fixable" | "user_fixable" | "manual_required" | "not_practical_local",
+        "suggestedAction": "concrete action or empty string"
+      }
+    ],
+    "validationPlan": ["step"],
+    "rationale": "concise reasoning"
+  }
+}
+
+Rules:
+1. Return only one valid JSON object. No commentary.
+2. If the prior response is unusable, return a conservative partial-validation assessment, not a hard block:
+{"version":"1","kind":"issue_feasibility_assessment","status":"needs_review","data":{"decision":"proceed_partial_validation","executionMode":"partial","confidence":"low","summary":"Feasibility could not be assessed reliably; continue only with review-oriented artifacts.","requiredCapabilities":[],"gaps":[{"code":"unknown","description":"The model response could not be reconstructed into a reliable feasibility decision.","severity":"warning","recoverability":"manual_required","suggestedAction":"Review the issue and repository requirements before applying code changes."}],"validationPlan":["Review repository context manually before applying changes."],"rationale":"The prior response was not usable enough to make a stronger execution decision."}}
+
+Previous response:
+{{invalidResponse}}
+`;
+
 export const CODE_CHANGE_PROMPT = `You are OpenMeta, an autonomous open source contribution agent.
 
 Generate a concrete implementation patch in strict JSON.
