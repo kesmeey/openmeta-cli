@@ -94,7 +94,6 @@ describe('skill bundle rendering', () => {
     () => {
       const packedRoot = mkdtempSync(join(tmpdir(), 'openmeta-pack-runtime-'));
       const exportRoot = join(packedRoot, 'exported');
-
       execFileSync(getBunCommand(), ['run', 'build'], {
         cwd: process.cwd(),
         stdio: ['ignore', 'pipe', 'inherit'],
@@ -180,6 +179,7 @@ describe('skill bundle rendering', () => {
 describe('package files', () => {
   test('publishes skill assets with the CLI binary', () => {
     expect(packageJson.files).toContain('bin/openmeta.js');
+    expect(packageJson.files).toContain('dashboard');
     expect(packageJson.files).toContain('skills');
   });
 });

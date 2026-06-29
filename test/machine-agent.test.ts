@@ -13,6 +13,7 @@ import {
   proofOfWorkService,
   workspaceService,
 } from '../src/services/index.js';
+import type { AppConfig } from '../src/types/index.js';
 import {
   createInboxItem,
   createMemory,
@@ -67,11 +68,11 @@ interface AgentMachineRunShape {
   }): Promise<MachineAgentResult>;
 }
 
-function createConfig() {
-  return {
+function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
+  const base: AppConfig = {
     userProfile: {
       techStack: ['typescript', 'react'],
-      proficiency: 'intermediate' as const,
+      proficiency: 'intermediate',
       focusAreas: ['frontend'],
     },
     github: {
@@ -83,7 +84,7 @@ function createConfig() {
       presets: {},
     },
     llm: {
-      provider: 'custom' as const,
+      provider: 'custom',
       apiBaseUrl: 'https://example.com/v1',
       apiKey: 'sk-test',
       modelName: 'test-model',
@@ -93,8 +94,8 @@ function createConfig() {
       enabled: true,
       scheduleTime: '09:00',
       timezone: 'UTC',
-      contentType: 'research_note' as const,
-      scheduler: 'manual' as const,
+      contentType: 'research_note',
+      scheduler: 'manual',
       minMatchScore: 75,
       skipIfAlreadyGeneratedToday: false,
     },
@@ -113,6 +114,43 @@ function createConfig() {
       preset: 'balanced',
     },
     commitTemplate: 'feat: {{title}}',
+  };
+
+  return {
+    ...base,
+    ...overrides,
+    github: {
+      ...base.github,
+      ...overrides.github,
+    },
+    repositoryTargeting: {
+      ...base.repositoryTargeting,
+      ...overrides.repositoryTargeting,
+      presets: {
+        ...base.repositoryTargeting.presets,
+        ...overrides.repositoryTargeting?.presets,
+      },
+    },
+    llm: {
+      ...base.llm,
+      ...overrides.llm,
+    },
+    automation: {
+      ...base.automation,
+      ...overrides.automation,
+    },
+    scoring: {
+      ...base.scoring,
+      ...overrides.scoring,
+      weights: {
+        ...base.scoring.weights,
+        ...overrides.scoring?.weights,
+      },
+      overallWeights: {
+        ...base.scoring.overallWeights,
+        ...overrides.scoring?.overallWeights,
+      },
+    },
   };
 }
 

@@ -3,6 +3,7 @@ export { AnalyzeOrchestrator, analyzeOrchestrator } from './analyze.js';
 export { AutomationOrchestrator, automationOrchestrator } from './automation.js';
 export { ConfigOrchestrator, configOrchestrator } from './config.js';
 export { DailyOrchestrator, dailyOrchestrator } from './daily.js';
+export { DashboardOrchestrator, dashboardOrchestrator } from './dashboard.js';
 export { DoctorOrchestrator, doctorOrchestrator } from './doctor.js';
 export { InitOrchestrator, initOrchestrator } from './init.js';
 export * from './machine/index.js';

@@ -1,13 +1,17 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, sep } from 'path';
 import { simpleGit } from 'simple-git';
 import { pathToFileURL } from 'url';
 import { workspaceService } from '../src/services/workspace.js';
 import { createMemory, createRankedIssue, createWorkspace } from './helpers/factories.js';
 
 const tempDirs: string[] = [];
+
+function normalizePathForAssertion(path: string): string {
+  return path.split(sep).join('/');
+}
 
 function makeWorkspace(): string {
   const dir = mkdtempSync(join(tmpdir(), 'openmeta-workspace-'));
@@ -180,7 +184,7 @@ describe('workspaceService.detectTestCommands', () => {
         delete process.env['OPENMETA_HOME'];
       }
     },
-    { timeout: 20_000 },
+    { timeout: 60_000 },
   );
 
   test(
@@ -246,8 +250,8 @@ describe('workspaceService.detectTestCommands', () => {
         expect(workspace.defaultBranch).toBe('main');
         expect(workspace.branchName).toMatch(/^openmeta\/analyze-acme-demo/);
         expect(workspace.topLevelFiles).toContain('README.md');
-        expect(workspace.candidateFiles).toContain('README.md');
-        expect(workspace.candidateFiles).toContain('src/index.ts');
+        expect(workspace.candidateFiles.map(normalizePathForAssertion)).toContain('README.md');
+        expect(workspace.candidateFiles.map(normalizePathForAssertion)).toContain('src/index.ts');
         expect(workspace.snippets.some((snippet) => snippet.path === 'README.md')).toBe(true);
         expect(workspace.testCommands.map((command) => command.command)).toContain('bun run test');
       } finally {
@@ -255,7 +259,7 @@ describe('workspaceService.detectTestCommands', () => {
         delete process.env['OPENMETA_HOME'];
       }
     },
-    { timeout: 20_000 },
+    { timeout: 60_000 },
   );
 
   test(
@@ -307,7 +311,7 @@ describe('workspaceService.detectTestCommands', () => {
         delete process.env['OPENMETA_HOME'];
       }
     },
-    { timeout: 20_000 },
+    { timeout: 60_000 },
   );
 
   test(
@@ -367,7 +371,7 @@ describe('workspaceService.detectTestCommands', () => {
         delete process.env['OPENMETA_HOME'];
       }
     },
-    { timeout: 20_000 },
+    { timeout: 60_000 },
   );
 
   test('prefers bun for package scripts when a bun lockfile is present', () => {

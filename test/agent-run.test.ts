@@ -95,7 +95,7 @@ interface AnalyzeRunInternals {
     dryRun?: boolean;
   }): Promise<unknown>;
   initializeClients(config: AppConfig): Promise<void>;
-  promptForSuggestion<T>(suggestions: T[]): Promise<T>;
+  promptForCandidate<T>(candidates: T[]): Promise<T>;
   prepareArtifactPaths(
     repoFullName: string,
     suggestionId: string,
@@ -160,7 +160,7 @@ function createConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       ...overrides.repositoryTargeting,
       presets: {
         ...base.repositoryTargeting.presets,
-        ...((overrides.repositoryTargeting?.presets as Record<string, { repos: string[] }> | undefined) ?? {}),
+        ...overrides.repositoryTargeting?.presets,
       },
     },
     llm: {
@@ -1096,9 +1096,9 @@ describe('AnalyzeOrchestrator run flow', () => {
       orchestrator as object as { showResult: AnalyzeRunInternals['showResult'] },
       'showResult',
     ).mockImplementation(() => {});
-    const promptForSuggestionSpy = spyOn(
-      orchestrator as object as { promptForSuggestion: AnalyzeRunInternals['promptForSuggestion'] },
-      'promptForSuggestion',
+    const promptForCandidateSpy = spyOn(
+      orchestrator as object as { promptForCandidate: AnalyzeRunInternals['promptForCandidate'] },
+      'promptForCandidate',
     ).mockResolvedValue(lowerSuggestion);
 
     spyOn(infra.configService, 'get').mockResolvedValue(config);
@@ -1136,7 +1136,7 @@ describe('AnalyzeOrchestrator run flow', () => {
 
     await orchestrator.run({ repo: 'https://github.com/acme/demo', headless: true });
 
-    expect(promptForSuggestionSpy).not.toHaveBeenCalled();
+    expect(promptForCandidateSpy).not.toHaveBeenCalled();
     expect(workspaceService.prepareRepositoryWorkspace).toHaveBeenCalledWith(
       'acme/demo',
       memory,
